@@ -62,14 +62,31 @@ def _lock_remaining(key: str, now: float) -> float:
         return until - now
 
 
-def _note_wrong(key: str, now: float) -> None:
+def _note_wrong(key: str, now: float) -> float:
+    """Count a wrong password. The seconds the override is now locked for:
+    LOCK_SECONDS when this one reached the limit, else 0."""
     with _guard:
         recent = [t for t in _wrong.get(key, []) if now - t < WRONG_WINDOW]
         recent.append(now)
+        locked = 0.0
         if len(recent) >= WRONG_LIMIT:
             _locked_until[key] = now + LOCK_SECONDS
             recent = []
+            locked = float(LOCK_SECONDS)
         _wrong[key] = recent
+        return locked
+
+
+def _locked_refusal(detail: str, remaining: float) -> HTTPException:
+    minutes = max(1, int(-(-remaining // 60)))
+    return HTTPException(
+        status_code=403,
+        detail=(
+            f"{detail} Too many wrong closing-date passwords were entered; "
+            f"try again in {minutes} minute{'' if minutes == 1 else 's'}."
+        ),
+        headers={OVERRIDE_HEADER: "locked"},
+    )
 
 
 def _clear_wrong(key: str) -> None:
@@ -146,16 +163,7 @@ def check_closing_date(db: Session, txn_date: date, password: str = None):
         if stored and password:
             remaining = _lock_remaining(key, now)
             if remaining:
-                minutes = max(1, int(-(-remaining // 60)))
-                raise HTTPException(
-                    status_code=403,
-                    detail=(
-                        f"{detail} Too many wrong closing-date passwords were "
-                        f"entered; try again in {minutes} minute"
-                        f"{'' if minutes == 1 else 's'}."
-                    ),
-                    headers={OVERRIDE_HEADER: "locked"},
-                )
+                raise _locked_refusal(detail, remaining)
         # compare bytes: compare_digest refuses a str with non-ASCII characters
         if (
             stored
@@ -168,10 +176,14 @@ def check_closing_date(db: Session, txn_date: date, password: str = None):
         headers = None
         if stored:
             if password:
-                _note_wrong(key, now)
+                locked = _note_wrong(key, now)
                 # Never log or echo the value, only that it did not match.
                 logger.warning("closing-date override refused: wrong password")
                 detail += " The closing-date password you entered is not correct."
+                if locked:
+                    # This answer is the one that locked it: say so now, not
+                    # on the next try.
+                    raise _locked_refusal(detail, locked)
                 headers = {OVERRIDE_HEADER: "wrong-password"}
             else:
                 detail += " Enter the closing-date password to make this change."

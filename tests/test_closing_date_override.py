@@ -303,12 +303,22 @@ def test_wrong_passwords_lock_the_override_for_a_while(
     monkeypatch.setattr(cd.time, "monotonic", lambda: clock[0])
     _close(client, password=OVERRIDE_PW)
     cid = _customer(client)
-    for _ in range(cd.WRONG_LIMIT):
+    for _ in range(cd.WRONG_LIMIT - 1):
         r = client.post(
             "/api/invoices", json=_invoice(cid), headers=_with_password(WRONG_PW)
         )
         assert r.status_code == 403
         assert r.headers.get("X-Closing-Date-Override") == "wrong-password"
+    # The wrong password that locks it says so at once, not on the next try.
+    r = client.post(
+        "/api/invoices", json=_invoice(cid), headers=_with_password(WRONG_PW)
+    )
+    assert r.status_code == 403
+    assert r.headers.get("X-Closing-Date-Override") == "locked"
+    detail = r.json()["detail"]
+    assert "The closing-date password you entered is not correct." in detail
+    assert "Too many wrong closing-date passwords" in detail
+    assert "try again in 10 minutes" in detail
     r = client.post(
         "/api/invoices", json=_invoice(cid), headers=_with_password(OVERRIDE_PW)
     )
