@@ -30,7 +30,8 @@ const state = { textContent: '' };
 const clear = { disabled: false };
 const note = { textContent: '' };
 const saveBtn = { disabled: false };
-const form = { id: 'settings-form' };
+// a form: the logo option's box is looked up on it (#192)
+const form = { id: 'settings-form', querySelector: () => null };
 const els = {
   'closing-date': input, 'closing-date-state': state, 'closing-date-clear': clear,
   'settings-dirty-note': note, 'settings-save-btn': saveBtn, 'settings-form': form,

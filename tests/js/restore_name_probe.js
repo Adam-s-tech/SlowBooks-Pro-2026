@@ -68,7 +68,7 @@ const log = (step) => console.log(JSON.stringify({
   await S.confirmRestore('harbor-light-bakery_20260926_120000.db');
   log('restore-after-a-rename-elsewhere');
 
-  await S.save({ preventDefault() {}, target: {} });
+  await S.save({ preventDefault() {}, target: { querySelector: () => null } });
   log('renamed-and-saved-here');
 
   settingsReachable = false;
