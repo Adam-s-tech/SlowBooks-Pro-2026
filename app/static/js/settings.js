@@ -6,6 +6,8 @@
 const SettingsPage = {
     async render() {
         const s = await API.get('/settings');
+        // what the books hold; the closing date's state line describes this
+        SettingsPage._savedClosingDate = s.closing_date || '';
         setTimeout(() => {
             SettingsPage.loadBackups();
             SettingsPage.loadEmailTemplates();
@@ -138,7 +140,8 @@ const SettingsPage = {
                             <div style="display:flex; gap:6px; align-items:center;">
                                 <input id="closing-date" name="closing_date" type="date" value="${escapeHtml(s.closing_date || '')}"
                                     aria-describedby="closing-date-state"
-                                    oninput="SettingsPage.showClosingState()" onchange="SettingsPage.showClosingState()">
+                                    oninput="SettingsPage.showClosingState()" onchange="SettingsPage.showClosingState()"
+                                    oninvalid="SettingsPage.closingDateInvalid()">
                                 <button type="button" class="btn btn-sm btn-secondary" id="closing-date-clear"
                                     onclick="SettingsPage.clearClosingDate()" ${s.closing_date ? '' : 'disabled'}>Clear</button>
                             </div>
@@ -716,8 +719,11 @@ const SettingsPage = {
         const btn = document.getElementById('settings-save-btn');
         if (btn) btn.disabled = true;
         try {
-            await API.put('/settings', data);
+            const saved = await API.put('/settings', data);
+            SettingsPage._savedClosingDate = saved && typeof saved.closing_date === 'string'
+                ? saved.closing_date : (data.closing_date || '');
             SettingsPage._markClean();
+            SettingsPage.showClosingState();
             toast('Settings saved');
         } catch (err) {
             toast(err.message, 'error');
@@ -729,25 +735,63 @@ const SettingsPage = {
     // Closing date: say plainly whether one is set, and clear it in one
     // click — clearing used to mean emptying three date segments by hand,
     // which WebKit could leave half-empty and silently invalid.
+    //
+    // The state line describes the closing date the books HOLD, and then
+    // any change typed but not saved yet. It used to describe the field,
+    // so after a Clear that never reached the server it said "No closing
+    // date: every period is open." while the books stayed closed (2.18.0
+    // gate, macbase1 NEW-1).
+    _savedClosingDate: '',
+
     _closingStateText(value) {
         return value
             ? `Closed through ${formatDate(value)}: changes dated on or before it are refused.`
             : 'No closing date: every period is open.';
     },
 
+    // What Save Settings will change, or '' when the field matches the books.
+    _closingPendingText(saved, typed, incomplete) {
+        if (incomplete) return 'The date typed is not complete: finish it, or press Clear.';
+        if (typed === saved) return '';
+        if (!typed) return 'Save Settings to remove the closing date.';
+        return saved
+            ? `Save Settings to move it to ${formatDate(typed)}.`
+            : `Save Settings to close the books through ${formatDate(typed)}.`;
+    },
+
     showClosingState() {
         const input = document.getElementById('closing-date');
-        const value = input ? input.value : '';
+        const typed = input ? input.value : '';
+        // a half-typed date reads as '' but is not empty: the form will not submit
+        const incomplete = !!(input && input.validity && input.validity.badInput);
+        const saved = SettingsPage._savedClosingDate || '';
         const state = document.getElementById('closing-date-state');
-        if (state) state.textContent = SettingsPage._closingStateText(value);
+        if (state) {
+            const pending = SettingsPage._closingPendingText(saved, typed, incomplete);
+            state.textContent = SettingsPage._closingStateText(saved) + (pending ? ` ${pending}` : '');
+        }
         const clear = document.getElementById('closing-date-clear');
-        if (clear) clear.disabled = !value;
+        if (clear) clear.disabled = !typed && !incomplete;
+    },
+
+    // Save Settings was refused by the browser because the date is half
+    // typed. WebKit shows an empty message and nothing else, so say it.
+    closingDateInvalid() {
+        SettingsPage.showClosingState();
+        toast('Nothing was saved: the closing date is not complete. Finish it, or press Clear.', 'error');
     },
 
     clearClosingDate() {
         const input = document.getElementById('closing-date');
         if (!input) return;
+        // `value = ''` alone left WebKit's date segments holding the old
+        // date: the field was invalid with an empty message, so Save
+        // Settings sent nothing, for this or any other setting, until a
+        // reload (2.18.0 gate, macbase1 NEW-1). Changing the type rebuilds
+        // the segments empty, which every engine accepts.
+        input.type = 'text';
         input.value = '';
+        input.type = 'date';
         SettingsPage.showClosingState();
         SettingsPage._updateDirty();
     },
