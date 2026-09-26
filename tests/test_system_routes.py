@@ -34,24 +34,27 @@ def test_system_info_reports_version(client):
 
 
 def test_system_info_desktop_flag(client, monkeypatch):
+    # A desktop install hears about new versions unless its owner turns the
+    # check off: an install that never asks never learns of the next release.
     monkeypatch.setenv("SLOWBOOKS_DESKTOP", "1")
     monkeypatch.delenv("SLOWBOOKS_UPDATE_CHECK", raising=False)
     assert client.get("/api/system").json()["desktop"] is True
-    assert client.get("/api/system").json()["update_check_enabled"] is False
-
-
-def test_system_info_reports_update_check_opt_in(client, monkeypatch):
-    monkeypatch.setenv("SLOWBOOKS_DESKTOP", "1")
-    monkeypatch.setenv("SLOWBOOKS_UPDATE_CHECK", "1")
     assert client.get("/api/system").json()["update_check_enabled"] is True
 
 
-def test_update_check_requires_opt_in_even_in_desktop_mode(client, monkeypatch):
+@pytest.mark.parametrize("value", ["0", "false", "off", " No "])
+def test_system_info_reports_the_update_check_turned_off(client, monkeypatch, value):
     monkeypatch.setenv("SLOWBOOKS_DESKTOP", "1")
-    monkeypatch.delenv("SLOWBOOKS_UPDATE_CHECK", raising=False)
+    monkeypatch.setenv("SLOWBOOKS_UPDATE_CHECK", value)
+    assert client.get("/api/system").json()["update_check_enabled"] is False
+
+
+def test_update_check_turned_off_makes_no_request(client, monkeypatch):
+    monkeypatch.setenv("SLOWBOOKS_DESKTOP", "1")
+    monkeypatch.setenv("SLOWBOOKS_UPDATE_CHECK", "0")
 
     async def unexpected_get(*args, **kwargs):
-        pytest.fail("default update check made an outbound request")
+        pytest.fail("an update check turned off made an outbound request")
 
     monkeypatch.setattr(httpx.AsyncClient, "get", unexpected_get)
     assert client.get("/api/system/update-check").json() == {"update_available": False}

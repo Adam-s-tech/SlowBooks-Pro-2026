@@ -3,7 +3,8 @@
 #
 # /api/system tells the frontend what it's running (version, desktop mode);
 # /api/system/update-check compares against the published latest.json on
-# dl.slowbookspro.com when the operator opts in to update checks.
+# dl.slowbookspro.com on desktop installs, unless the operator turns it off
+# with SLOWBOOKS_UPDATE_CHECK=0.
 #
 # The check is proxied through the backend (not fetched from the browser)
 # so the manifest host needs no CORS relationship with the app, and it is
@@ -35,8 +36,15 @@ def _is_desktop() -> bool:
     return os.environ.get("SLOWBOOKS_DESKTOP") == "1"
 
 
+_OFF = ("0", "false", "no", "off")
+
+
 def _update_check_enabled() -> bool:
-    return _is_desktop() and os.environ.get("SLOWBOOKS_UPDATE_CHECK") == "1"
+    """On for desktop installs, so an install on an old version hears about
+    the new one; SLOWBOOKS_UPDATE_CHECK=0 in .env turns it off (the request
+    tells dl.slowbookspro.com the install's IP address and version)."""
+    setting = os.environ.get("SLOWBOOKS_UPDATE_CHECK", "1").strip().lower()
+    return _is_desktop() and setting not in _OFF
 
 
 def _is_server_mode() -> bool:

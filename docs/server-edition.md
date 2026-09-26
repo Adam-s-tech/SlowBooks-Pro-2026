@@ -86,8 +86,10 @@ trusted networks.
   it to the internet.
 - Comfortable for small teams (2–10 people). The database serializes
   writes; hundreds of concurrent users is not the design target.
-- The update badge is off by default. Set `SLOWBOOKS_UPDATE_CHECK=1` in
-  the host's SlowBooks `.env` file and restart to enable it. Updating means
+- The update badge appears in-app as usual: opening the app asks
+  dl.slowbookspro.com for the latest version, which tells that host the
+  install's IP address and version. Set `SLOWBOOKS_UPDATE_CHECK=0` in the
+  host's SlowBooks `.env` file and restart to turn it off. Updating means
   running the new installer on the host machine.
 
 ## Troubleshooting
