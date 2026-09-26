@@ -273,6 +273,11 @@ _INTENTIONAL_BACKEND_ONLY: set[tuple[str, str]] = {
     ("POST", "/api/payments/{provider_name}/webhook"),
     ("POST", "/api/payments/{provider_name}/create-checkout-session"),
     ("GET", "/api/qbo/callback"),
+    # The synchronous QBO imports: the page starts a background run
+    # (POST /api/qbo/import-runs, #192). These stay for API clients, share
+    # its one-import-per-company guard, and are listed in docs/setup-qbo.md.
+    ("POST", "/api/qbo/import"),
+    ("POST", "/api/qbo/import/{entity}"),
     ("POST", "/api/payroll/gross-up"),
     ("POST", "/api/payroll/{run_id}/nacha"),
     ("POST", "/api/time-entries/classify"),
