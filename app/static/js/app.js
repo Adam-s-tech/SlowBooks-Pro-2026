@@ -73,7 +73,8 @@ const App = {
         '/deposits':      { page: 'deposits',        label: 'Make Deposits',      render: () => DepositsPage.render() },
         '/deposits/:id':      { page: 'deposits',   label: 'Deposit',       render: (id) => App.withDocument(() => DepositsPage.render(), () => DepositsPage.view(id)) },
         // The Check Register page is the Banking register now (2.10); old bookmarks land there.
-        '/check-register': { page: 'banking',         label: 'Banking',            render: () => { App.navigate('#/banking'); return ''; } },
+        // (replaceState: Back from Banking must not land on the alias, which would send it forward again)
+        '/check-register': { page: 'banking',         label: 'Banking',            render: () => { history.replaceState(null, '', '#/banking'); App.navigate('#/banking'); return ''; } },
         '/cc-charges':    { page: 'cc-charges',      label: 'CC Charges',         render: () => CCChargesPage.render() },
         '/cc-charges/:id':    { page: 'cc-charges', label: 'CC Charge',     render: (id) => App.withDocument(() => CCChargesPage.render(), () => JournalPage.view(id)) },
         '/expenses':      { page: 'expenses',        label: 'Enter Expenses',     render: () => ExpensesPage.render() },
@@ -102,6 +103,14 @@ const App = {
 
     async navigate(hash) {
         const path = hash.replace('#', '') || '/';
+        // Keep the address in step with the page shown. The toolbar's Home,
+        // Quick Entry and Reports (and the shortcuts, search results and the
+        // pages that move on by themselves) came here without changing it,
+        // so the sidebar link of the page left behind then did nothing:
+        // clicking it changed no hash (2.18.0 gate, macbase1 NEW-9).
+        // pushState gives Back an entry, as a link does, and fires no
+        // hashchange to navigate a second time.
+        if ((location.hash || '#/') !== `#${path}`) history.pushState(null, '', `#${path}`);
         let route = App.routes[path];
         let param = null;
         if (!route) {

@@ -1,5 +1,5 @@
 """The page in a real browser: what a node probe cannot see (layout, focus,
-scrolling), checked in playwright's Chromium.
+scrolling, the address bar), checked in playwright's Chromium.
 
 The page is the real index.html with the real scripts and stylesheets; the
 API answers from the fixtures below. Skipped, as one module, where playwright
@@ -15,6 +15,9 @@ or its Chromium is not installed.
   first Stub PDF, with the Employee column out of sight, so no button said
   whose stub it was. Checked in the gate's 1280 x 800 window and a narrower
   one.
+- NEW-9 (2.18.0 gate, macbase1): after the toolbar's Home, the sidebar link
+  of the page just left did nothing. Clicked through with the real toolbar
+  and sidebar, and Back.
 """
 
 import json
@@ -291,3 +294,20 @@ def test_each_pay_run_row_says_whose_stub_it_is(browser):
                     assert r["label"] == f"Stub PDF — {r['name']}"
         finally:
             page.close()
+
+
+def test_a_sidebar_link_works_after_a_toolbar_button(browser):
+    page = _open(browser, 1280, 800, "#/settings")
+    try:
+        page.wait_for_selector("#settings-form")
+        page.click('#topbar .tb-btn[data-nav="#/"]')  # Home
+        page.wait_for_selector('.nav-link.active[data-page="dashboard"]')
+        assert page.evaluate("location.hash") == "#/"
+        page.click('#sidebar a.nav-link[data-page="settings"]')
+        page.wait_for_selector("#settings-form", timeout=5000)
+        # and Back goes to the Dashboard the toolbar opened
+        page.go_back()
+        page.wait_for_selector('.nav-link.active[data-page="dashboard"]')
+        assert page.evaluate("location.hash") == "#/"
+    finally:
+        page.close()
