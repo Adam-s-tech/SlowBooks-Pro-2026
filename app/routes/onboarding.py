@@ -25,6 +25,7 @@ from app.services.new_hire_report import (
     generate_new_hire_report_pdf,
 )
 from app.services.payroll_documents import employer_block
+from app.services.request_utils import content_disposition, file_name
 
 router = APIRouter(prefix="/api/onboarding", tags=["onboarding"])
 
@@ -159,8 +160,12 @@ def new_hire_report_pdf(emp_id: int, db: Session = Depends(get_db)):
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    # Named for the person, not the employee id ("new_hire_1.pdf"; 2.18.0
+    # gate, NEW-6).
+    emp = db.query(Employee).filter(Employee.id == emp_id).first()
+    name = file_name("New-Hire-Report", emp.full_name if emp else None)
     return Response(
         content=pdf,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"inline; filename=new_hire_{emp_id}.pdf"},
+        headers={"Content-Disposition": content_disposition(name + ".pdf")},
     )

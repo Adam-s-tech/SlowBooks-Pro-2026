@@ -11,6 +11,7 @@ from app.services.document_audit import (
     record_doc_audit,
 )
 from app.services.payroll_documents import employer_block
+from app.services.request_utils import content_disposition, file_name
 from app.services.tax_forms.form_940 import compute_940, generate_940_pdf
 from app.services.tax_forms.form_941 import compute_941, generate_941_pdf
 from app.services.tax_forms.w2_w3 import (
@@ -187,11 +188,13 @@ def _company_for_pdf(db: Session) -> dict:
     return employer_block(db)
 
 
-def _pdf_response(pdf_bytes: bytes, filename: str) -> Response:
+def _pdf_response(pdf_bytes: bytes, *name) -> Response:
+    """The form's PDF, named for the form and the person it is for:
+    "W-2_2026_Lena-Ortiz.pdf", not "w2_1_2026.pdf" (2.18.0 gate, NEW-6)."""
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"inline; filename={filename}"},
+        headers={"Content-Disposition": content_disposition(file_name(*name) + ".pdf")},
     )
 
 
@@ -213,14 +216,15 @@ def generate_w2_form_pdf(
     db: Session = Depends(get_db),
 ):
     """W-2 PDF for one employee for the given calendar year."""
-    if not db.query(Employee).filter(Employee.id == emp_id).first():
+    emp = db.query(Employee).filter(Employee.id == emp_id).first()
+    if not emp:
         raise HTTPException(status_code=404, detail="Employee not found")
     company = _company_for_pdf(db)
     audit = _hash_and_audit(
         db, "w2", f"emp{emp_id}-yr{year}", company, compute_w2(db, year, emp_id)
     )
     pdf = generate_w2_pdf(db, year, emp_id, company, audit=audit)
-    return _pdf_response(pdf, f"w2_{emp_id}_{year}.pdf")
+    return _pdf_response(pdf, "W-2", year, emp.full_name)
 
 
 @router.get("/forms/w3/{year}/pdf", response_class=Response)
@@ -230,7 +234,7 @@ def generate_w3_form_pdf(year: int, db: Session = Depends(get_db)):
     company = _company_for_pdf(db)
     audit = _hash_and_audit(db, "w3", f"yr{year}", company, compute_w3(db, year))
     pdf = generate_w3_pdf(db, year, company, audit=audit)
-    return _pdf_response(pdf, f"w3_{year}.pdf")
+    return _pdf_response(pdf, "W-3", year)
 
 
 @router.get("/forms/940/{year}/pdf", response_class=Response)
@@ -240,7 +244,7 @@ def generate_form_940_pdf(year: int, db: Session = Depends(get_db)):
     company = _company_for_pdf(db)
     audit = _hash_and_audit(db, "940", f"yr{year}", company, compute_940(db, year))
     pdf = generate_940_pdf(db, year, company, audit=audit)
-    return _pdf_response(pdf, f"form_940_{year}.pdf")
+    return _pdf_response(pdf, "940", year)
 
 
 @router.get("/forms/941/{year}/{quarter}/pdf", response_class=Response)
@@ -258,4 +262,4 @@ def generate_form_941_pdf(year: int, quarter: int, db: Session = Depends(get_db)
         compute_941(db, year, quarter),
     )
     pdf = generate_941_pdf(db, year, quarter, company, audit=audit)
-    return _pdf_response(pdf, f"form_941_{year}_q{quarter}.pdf")
+    return _pdf_response(pdf, "941", year, f"Q{quarter}")

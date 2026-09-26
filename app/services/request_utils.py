@@ -71,6 +71,15 @@ def _ascii_file_name(name: str) -> str:
     return "".join(out)
 
 
+def file_name(*parts) -> str:
+    """A file name from what the file is and who it is for, "_" between the
+    parts and "-" between a name's words: ("W-2", 2026, "Lena Ortiz") ->
+    "W-2_2026_Lena-Ortiz". Blank parts are left out. Pass the result to
+    content_disposition, which makes any name safe to send."""
+    words = ("-".join(str(p).split()) for p in parts if p is not None)
+    return "_".join(w for w in words if w)
+
+
 def content_disposition(filename: str, disposition: str = "inline") -> str:
     """A Content-Disposition header value for a file named after something a
     person typed — a customer's name, an invoice or bill number.
