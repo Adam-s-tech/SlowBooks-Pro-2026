@@ -157,3 +157,76 @@ def test_a_running_import_keeps_beating(run_db, monkeypatch):
     while store.latest()["run"]["status"] in runs.ACTIVE:
         assert time.monotonic() < deadline, "import worker did not finish"
         time.sleep(0.01)
+
+
+def test_import_all_in_the_background_leaves_the_books_writable_between_steps(
+    tmp_path, monkeypatch
+):
+    """Import All ran as one transaction, so on SQLite the company file
+    stayed write-locked from the first account it saved to the last ledger
+    line, network waits included, and the page says to keep working while
+    it runs: every save meanwhile failed with "database is locked". Each
+    step is committed as it finishes, as Import Selected already did."""
+    from sqlalchemy import event
+
+    from app.models.accounts import Account, AccountType
+    from app.services import qbo_ledger_import
+
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'company.db'}", connect_args={"timeout": 0.2}
+    )
+
+    @event.listens_for(engine, "connect")
+    def _wal(connection, _record):
+        connection.execute("PRAGMA journal_mode=WAL")
+
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, autoflush=False)
+    waiting, release = Event(), Event()
+
+    @qbo_progress.stage("accounts")
+    def accounts(db):
+        db.add(Account(name="From QBO", account_type=AccountType.EXPENSE))
+        db.flush()
+        qbo_progress.created()
+        return {"imported": 1, "errors": []}
+
+    @qbo_progress.stage("customers")
+    def customers(db):
+        waiting.set()  # a long fetch from QBO
+        assert release.wait(5)
+        return {"imported": 0, "errors": []}
+
+    def nothing(entity):
+        @qbo_progress.stage(entity)
+        def run(db):
+            return {"imported": 0, "errors": []}
+
+        return run
+
+    monkeypatch.setattr(qbo_import, "import_accounts", accounts)
+    monkeypatch.setattr(qbo_import, "import_customers", customers)
+    for entity in runs.ENTITY_ORDER[2:-1]:
+        monkeypatch.setattr(qbo_import, f"import_{entity}", nothing(entity))
+    monkeypatch.setattr(qbo_ledger_import, "import_ledger", nothing("ledger"))
+    monkeypatch.setattr(qbo_import, "get_qbo_client", lambda db: object())
+
+    with factory() as request_db:
+        store = runs.store_for(request_db)
+        runs.start_run(request_db, list(runs.ENTITY_ORDER), "eric", import_all=True)
+    try:
+        assert waiting.wait(3)
+        with factory() as user_db:
+            user_db.add(Account(name="Typed meanwhile", account_type=AccountType.ASSET))
+            user_db.commit()
+    finally:
+        release.set()
+    deadline = time.monotonic() + 5
+    while store.latest()["run"]["status"] in runs.ACTIVE:
+        assert time.monotonic() < deadline, "import worker did not finish"
+        time.sleep(0.01)
+    assert store.latest()["run"]["status"] == "completed"
+    with factory() as check:
+        names = {account.name for account in check.query(Account)}
+    assert names == {"From QBO", "Typed meanwhile"}
+    engine.dispose()

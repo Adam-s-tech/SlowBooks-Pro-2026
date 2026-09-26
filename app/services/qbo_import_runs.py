@@ -508,23 +508,24 @@ def start_run(db: Session, entities, actor, import_all=False):
             with session_class(bind=engine, autoflush=False) as worker_db:
                 worker_db.info["acting_username"] = actor
                 with _run_context(worker_db, store, state) as reporter:
-                    if import_all:
-                        qbo_import.import_all(worker_db)
-                    else:
-                        for entity in entities:
-                            function = (
-                                qbo_ledger_import.import_ledger
-                                if entity == "ledger"
-                                else getattr(qbo_import, f"import_{entity}")
-                            )
-                            # A mocked/third-party importer may not use the decorator.
-                            decorated = hasattr(function, "__wrapped__")
-                            if not decorated:
-                                reporter.begin_entity(entity)
-                            result = function(worker_db)
-                            if not decorated:
-                                reporter.end_entity(result)
-                            worker_db.commit()
+                    # Import All too goes a step at a time, each committed as
+                    # it finishes (qbo_import.import_all commits once, at the
+                    # end): on SQLite an open write holds the company file,
+                    # and the person keeps working while this runs.
+                    for entity in entities:
+                        function = (
+                            qbo_ledger_import.import_ledger
+                            if entity == "ledger"
+                            else getattr(qbo_import, f"import_{entity}")
+                        )
+                        # A mocked/third-party importer may not use the decorator.
+                        decorated = hasattr(function, "__wrapped__")
+                        if not decorated:
+                            reporter.begin_entity(entity)
+                        result = function(worker_db)
+                        if not decorated:
+                            reporter.end_entity(result)
+                        worker_db.commit()
         except Exception as exc:
             if state["status"] in ACTIVE:
                 reporter = Reporter(store, state)
