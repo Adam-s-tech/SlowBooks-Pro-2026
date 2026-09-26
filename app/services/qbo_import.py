@@ -29,7 +29,10 @@ from app.models.qbo_mapping import QBOMapping
 from app.models.transactions import Transaction
 from app.services.qbo_common import (
     CHANGED_HERE,
+    DELETED_IN_QBO,
+    NOT_OWNED,
     QBO_TO_ACCOUNT_TYPE,
+    VOIDED_IN_QBO,
     QBO_TO_ITEM_TYPE,
     create_mapping,
     apply_rollup_repair,
@@ -38,7 +41,6 @@ from app.services.qbo_common import (
     journal_posting_matches,
     ledger_posting,
     legacy_rollup_repair,
-    posting_mismatch,
     rebase_account_balances,
 )
 from app.services.qbo_service import get_qbo_client
@@ -1388,6 +1390,21 @@ def _journal_lines(qbo_entry, accounts) -> list[dict]:
     return [line for line in lines if line["debit"] or line["credit"]]
 
 
+def _post_journal(db, qbo_entry, txn_date, lines):
+    """A QBO journal's lines as a journal here."""
+    from app.services.accounting import create_journal_entry
+
+    qbo_id = str(_safe(qbo_entry, "Id", ""))
+    return create_journal_entry(
+        db,
+        txn_date,
+        _safe(qbo_entry, "PrivateNote") or f"QBO Journal Entry {qbo_id}",
+        lines,
+        source_type="qbo_journal",
+        reference=str(_safe(qbo_entry, "DocNumber") or qbo_id)[:100],
+    )
+
+
 def _non_posting_journal(qbo_entry, client, txn_date):
     """Verify old empty QBO journal stubs against the posted General Ledger.
 
@@ -1460,8 +1477,12 @@ def import_journal_entries(db: Session) -> dict:
     """
     from quickbooks.objects.journalentry import JournalEntry as QBOJournalEntry
 
-    from app.services.accounting import create_journal_entry
     from app.services.closing_date import check_closing_date
+    from app.services.qbo_documents import (
+        amount_of,
+        reverse_for_import,
+        why_not_changed,
+    )
     from app.services.qbo_ledger_import import _account_map
 
     errors = []
@@ -1488,13 +1509,37 @@ def import_journal_entries(db: Session) -> dict:
 
     pending = []
     token_updates = []
+    changes = []  # QBO changed an imported journal: reverse it, post again
+    gone = []  # QBO voided or deleted an imported journal: reverse it
+    unapplied = []  # a QBO change that can't be applied here: said, never blocking
     seen = set()
+    listed = True  # every journal QBO returned has a sound ID
+
+    def not_applied(qbo_id, number, context, what, why):
+        qbo_progress.append_error(
+            unapplied,
+            {
+                "entity": "journal_entries",
+                "qbo_id": qbo_id,
+                "document_number": number,
+                "code": "IMPORT_QBO_CHANGE_NOT_APPLIED",
+                "message": (
+                    f"{context} was {what} in QuickBooks Online after it was "
+                    f"imported, and that was not applied here: {why}. The books "
+                    "keep what was imported."
+                ),
+            },
+        )
+
     for qbo_entry in qbo_entries:
         qbo_id = str(_safe(qbo_entry, "Id", ""))
         context = _source_context("JournalEntry", qbo_entry)
-        qbo_progress.item(qbo_id, _safe(qbo_entry, "DocNumber"))
+        number = _safe(qbo_entry, "DocNumber")
+        qbo_progress.item(qbo_id, number)
+        owned = []
         try:
             if not qbo_id or len(qbo_id) > 100 or qbo_id in seen:
+                listed = False
                 raise DataProblem(
                     f"{context}: missing, duplicate, or invalid journal entry ID"
                 )
@@ -1512,13 +1557,19 @@ def import_journal_entries(db: Session) -> dict:
                 # Voided here: a later import leaves it as it is.
                 qbo_progress.skipped("Changed in SlowBooks; kept as it is here")
                 continue
-            if (
-                not mapping
-                and not legacy
-                and _non_posting_journal(qbo_entry, client, txn_date)
-            ):
+            owned = [m for m in [mapping, *legacy] if m]
+            if not owned and _non_posting_journal(qbo_entry, client, txn_date):
                 continue
             lines = _journal_lines(qbo_entry, accounts)
+            if owned and all(m.qbo_sync_token in NOT_OWNED for m in owned):
+                # Voided or deleted in QBO earlier; posting again if it is back.
+                if not lines:
+                    qbo_progress.skipped("Still voided in QuickBooks Online")
+                    continue
+                check_closing_date(db, txn_date)
+                changes.append((qbo_entry, txn_date, lines, None, mapping, legacy))
+                qbo_progress.validated(qbo_id)
+                continue
             txn = None
             repair = None
             local_id = mapping.slowbooks_id if mapping else None
@@ -1539,6 +1590,24 @@ def import_journal_entries(db: Session) -> dict:
                 local_id = local_id if local_id is not None else legacy[0].slowbooks_id
             if local_id is not None:
                 txn = db.get(Transaction, local_id)
+                if txn is None:
+                    not_applied(
+                        qbo_id,
+                        number,
+                        context,
+                        "changed",
+                        f"its posting here, local transaction #{local_id}, does not exist",
+                    )
+                    continue
+                if not lines:
+                    # Voided in QBO: every line now reads 0.00.
+                    why = why_not_changed(db, txn)
+                    if why:
+                        not_applied(qbo_id, number, context, "voided", why)
+                        continue
+                    gone.append((qbo_id, number, context, txn, owned, VOIDED_IN_QBO))
+                    qbo_progress.validated(qbo_id)
+                    continue
                 if not journal_posting_matches(txn, txn_date, lines):
                     repair = (
                         legacy_rollup_repair(txn, txn_date, lines, accounts)
@@ -1546,7 +1615,15 @@ def import_journal_entries(db: Session) -> dict:
                         else None
                     )
                     if not repair:
-                        raise posting_mismatch(txn, local_id, txn_date, lines, accounts)
+                        why = why_not_changed(db, txn, txn_date)
+                        if why:
+                            not_applied(qbo_id, number, context, "changed", why)
+                            continue
+                        changes.append(
+                            (qbo_entry, txn_date, lines, txn, mapping, legacy)
+                        )
+                        qbo_progress.validated(qbo_id)
+                        continue
                     check_closing_date(db, txn_date)
                 elif mapping:
                     # SyncToken also changes for non-posting metadata edits.
@@ -1569,18 +1646,53 @@ def import_journal_entries(db: Session) -> dict:
                 if isinstance(exc, HTTPException)
                 else qbo_progress.error_message(exc, "QBO journal import")
             )
-            qbo_progress.append_error(
-                errors,
-                {
-                    "entity": "journal_entries",
-                    "qbo_id": qbo_id,
-                    "document_number": _safe(qbo_entry, "DocNumber"),
-                    "code": getattr(exc, "error_code", "IMPORT_VALIDATION"),
-                    "message": (
-                        f"{context}: {detail}" if context not in detail else detail
-                    ),
-                },
+            error = {
+                "entity": "journal_entries",
+                "qbo_id": qbo_id,
+                "document_number": number,
+                "code": getattr(exc, "error_code", "IMPORT_VALIDATION"),
+                "message": (
+                    f"{context}: {detail}" if context not in detail else detail
+                ),
+            }
+            if owned:
+                # Imported before: QBO's new version can't be applied here,
+                # and the rest of the batch goes on.
+                error["code"] = "IMPORT_QBO_CHANGE_NOT_APPLIED"
+                error["message"] += " The books keep what was imported."
+                qbo_progress.append_error(unapplied, error)
+            else:
+                qbo_progress.append_error(errors, error)
+
+    # Deleted in QBO: a journal imported before that a complete, sound list of
+    # QBO's journals no longer has. (The list is complete: any page that
+    # failed to load stopped the import above.)
+    if listed:
+        owners = {}
+        for mapping in db.query(QBOMapping).filter_by(entity_type="journal_entry"):
+            owners.setdefault(mapping.qbo_id, []).append(mapping)
+        for qbo_id, mappings in ledger_mappings.items():
+            owners.setdefault(qbo_id, []).extend(mappings)
+        for qbo_id, mappings in sorted(owners.items()):
+            if qbo_id in seen or any(m.qbo_sync_token in NOT_OWNED for m in mappings):
+                continue
+            txn = db.get(Transaction, mappings[0].slowbooks_id)
+            if txn is None:
+                continue
+            context = f"JournalEntry QBO #{qbo_id}" + (
+                f" (document {txn.reference})"
+                if txn.reference and txn.reference != qbo_id
+                else ""
             )
+            qbo_progress.item(qbo_id, txn.reference or "")
+            why = why_not_changed(db, txn)
+            if why:
+                not_applied(qbo_id, txn.reference or "", context, "deleted", why)
+                continue
+            gone.append(
+                (qbo_id, txn.reference or "", context, txn, mappings, DELETED_IN_QBO)
+            )
+            qbo_progress.validated(qbo_id)
 
     if errors:
         qbo_progress.emit(
@@ -1591,7 +1703,7 @@ def import_journal_entries(db: Session) -> dict:
             code="IMPORT_BATCH_BLOCKED",
             item_id="",
         )
-        return {"imported": 0, "errors": errors}
+        return {"imported": 0, "errors": errors + unapplied}
 
     imported = 0
     qbo_id = ""
@@ -1603,7 +1715,7 @@ def import_journal_entries(db: Session) -> dict:
                     qbo_progress.posting(qbo_id, _safe(qbo_entry, "DocNumber"))
                     apply_rollup_repair(txn, repair, accounts)
             db.flush()
-            if pending:
+            if pending or changes or gone:
                 rebase_account_balances(db, accounts.values())
             for mapping, token in token_updates:
                 mapping.qbo_sync_token = token
@@ -1611,15 +1723,7 @@ def import_journal_entries(db: Session) -> dict:
                 qbo_id = str(qbo_entry.Id)
                 qbo_progress.posting(qbo_id, _safe(qbo_entry, "DocNumber"))
                 if txn is None:
-                    txn = create_journal_entry(
-                        db,
-                        txn_date,
-                        _safe(qbo_entry, "PrivateNote")
-                        or f"QBO Journal Entry {qbo_id}",
-                        lines,
-                        source_type="qbo_journal",
-                        reference=str(_safe(qbo_entry, "DocNumber") or qbo_id)[:100],
-                    )
+                    txn = _post_journal(db, qbo_entry, txn_date, lines)
                     imported += 1
                     qbo_progress.created(qbo_id)
                 else:
@@ -1639,6 +1743,48 @@ def import_journal_entries(db: Session) -> dict:
                         qbo_id,
                         _safe(qbo_entry, "SyncToken"),
                     )
+            for qbo_entry, txn_date, lines, old, mapping, legacy in changes:
+                qbo_id = str(qbo_entry.Id)
+                qbo_progress.posting(qbo_id, _safe(qbo_entry, "DocNumber"))
+                if old is not None:
+                    reverse_for_import(db, old)
+                txn = _post_journal(db, qbo_entry, txn_date, lines)
+                token = _safe(qbo_entry, "SyncToken")
+                if mapping:
+                    mapping.slowbooks_id, mapping.qbo_sync_token = txn.id, token
+                else:
+                    create_mapping(db, "journal_entry", txn.id, qbo_id, token)
+                for ledger in legacy:
+                    ledger.slowbooks_id, ledger.qbo_sync_token = txn.id, token
+                was = (
+                    f"its posting here (local #{old.id}, {amount_of(old.lines)}) was "
+                    "reversed and "
+                    if old is not None
+                    else ""
+                )
+                qbo_progress.emit(
+                    "update",
+                    f"{_source_context('JournalEntry', qbo_entry)} changed in "
+                    f"QuickBooks Online: {was}the new version was posted (local "
+                    f"#{txn.id}, {amount_of(lines)})",
+                    code="IMPORT_QBO_CHANGE_APPLIED",
+                )
+            for qbo_id, number, context, old, mappings, token in gone:
+                qbo_progress.posting(qbo_id, number)
+                reverse_for_import(db, old)
+                for mapping in mappings:
+                    mapping.qbo_sync_token = token
+                how = "voided" if token == VOIDED_IN_QBO else "deleted"
+                qbo_progress.emit(
+                    "update",
+                    f"{context} was {how} in QuickBooks Online: its posting here "
+                    f"(local #{old.id}, {amount_of(old.lines)}) was reversed",
+                    code=(
+                        "IMPORT_QBO_VOID_APPLIED"
+                        if how == "voided"
+                        else "IMPORT_QBO_DELETE_APPLIED"
+                    ),
+                )
             db.flush()
     except Exception as exc:
         return {
@@ -1650,9 +1796,10 @@ def import_journal_entries(db: Session) -> dict:
                     "message": f"JournalEntry QBO #{qbo_id or '(batch)'}: "
                     + qbo_progress.error_message(exc, "QBO journal import"),
                 }
-            ],
+            ]
+            + unapplied,
         }
-    return {"imported": imported, "errors": []}
+    return {"imported": imported, "errors": unapplied}
 
 
 # ============================================================================

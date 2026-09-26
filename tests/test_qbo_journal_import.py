@@ -350,7 +350,12 @@ def test_failure_on_later_api_page_does_not_post_first_page(
 
 
 @pytest.mark.parametrize("change", ["amount", "deleted_local"])
-def test_changed_import_is_reported_without_duplicate(db_session, qbo, change):
+def test_a_journal_changed_in_qbo_is_posted_again_or_said_why_not(
+    db_session, qbo, change
+):
+    """2.18.0 (owner): QBO's change flows in (the imported posting reversed,
+    the new version posted); when it can't be applied, the log says why and
+    the batch goes on. #192 reported every change as a blocking mismatch."""
     client, accounts = qbo
     assert qbo_import.import_journal_entries(db_session)["imported"] == 1
     local_id = db_session.query(Transaction).one().id
@@ -363,15 +368,25 @@ def test_changed_import_is_reported_without_duplicate(db_session, qbo, change):
     count_before = db_session.query(Transaction).count()
     result = qbo_import.import_journal_entries(db_session)
     assert result["imported"] == 0
+    if change == "amount":
+        assert result["errors"] == []
+        assert db_session.query(Transaction).count() == count_before + 2
+        mapping = (
+            db_session.query(QBOMapping).filter_by(entity_type="journal_entry").one()
+        )
+        new = db_session.get(Transaction, mapping.slowbooks_id)
+        assert mapping.slowbooks_id != local_id
+        assert sorted(line.debit + line.credit for line in new.lines) == [
+            Decimal("50.00"),
+            Decimal("50.00"),
+        ]
+        assert accounts["1"].balance == Decimal("-50.00")
+        return
     error = result["errors"][0]
-    assert error["code"] == "IMPORT_POSTING_MISMATCH"
+    assert error["code"] == "IMPORT_QBO_CHANGE_NOT_APPLIED"
     assert "JournalEntry QBO #227 (document ADJ-7)" in error["message"]
     assert f"local transaction #{local_id}" in error["message"].lower()
-    if change == "amount":
-        assert "account QBO #2" in error["message"]
-        assert "25.54" in error["message"] and "50.00" in error["message"]
-    else:
-        assert "does not exist" in error["message"]
+    assert "does not exist" in error["message"]
     assert db_session.query(Transaction).count() == count_before
 
 
@@ -458,6 +473,10 @@ def test_legacy_parent_account_is_repaired_without_replacing_lines(db_session, q
 
 @pytest.mark.parametrize("blocker", ["amount", "closed", "invalid_other"])
 def test_parent_repair_does_not_override_financial_blockers(db_session, qbo, blocker):
+    """The in-place repair is not applied past a real difference: a changed
+    amount is QBO's edit (2.18.0: reversed and posted again, the old lines
+    untouched), a closed period is said and skipped, and a new bad journal
+    stops the batch."""
     client, accounts = qbo
     txn, parent = _old_parent_journal(db_session, accounts)
     if blocker == "amount":
@@ -471,8 +490,12 @@ def test_parent_repair_does_not_override_financial_blockers(db_session, qbo, blo
         client.entries.append(broken)
     db_session.flush()
     result = qbo_import.import_journal_entries(db_session)
-    assert result["errors"]
     assert txn.lines[0].account_id == parent.id
+    if blocker == "amount":
+        assert result["errors"] == []
+        assert db_session.query(Transaction).count() == 3  # reversal, new version
+        return
+    assert result["errors"]
     assert db_session.query(Transaction).count() == 1
 
 

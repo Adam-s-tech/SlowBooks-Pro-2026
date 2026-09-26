@@ -385,3 +385,142 @@ def adopt_invoice(db: Session, invoice) -> bool:
                 post_payment_journal(db, payment)
     mark_changed_here(db, mapping, ledger)
     return True
+
+
+# ---------------------------------------------------------------------------
+# Changes made in QuickBooks Online, applied by the import
+# ---------------------------------------------------------------------------
+
+
+def why_not_changed(db: Session, txn, new_date=None) -> str | None:
+    """Why the import can't reverse its posting `txn` (and post a new
+    version dated `new_date`), in words; None when it can."""
+    from app.services.closing_date import get_closing_date
+
+    closing = get_closing_date(db)
+    if closing is not None:
+        for day in (txn.date, new_date):
+            if day is not None and day <= closing:
+                return f"the books are closed through {closing}, and it is dated {day}"
+    if any(line.reconciliation_id for line in txn.lines):
+        return "one of its lines is on a reconciled bank statement here"
+    if any(line.deposit_transaction_id for line in txn.lines):
+        return "its money is in a deposit made here"
+    return None
+
+
+def reverse_for_import(db: Session, txn) -> Transaction:
+    """The import reverses one of its own postings (QBO changed or voided
+    it): the usual reversing entry, keyed by the posting."""
+    from app.services.accounting import create_journal_entry, reversing_lines
+    from app.services.bank_posting import release_statement_links
+
+    reversal = create_journal_entry(
+        db,
+        txn.date,
+        f"VOID {txn.description or ''}".strip(),
+        reversing_lines(txn.lines),
+        source_type=f"{txn.source_type}_void",
+        source_id=txn.id,
+        reference=txn.reference or "",
+        class_id=txn.class_id,
+        job_id=txn.job_id,
+    )
+    release_statement_links(db, txn)
+    return reversal
+
+
+def amount_of(lines) -> str:
+    """ "25.54": what a posting moves (its debits), for the import log."""
+    total = sum(
+        (Decimal(str(line["debit"] if isinstance(line, dict) else line.debit)))
+        for line in lines
+    )
+    return f"{total:,.2f}"
+
+
+def void_document_from_qbo(db: Session, qbo_type: str, qbo_id: str) -> str | None:
+    """QBO voided a transaction whose document the QBO import created: void
+    that document here too (its import posting is reversed by the caller).
+    A sales receipt's payment goes with it; a payment QBO leaves standing
+    once the invoice it paid is voided stays, unapplied, as in QBO. Returns
+    the document's name for the import log, or None if there is none to
+    void (none, voided already, or ours now)."""
+    from app.services.inventory_service import reverse_sale
+    from app.services.qbo_common import VOIDED_IN_QBO
+
+    kind = {
+        "invoice": "invoice",
+        "salesreceipt": "sales_receipt",
+        "payment": "payment",
+    }.get(qbo_type.lower().replace(" ", ""))
+    if kind is None:
+        return None
+    mapping = (
+        db.query(QBOMapping)
+        .filter(QBOMapping.entity_type == kind, QBOMapping.qbo_id == qbo_id)
+        .first()
+    )
+    if mapping is None:
+        return None
+    if kind == "payment":
+        payment = db.get(Payment, mapping.slowbooks_id)
+        if payment is None or payment.is_voided or payment.transaction_id is not None:
+            return None
+        for alloc in payment.allocations:
+            _unpay(alloc.invoice, alloc.amount)
+        payment.is_voided = True
+        mapping.qbo_sync_token = VOIDED_IN_QBO
+        return f"payment #{payment.id}"
+    invoice = db.get(Invoice, mapping.slowbooks_id)
+    if (
+        invoice is None
+        or invoice.status == InvoiceStatus.VOID
+        or invoice.transaction_id is not None
+    ):
+        return None
+    cost_here = local_cost_live(db, invoice)
+    for alloc in list(invoice.payment_allocations):
+        payment = alloc.payment
+        own = (
+            kind == "sales_receipt"
+            and payment is not None
+            and payment.transaction_id is None
+            and not payment.is_voided
+        )
+        if own:
+            payment.is_voided = True  # the receipt's own payment goes with it
+        else:
+            db.delete(alloc)  # a payment of it stays, unapplied
+    for line in invoice.lines:
+        item = db.get(Item, line.item_id) if line.item_id else None
+        if item is not None and item.track_inventory:
+            reverse_sale(
+                db,
+                item,
+                quantity=Decimal(str(line.quantity)),
+                source_type="invoice_void",
+                source_id=invoice.id,
+                original_source_type="invoice",
+                original_source_id=invoice.id,
+                txn_date=invoice.date,
+                post_journal=cost_here,
+            )
+    invoice.amount_paid = Decimal("0")
+    invoice.balance_due = Decimal("0")
+    invoice.status = InvoiceStatus.VOID
+    mapping.qbo_sync_token = VOIDED_IN_QBO
+    noun = "sales receipt" if kind == "sales_receipt" else "invoice"
+    return f"{noun} {invoice.invoice_number}"
+
+
+def _unpay(invoice, amount) -> None:
+    """Take a payment's amount off an invoice it paid, as a payment void does."""
+    if invoice is None or invoice.status == InvoiceStatus.VOID:
+        return
+    invoice.amount_paid = (invoice.amount_paid or Decimal("0")) - amount
+    invoice.balance_due = (invoice.balance_due or Decimal("0")) + amount
+    if invoice.amount_paid > 0:
+        invoice.status = InvoiceStatus.PARTIAL
+    else:
+        invoice.status = InvoiceStatus.SENT

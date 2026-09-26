@@ -20,7 +20,6 @@ from app.models.accounts import AccountType
 from app.models.items import ItemType
 from app.models.qbo_mapping import QBOMapping
 from app.services import qbo_progress
-from app.services.safe_errors import DataProblem
 
 QBO_TO_ACCOUNT_TYPE = {
     "Bank": AccountType.ASSET,
@@ -136,41 +135,6 @@ def journal_posting_matches(txn, txn_date, lines) -> bool:
         (line.account_id, line.debit, line.credit) for line in txn.lines
     ) == _posting_totals(
         (line["account_id"], line["debit"], line["credit"]) for line in lines
-    )
-
-
-class PostingMismatch(DataProblem):
-    error_code = "IMPORT_POSTING_MISMATCH"
-
-
-def posting_mismatch(txn, local_id, txn_date, lines, accounts):
-    """Describe observed differences without claiming the source changed."""
-    if txn is None:
-        return PostingMismatch(f"Mapped local transaction #{local_id} does not exist")
-    differences = []
-    if txn.date != txn_date:
-        differences.append(f"date differs: local {txn.date}, QBO {txn_date}")
-    local = _posting_totals(
-        (line.account_id, line.debit, line.credit) for line in txn.lines
-    )
-    source = _posting_totals(
-        (line["account_id"], line["debit"], line["credit"]) for line in lines
-    )
-    by_id = {
-        account.id: (qbo_id, account) for qbo_id, account in accounts.items() if account
-    }
-    for account_id in sorted(local.keys() | source.keys()):
-        if local.get(account_id, Decimal(0)) == source.get(account_id, Decimal(0)):
-            continue
-        qbo_id, account = by_id.get(account_id, ("unmapped", None))
-        differences.append(
-            f"account QBO #{qbo_id} / local #{account_id} ({account.name if account else 'unknown'}): "
-            f"local debit-minus-credit {local.get(account_id, Decimal(0)):.2f}, "
-            f"QBO {source.get(account_id, Decimal(0)):.2f}"
-        )
-    return PostingMismatch(
-        f"Local transaction #{local_id} does not match the source posting; "
-        + "; ".join(differences)
     )
 
 
