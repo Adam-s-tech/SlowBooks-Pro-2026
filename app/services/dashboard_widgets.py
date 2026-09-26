@@ -25,6 +25,7 @@ from app.models.invoices import Invoice, InvoiceStatus
 from app.models.payments import Payment
 from app.models.purchase_orders import POStatus, PurchaseOrder
 from app.models.transactions import Transaction, TransactionLine
+from app.services.accounting import _q
 
 OPEN_INVOICE = (InvoiceStatus.DRAFT, InvoiceStatus.SENT, InvoiceStatus.PARTIAL)
 OPEN_BILL = (BillStatus.UNPAID, BillStatus.PARTIAL)
@@ -34,7 +35,41 @@ def _f(v) -> float:
     return float(v or 0)
 
 
+def _owing():
+    """Open invoices with money still owed. A $0.00 invoice made before
+    2.18.0 (which starts one as paid) is still a draft or sent, so on an
+    upgraded company it sat in the Overdue Invoices list at $0.00 and in
+    the overdue count (2.18.0 gate, skytech N7). What makes an invoice
+    overdue is a balance, not its status."""
+    return (Invoice.status.in_(OPEN_INVOICE), Invoice.balance_due > 0)
+
+
+def _bills_owing():
+    """Open bills with money still owed (the payable side of _owing)."""
+    return (Bill.status.in_(OPEN_BILL), Bill.balance_due > 0)
+
+
+def _past_due(column):
+    """Due before today — the local date, as the A/R Aging card and the
+    days-overdue count read it. SQL's CURRENT_DATE is UTC in SQLite, so
+    in a US evening an invoice due today was counted overdue already."""
+    return column < date.today()
+
+
 # ── builders ─────────────────────────────────────────────────────────────
+
+
+def _ar_aging_totals(db: Session) -> dict:
+    """The TOTAL row of the A/R Aging report as of today — the one source
+    for both receivables cards, so they cannot disagree with each other or
+    with the report."""
+    from app.routes.reports.receivables import ar_aging_report
+
+    return ar_aging_report(db, date.today())["totals"]
+
+
+def _money(value) -> Decimal:
+    return Decimal(str(value or 0))
 
 
 def receivables(db: Session) -> dict:
@@ -42,14 +77,10 @@ def receivables(db: Session) -> dict:
     # credit memos), in home currency: the A/R Aging total and account 1100.
     # Summing invoice balances alone read $782.13 against a balance sheet of
     # $555.74 (explore 2.17.3, F17).
-    from app.services.contact_balances import customer_balances
-
-    total = sum(customer_balances(db).values(), Decimal(0))
+    total = _ar_aging_totals(db)["total"]
     overdue = (
         db.query(func.count(Invoice.id))
-        .filter(
-            Invoice.status.in_(OPEN_INVOICE), Invoice.due_date < func.current_date()
-        )
+        .filter(*_owing(), _past_due(Invoice.due_date))
         .scalar()
     )
     return {"total": _f(total), "overdue_count": int(overdue or 0)}
@@ -58,18 +89,14 @@ def receivables(db: Session) -> dict:
 def overdue_invoices(db: Session) -> dict:
     rows = (
         db.query(Invoice)
-        .filter(
-            Invoice.status.in_(OPEN_INVOICE), Invoice.due_date < func.current_date()
-        )
+        .filter(*_owing(), _past_due(Invoice.due_date))
         .order_by(Invoice.due_date)
         .limit(5)
         .all()
     )
     count = (
         db.query(func.count(Invoice.id))
-        .filter(
-            Invoice.status.in_(OPEN_INVOICE), Invoice.due_date < func.current_date()
-        )
+        .filter(*_owing(), _past_due(Invoice.due_date))
         .scalar()
     )
     today = date.today()
@@ -104,7 +131,7 @@ def payables(db: Session) -> dict:
     )
     overdue = (
         db.query(func.count(Bill.id))
-        .filter(Bill.status.in_(OPEN_BILL), Bill.due_date < func.current_date())
+        .filter(*_bills_owing(), _past_due(Bill.due_date))
         .scalar()
     )
     return {"total": _f(total), "overdue_count": int(overdue or 0)}
@@ -143,29 +170,25 @@ def bank_balances(db: Session) -> dict:
 
 
 def ar_aging(db: Session) -> dict:
-    today = date.today()
-    buckets = {
-        "current": Decimal(0),
-        "d30": Decimal(0),
-        "d60": Decimal(0),
-        "d90": Decimal(0),
+    """The A/R Aging report's figures: what customers owe by age, the credits
+    they hold, and the total — the report's TOTAL row, as of today.
+
+    The card summed open invoice balances on its own, so it read "Current
+    $323.56" beside a Total Receivables of $303.56: a $20.00 payment not
+    yet applied to an invoice was in one figure and not the other (2.18.0
+    gate, NEW-5). The report nets credits into Current; the card shows
+    Current before them and the credits on their own line, as the report
+    page does, so the buckets less the credits are the total."""
+    t = _ar_aging_totals(db)
+    credits = _money(t["unapplied_credits"])
+    return {
+        "current": float(_q(_money(t["current"]) + credits)),
+        "d30": t["over_30"],
+        "d60": t["over_60"],
+        "d90": t["over_90"],
+        "credits": float(credits),
+        "total": t["total"],
     }
-    rows = (
-        db.query(Invoice)
-        .filter(Invoice.status.in_(OPEN_INVOICE), Invoice.balance_due > 0)
-        .all()
-    )
-    for inv in rows:
-        days = (today - inv.due_date).days if inv.due_date else 0
-        key = (
-            "current"
-            if days <= 0
-            else "d30" if days <= 30 else "d60" if days <= 60 else "d90"
-        )
-        buckets[key] += inv.balance_due
-    out = {k: float(v) for k, v in buckets.items()}
-    out["total"] = sum(out.values())
-    return out
 
 
 def _month_bounds(year: int, month: int) -> tuple[date, date]:
@@ -381,12 +404,12 @@ def cash_position(db: Session) -> dict:
     cash = sum(r["balance"] for r in _bank_ledger_rows(db) if r["kind"] == "bank")
     ar_due = _f(
         db.query(func.coalesce(func.sum(Invoice.balance_due), 0))
-        .filter(Invoice.status.in_(OPEN_INVOICE), Invoice.due_date <= horizon)
+        .filter(*_owing(), Invoice.due_date <= horizon)
         .scalar()
     )
     ap_due = _f(
         db.query(func.coalesce(func.sum(Bill.balance_due), 0))
-        .filter(Bill.status.in_(OPEN_BILL), Bill.due_date <= horizon)
+        .filter(*_bills_owing(), Bill.due_date <= horizon)
         .scalar()
     )
     return {

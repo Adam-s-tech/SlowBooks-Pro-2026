@@ -7,9 +7,12 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models.contacts import Vendor
+from app.models.payroll import Employee
 from app.services.tax_forms import form_941, form_940, w2_w3, state_sui, tax_liability
 from app.services import form_1099
 from app.services.payroll_documents import employer_block
+from app.services.request_utils import content_disposition, file_name
 
 router = APIRouter(prefix="/api/tax-forms", tags=["tax-forms"])
 
@@ -19,11 +22,16 @@ def _company(db: Session) -> dict:
     return employer_block(db)
 
 
-def _pdf(content: bytes, filename: str) -> Response:
+def _pdf(content: bytes, *name) -> Response:
+    """A form's PDF, named for the form and the person it is for
+    ("W-2_2026_Lena-Ortiz.pdf", "941_2026_Q3.pdf"). The names used to
+    carry internal ids ("w2_2026_emp1.pdf", "1099nec_2026_vendor3.pdf"),
+    which told the owner nothing in the Reports folder (2.18.0 gate,
+    NEW-6)."""
     return Response(
         content=content,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"inline; filename={filename}"},
+        headers={"Content-Disposition": content_disposition(file_name(*name) + ".pdf")},
     )
 
 
@@ -47,7 +55,7 @@ def get_941_pdf(
 ):
     _check_quarter(quarter)
     pdf = form_941.generate_941_pdf(db, year, quarter, _company(db))
-    return _pdf(pdf, f"form941_{year}Q{quarter}.pdf")
+    return _pdf(pdf, "941", year, f"Q{quarter}")
 
 
 # --- Form 940 — annual FUTA ------------------------------------------------
@@ -59,7 +67,7 @@ def get_940(year: int = Query(...), db: Session = Depends(get_db)):
 @router.get("/940/pdf")
 def get_940_pdf(year: int = Query(...), db: Session = Depends(get_db)):
     pdf = form_940.generate_940_pdf(db, year, _company(db))
-    return _pdf(pdf, f"form940_{year}.pdf")
+    return _pdf(pdf, "940", year)
 
 
 # --- W-2 / W-3 -------------------------------------------------------------
@@ -80,7 +88,8 @@ def get_w2(employee_id: int, year: int = Query(...), db: Session = Depends(get_d
 @router.get("/w2/{employee_id}/pdf")
 def get_w2_pdf(employee_id: int, year: int = Query(...), db: Session = Depends(get_db)):
     pdf = w2_w3.generate_w2_pdf(db, year, employee_id, _company(db))
-    return _pdf(pdf, f"w2_{year}_emp{employee_id}.pdf")
+    emp = db.query(Employee).filter(Employee.id == employee_id).first()
+    return _pdf(pdf, "W-2", year, emp.full_name if emp else None)
 
 
 # --- State unemployment ----------------------------------------------------
@@ -124,10 +133,11 @@ def get_1099_pdf(vendor_id: int, year: int = Query(...), db: Session = Depends(g
         # as 404 instead of leaking a 500 stack trace to the operator running
         # year-end forms.
         raise HTTPException(status_code=404, detail=str(e))
-    return _pdf(pdf, f"1099nec_{year}_vendor{vendor_id}.pdf")
+    vendor = db.query(Vendor).filter(Vendor.id == vendor_id).first()
+    return _pdf(pdf, "1099-NEC", year, vendor.name if vendor else None)
 
 
 @router.get("/1096/pdf")
 def get_1096_pdf(year: int = Query(...), db: Session = Depends(get_db)):
     pdf = form_1099.generate_1096_pdf(db, year, _company(db))
-    return _pdf(pdf, f"form1096_{year}.pdf")
+    return _pdf(pdf, "1096", year)

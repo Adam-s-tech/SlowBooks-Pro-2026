@@ -32,6 +32,7 @@ from app.models.items import Item
 from app.models.invoices import Invoice, InvoiceLine, InvoiceStatus
 from app.models.payments import Payment, PaymentAllocation
 from app.models.estimates import Estimate, EstimateLine
+from app.services.addresses import city_line
 from app.services.csv_export import _csv_safe
 from app.services.currency import convert_lines, to_home
 from app.services.iif_common import account_to_iif_type, item_to_iif_type
@@ -232,6 +233,20 @@ def export_accounts(db: Session) -> str:
     return lines
 
 
+def _address_lines(street1, street2, city, state, zip_code) -> tuple:
+    """ADDR2, ADDR3 and ADDR4 of a customer or vendor: the two street lines
+    and "City, ST ZIP". A blank part is left out rather than written: a
+    customer with no ZIP went out as "Astoria, OR None" (the Python None
+    formatted into the line) and one with no state as "None 97103", which
+    QuickBooks and our own importer then read as the ZIP code or state
+    (2.18.0 gate, NEW-7)."""
+    return (
+        (street1 or "").strip(),
+        (street2 or "").strip(),
+        city_line(city, state, zip_code),
+    )
+
+
 def export_customers(db: Session) -> str:
     """Export customers as !CUST section."""
     header = _iif_line(
@@ -268,20 +283,8 @@ def export_customers(db: Session) -> str:
 
         # QB address convention: ADDR1=company/name, ADDR2-3=street, ADDR4=city/state/zip
         addr1 = c.company or c.name or ""
-        addr2 = c.bill_address1 or ""
-        addr3 = c.bill_address2 or ""
-        city_st_zip = ", ".join(
-            filter(
-                None,
-                [
-                    c.bill_city,
-                    (
-                        f"{c.bill_state} {c.bill_zip}".strip()
-                        if (c.bill_state or c.bill_zip)
-                        else None
-                    ),
-                ],
-            )
+        addr2, addr3, city_st_zip = _address_lines(
+            c.bill_address1, c.bill_address2, c.bill_city, c.bill_state, c.bill_zip
         )
 
         lines += _iif_line(
@@ -336,16 +339,8 @@ def export_vendors(db: Session) -> str:
     lines = header
     for v in vendors:
         addr1 = v.company or v.name or ""
-        addr2 = v.address1 or ""
-        addr3 = v.address2 or ""
-        city_st_zip = ", ".join(
-            filter(
-                None,
-                [
-                    v.city,
-                    f"{v.state} {v.zip}".strip() if (v.state or v.zip) else None,
-                ],
-            )
+        addr2, addr3, city_st_zip = _address_lines(
+            v.address1, v.address2, v.city, v.state, v.zip
         )
 
         lines += _iif_line(

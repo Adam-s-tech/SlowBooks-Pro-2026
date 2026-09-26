@@ -189,15 +189,24 @@ const DashboardPage = {
                 <div class="card-header">${escapeHtml(b.name)}${b.kind === 'credit_card' ? ' <span style="font-size:10px;color:var(--gray-400)">owed</span>' : ''}</div><div class="card-value">${formatCurrency(b.balance)}</div></div>`).join('')}</div>`;
         },
         ar_aging(d) {
-            if (!d.total) return '<div style="color:var(--gray-500);font-size:12px">No open receivables.</div>';
-            const seg = (v, color, label) => v > 0 ? `<div style="width:${(v / d.total * 100).toFixed(1)}%;background:${color}" title="${label}: ${formatCurrency(v)}"></div>` : '';
+            // The A/R Aging report's own figures: the buckets, the credits
+            // customers hold (payments and credit memos not yet applied) and
+            // the total, which is Total Receivables. Current + 1-30 + 31-60
+            // + 61+ − credits = Total, as on the report page.
+            const owed = d.current + d.d30 + d.d60 + d.d90;
+            if (!owed && !d.credits) return '<div style="color:var(--gray-500);font-size:12px">No open receivables.</div>';
+            const seg = (v, color, label) => v > 0 ? `<div style="width:${(v / owed * 100).toFixed(1)}%;background:${color}" title="${label}: ${formatCurrency(v)}"></div>` : '';
             return `<div style="display:flex;height:28px;border-radius:4px;overflow:hidden">${seg(d.current, 'var(--success)', 'Current')}${seg(d.d30, 'var(--qb-gold)', '1-30')}${seg(d.d60, '#f97316', '31-60')}${seg(d.d90, 'var(--danger)', '61+')}</div>
                 <div style="display:flex;gap:12px;margin-top:6px;font-size:10px;flex-wrap:wrap">
                     <span><span style="color:var(--success)">■</span> Current ${formatCurrency(d.current)}</span>
                     <span><span style="color:var(--qb-gold)">■</span> 1-30 ${formatCurrency(d.d30)}</span>
                     <span><span style="color:#f97316">■</span> 31-60 ${formatCurrency(d.d60)}</span>
                     <span><span style="color:var(--danger)">■</span> 61+ ${formatCurrency(d.d90)}</span>
-                </div>`;
+                </div>
+                <table class="data-table" style="font-size:12px;margin-top:6px"><tbody>
+                    ${d.credits ? `<tr><td>Credits not yet applied</td><td class="amount">${formatCurrency(-d.credits)}</td></tr>` : ''}
+                    <tr style="font-weight:700"><td>Total</td><td class="amount">${formatCurrency(d.total)}</td></tr>
+                </tbody></table>`;
         },
         monthly_revenue(d) {
             const max = Math.max(...d.months.map(m => m.amount), 1);

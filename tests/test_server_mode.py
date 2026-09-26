@@ -99,14 +99,27 @@ def test_serve_banner_lists_all_addresses():
 
 
 def test_data_dir_flag_redirects_everything(tmp_path):
+    import shutil
     import subprocess
     import sys as _sys
+    from pathlib import Path
+
+    # Run a copy: from a checkout the launcher keeps its .env beside itself,
+    # so running the checkout's own copy rewrote the developer's .env (its
+    # APP_HOST, and a SETTINGS_ENCRYPTION_KEY that then outranks their
+    # .slowbooks-master.key) — or left a new one in the tree (2.18.0 gate,
+    # macbase1).
+    checkout = Path(desktop_launcher.__file__).resolve().parent
+    launcher = tmp_path / "desktop_launcher.py"
+    shutil.copyfile(checkout / "desktop_launcher.py", launcher)
+    their_env = checkout / ".env"
+    before = their_env.read_bytes() if their_env.exists() else None
 
     target = tmp_path / "server-data"
     r = subprocess.run(
         [
             _sys.executable,
-            "desktop_launcher.py",
+            str(launcher),
             "--setup-only",
             "--data-dir",
             str(target),
@@ -118,6 +131,8 @@ def test_data_dir_flag_redirects_everything(tmp_path):
     )
     assert r.returncode == 0, r.stdout + r.stderr
     assert (target / "companies").is_dir()
+    assert (tmp_path / ".env").is_file()
+    assert (their_env.read_bytes() if their_env.exists() else None) == before
 
 
 # ---------------------------------------------------------------------------
