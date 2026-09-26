@@ -60,4 +60,6 @@ def test_the_report_page_explains_it_and_gives_the_entry():
     # owed: "Of that, $59.24" read as part of the $0.33 owed (2.18.0 gate,
     # macbase1's wording nit).
     assert "Of that, <strong>${formatCurrency(ledger.purchase_tax)}" not in js
-    assert "'lowered'} that balance by" in js
+    assert (
+        "lowering that balance by <strong>${formatCurrency(ledger.purchase_tax)}" in js
+    )
