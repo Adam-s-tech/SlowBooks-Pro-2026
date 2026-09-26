@@ -319,6 +319,10 @@ def test_wrong_passwords_lock_the_override_for_a_while(
     assert "The closing-date password you entered is not correct." in detail
     assert "Too many wrong closing-date passwords" in detail
     assert "try again in 10 minutes" in detail
+    # while locked, a change sent with no password is not asked for one
+    r = client.post("/api/invoices", json=_invoice(cid))
+    assert r.status_code == 403
+    assert r.headers.get("X-Closing-Date-Override") == "locked"
     r = client.post(
         "/api/invoices", json=_invoice(cid), headers=_with_password(OVERRIDE_PW)
     )

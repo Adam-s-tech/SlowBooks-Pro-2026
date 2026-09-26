@@ -179,3 +179,5 @@ def test_the_pdf_keeps_each_date_on_one_line(client, db_session, seed_accounts, 
     for day in ("Sep 01, 2026", "Sep 02, 2026", "Sep 10, 2026", "Sep 11, 2026"):
         assert day in text, (day, text[:600])
     assert "applied to #" in text
+    for label in ("Total Invoiced", "Total Payments", "Balance Due"):
+        assert label in text, (label, text[-300:])

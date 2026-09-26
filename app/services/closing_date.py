@@ -160,7 +160,10 @@ def check_closing_date(db: Session, txn_date: date, password: str = None):
         )
         key = _company_key(db)
         now = time.monotonic()
-        if stored and password:
+        if stored:
+            # While locked, say so at once, even to a request that brought no
+            # password: asking for one the lock would refuse anyway was one
+            # more step to the same refusal (skytech N3).
             remaining = _lock_remaining(key, now)
             if remaining:
                 raise _locked_refusal(detail, remaining)
