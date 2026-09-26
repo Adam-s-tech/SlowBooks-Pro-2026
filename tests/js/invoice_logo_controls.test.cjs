@@ -25,6 +25,9 @@ function fixture(settings = {}) {
         formatDate: value => value, formatCurrency: value => `$${value}`, statusBadge: value => value,
         todayISO: () => '2026-09-26', classFormGroupHtml: async () => '', jobFormGroupHtml: async () => '',
         currencyFormGroupsHtml: () => '', openModal: (title, html) => dialogs.push({ title, html }),
+        // The form's currency listener and the view's credit note look
+        // elements up (2.18.0); this fake dialog has none.
+        $: () => null, $$: () => [],
     };
     vm.createContext(context);
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../../app/static/js/invoices.js'), 'utf8'), context);

@@ -13,6 +13,9 @@ function fixture(settings = {}) {
             '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
         })[character]),
         toast() {},
+        // Save disables its button and re-reads the form for the unsaved-
+        // changes note (2.18.0); neither is on this fake page.
+        document: { getElementById: () => null },
         // A checkbox is absent from browser FormData when it is unchecked.
         FormData: class {
             constructor(form) { this.form = form; }
