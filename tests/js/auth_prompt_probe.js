@@ -32,7 +32,7 @@ statusCompany.textContent = 'Company: bookkeeper.sbk';
 
 const ctx = {
   console,
-  window: {},
+  window: { addEventListener() {} },
   fetch: async () => ({ ok: true, json: async () => scenario.status }),
   document: {
     body,
