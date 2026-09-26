@@ -10,6 +10,10 @@ const allocs = [
   el({ dataset: { invoice: '11', max: '312.30' } }), // oldest first, as rendered
   el({ dataset: { invoice: '12', max: '500.00' } }),
 ];
+const creditAllocs = [
+  el({ dataset: { invoice: '11', number: '1001', max: '312.30' } }),
+  el({ dataset: { invoice: '12', number: '1002', max: '500.00' } }),
+];
 const host = el({ querySelectorAll: (sel) => (sel === '.alloc-amount' ? allocs : []) });
 const byId = {
   '#payment-invoices': host,
@@ -18,13 +22,15 @@ const byId = {
   '#keep-credit': el(),
   '#alloc-status': el(),
   '[name="amount"]': amount,
+  '#credit-status': el(),
 };
 const toasts = [], posts = [];
 const ctx = {
   console,
   window: {},
   $: (sel) => byId[sel] || null,
-  $$: (sel) => (sel === '#payment-invoices .alloc-amount' ? allocs : []),
+  $$: (sel) => (sel === '#payment-invoices .alloc-amount' ? allocs
+    : sel === '.credit-alloc' ? creditAllocs : []),
   T: (s) => s,
   Terms: { text: (s) => s, isNonprofit: () => false },
   formatCurrency: (n) => '$' + Number(n || 0).toFixed(2),
@@ -40,7 +46,7 @@ const ctx = {
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync('app/static/js/payments.js', 'utf8') + '\nthis.PaymentsPage = PaymentsPage;', ctx);
 const P = ctx.PaymentsPage;
-P._invoices = [{ id: 11 }, { id: 12 }];
+P._invoices = [{ id: 11, invoice_number: '1001' }, { id: 12, invoice_number: '1002' }];
 const state = () => ({
   apply: allocs.map((a) => a.value),
   keepShown: !byId['#keep-credit-row'].hidden,
@@ -83,4 +89,25 @@ out('edited');
     { id: 5, date: '2026-08-01', status: 'partial', balance_due: '1.00' },
   ]);
   console.log(JSON.stringify({ name: 'open', ids: open.map((i) => i.id) }));
+
+  // An Apply amount over its invoice's balance while the total matches:
+  // the browser blocks the save, so the status must not read as done.
+  amount.value = '500';
+  allocs[0].value = '400.00';
+  allocs[1].value = '100.00';
+  P._updateAllocStatus();
+  out('over-balance');
+  allocs[0].value = '312.30';
+  allocs[1].value = '187.70';
+  P._updateAllocStatus();
+  out('fully');
+
+  // Apply Credit: the same over-balance check, a $600 credit
+  creditAllocs[0].value = '400.00';
+  creditAllocs[1].value = '100.00';
+  P._creditStatus(60000);
+  console.log(JSON.stringify({ name: 'credit-over-balance', status: byId['#credit-status'].textContent }));
+  creditAllocs[0].value = '312.30';
+  P._creditStatus(60000);
+  console.log(JSON.stringify({ name: 'credit-ok', status: byId['#credit-status'].textContent }));
 })();

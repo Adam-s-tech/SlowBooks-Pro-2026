@@ -310,6 +310,20 @@ const PaymentsPage = {
         return { total, allocated, remaining: total - allocated };
     },
 
+    // The first Apply amount over its invoice's balance, if any.
+    _overBalance() {
+        const host = $('#payment-invoices');
+        for (const input of (host ? host.querySelectorAll('.alloc-amount') : [])) {
+            const max = PaymentsPage._cents(input.dataset.max);
+            if (PaymentsPage._cents(input.value) > max) {
+                const inv = (PaymentsPage._invoices || [])
+                    .find(i => String(i.id) === String(input.dataset.invoice));
+                return { number: inv && inv.invoice_number, max };
+            }
+        }
+        return null;
+    },
+
     _updateAllocStatus() {
         const { total, allocated, remaining } = PaymentsPage._remainingCents();
         // Money left over is kept as a customer credit only when the user
@@ -330,7 +344,16 @@ const PaymentsPage = {
         }
         const status = $('#alloc-status');
         if (!status) return;
-        if (total === 0 && allocated > 0) {
+        const over = PaymentsPage._overBalance();
+        if (over) {
+            // The field's max blocks the save, so nothing may read as done.
+            status.style.background = '#fde2e2';
+            status.style.color = '#a4242b';
+            status.textContent = Terms.text(
+                `The Apply amount for ${over.number ? `invoice #${over.number}` : 'an invoice'} is more than ` +
+                `its balance of ${PaymentsPage._fmt(over.max / 100)}. Apply at most the balance; ` +
+                `money left over can be kept as a credit.`);
+        } else if (total === 0 && allocated > 0) {
             // Amount cleared (or never entered) but money is allocated — this
             // would submit a NaN/zero payment with real allocations. Warn.
             status.style.background = '#fde2e2';
@@ -404,7 +427,7 @@ const PaymentsPage = {
                 <td>#${escapeHtml(i.invoice_number)}</td>
                 <td>${formatDate(i.date)}</td>
                 <td class="amount">${formatCurrency(i.balance_due)}</td>
-                <td><input class="credit-alloc" data-invoice="${i.id}" type="number" step="0.01" min="0" max="${i.balance_due}"
+                <td><input class="credit-alloc" data-invoice="${i.id}" data-number="${escapeHtml(i.invoice_number)}" data-max="${i.balance_due}" type="number" step="0.01" min="0" max="${i.balance_due}"
                     value="${take > 0 ? (take / 100).toFixed(2) : ''}" aria-label="Apply to ${escapeHtml(i.invoice_number)}"
                     oninput="PaymentsPage._creditStatus(${PaymentsPage._cents(credit.available)})" style="width:100px;"></td>
             </tr>`;
@@ -428,10 +451,17 @@ const PaymentsPage = {
     _creditStatus(availableCents) {
         const el = $('#credit-status');
         if (!el) return;
-        let used = 0;
-        $$('.credit-alloc').forEach(i => { used += PaymentsPage._cents(i.value); });
-        el.style.color = used > availableCents ? '#a4242b' : 'var(--gray-600)';
-        el.textContent = used > availableCents
+        let used = 0, over = null;
+        $$('.credit-alloc').forEach(i => {
+            const cents = PaymentsPage._cents(i.value);
+            used += cents;
+            // over its invoice's balance: the field's max blocks the save
+            if (!over && i.dataset.max !== undefined && cents > PaymentsPage._cents(i.dataset.max)) over = i;
+        });
+        el.style.color = over || used > availableCents ? '#a4242b' : 'var(--gray-600)';
+        el.textContent = over
+            ? Terms.text(`The Apply amount for invoice #${over.dataset.number} is more than its balance of ${formatCurrency(over.dataset.max)}.`)
+            : used > availableCents
             ? `That is ${formatCurrency((used - availableCents) / 100)} more than the credit has.`
             : `Applying ${formatCurrency(used / 100)}; ${formatCurrency((availableCents - used) / 100)} stays as a credit.`;
     },

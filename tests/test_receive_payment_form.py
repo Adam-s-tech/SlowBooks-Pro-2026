@@ -58,6 +58,23 @@ def test_typing_the_amount_applies_it_oldest_first(probe):
     assert "$487.70 not applied" in probe["edited"]["status"]
 
 
+def test_an_apply_amount_over_its_balance_is_named_not_fully_allocated(probe):
+    # 2.18.0 gate, skytech N5: $400 on a $312.30 invoice and $100 on the
+    # next matched a $500 payment, so the status read "Fully allocated"
+    # while the browser refused to save the form.
+    status = probe["over-balance"]["status"]
+    assert "Fully allocated" not in status
+    assert "invoice #1001 is more than its balance of $312.30" in status
+    assert probe["fully"]["status"] == "Fully allocated ($500.00)."
+    # Apply Credit names it the same way
+    assert probe["credit-over-balance"]["status"] == (
+        "The Apply amount for invoice #1001 is more than its balance of $312.30."
+    )
+    assert (
+        probe["credit-ok"]["status"] == "Applying $412.30; $187.70 stays as a credit."
+    )
+
+
 def test_money_left_over_is_kept_only_when_the_box_is_ticked(probe):
     assert probe["over"]["keepShown"] is True
     assert "Keep the $87.70 not applied as a credit" in probe["over"]["keepText"]
