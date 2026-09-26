@@ -42,6 +42,15 @@ The first sync reaches back roughly three months; every later sync re-checks a 7
 overlap window before your last sync so late-posting transactions are
 never missed.
 
+**Older history.** **Fetch older history…** reaches back 3, 6 or 12 months
+(the API takes `POST /api/simplefin/sync {"history_months": N}`, up to 24).
+How much there is depends on your SimpleFIN provider: the SimpleFIN Bridge
+keeps about 90 days, while others, such as BankSync, keep up to a year. The
+Bridge refuses a request spanning more than 90 days, so SlowBooks asks for
+the range in slices of 85 days, oldest first; transactions already imported
+are skipped, and the rest wait in *To review* like any other line, where
+anything from before your books began can be excluded.
+
 ## Trying it without a bank
 
 SimpleFIN publishes a public demo. Generate a demo setup token at

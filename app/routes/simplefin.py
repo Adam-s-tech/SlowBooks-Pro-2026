@@ -11,7 +11,10 @@
 import json
 from datetime import date, datetime, timedelta, timezone
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import Field
 from app.schemas.common import StrictModel
 from sqlalchemy.orm import Session
 
@@ -30,6 +33,15 @@ class ClaimRequest(StrictModel):
 
 class MapRequest(StrictModel):
     mapping: dict[str, int]
+
+
+class SyncRequest(StrictModel):
+    # Reach back this many months rather than from the last sync: brings in
+    # the older history a SimpleFIN server keeps. Transactions already
+    # imported are skipped as on any sync.
+    history_months: Optional[int] = Field(
+        default=None, ge=1, le=simplefin_service.MAX_HISTORY_MONTHS
+    )
 
 
 def _connected(db: Session) -> str:
@@ -93,8 +105,10 @@ def save_mapping(payload: MapRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/sync")
-def sync(db: Session = Depends(get_db)):
-    """Pull transactions for every mapped account through dedup + rules."""
+def sync(payload: Optional[SyncRequest] = None, db: Session = Depends(get_db)):
+    """Pull transactions for every mapped account through dedup + rules.
+    With history_months, from that many months back to today, fetched in
+    slices the SimpleFIN Bridge accepts."""
     access_url = _connected(db)
     account_map = simplefin_service.parse_account_map(
         get_setting_raw(db, "simplefin_account_map") or "{}"
@@ -105,8 +119,11 @@ def sync(db: Session = Depends(get_db)):
             detail="Map at least one SimpleFIN account to a bank account first",
         )
 
+    history = payload.history_months if payload else None
     last_sync_raw = get_setting_raw(db, "simplefin_last_sync") or ""
-    if last_sync_raw:
+    if history:
+        start = simplefin_service.months_before(date.today(), history)
+    elif last_sync_raw:
         try:
             last = date.fromisoformat(last_sync_raw[:10])
             start = last - timedelta(days=simplefin_service.RESYNC_OVERLAP_DAYS)
@@ -116,11 +133,18 @@ def sync(db: Session = Depends(get_db)):
         start = date.today() - timedelta(days=simplefin_service.FIRST_SYNC_DAYS)
 
     try:
-        data = simplefin_service.fetch_accounts(access_url, start_date=start)
+        if history:
+            # through today: the protocol's end-date is exclusive
+            data = simplefin_service.fetch_history(
+                access_url, start, date.today() + timedelta(days=1)
+            )
+        else:
+            data = simplefin_service.fetch_accounts(access_url, start_date=start)
     except SimpleFINError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
     result = simplefin_service.sync_accounts(db, data, account_map)
+    result["since"] = start.isoformat()
     set_setting(
         db,
         "simplefin_accounts_cache",

@@ -516,3 +516,154 @@ def test_peer_is_read_before_the_client_closes(monkeypatch):
     )
     with pytest.raises(sf.SimpleFINError):
         sf.send({"method": "GET", "url": "https://bridge.example.com/x"})
+
+
+# ---------------------------------------------------------------------------
+# Older history (2.18.0, #181 follow-up): the first sync reaches back 85
+# days, because the reference Bridge refuses a longer request; a provider
+# such as BankSync keeps a year. Fetch older history asks for up to
+# MAX_HISTORY_MONTHS in slices the Bridge accepts.
+# ---------------------------------------------------------------------------
+
+
+def test_months_before_lands_on_the_same_day_or_the_months_last():
+    assert sf.months_before(date(2026, 9, 26), 12) == date(2025, 9, 26)
+    assert sf.months_before(date(2026, 3, 31), 1) == date(2026, 2, 28)
+    assert sf.months_before(date(2024, 3, 31), 1) == date(2024, 2, 29)
+    assert sf.months_before(date(2026, 1, 15), 3) == date(2025, 10, 15)
+
+
+def test_history_windows_cover_the_range_in_bridge_sized_slices():
+    since, until = date(2025, 9, 26), date(2026, 9, 27)
+    windows = sf.history_windows(since, until)
+    assert windows[0][0] == since and windows[-1][1] == until
+    for (start, end), nxt in zip(windows, windows[1:] + [(until, None)]):
+        assert 0 < (end - start).days <= sf.HISTORY_WINDOW_DAYS < 90
+        assert end == nxt[0]  # no gap, no overlap
+    assert len(windows) == 5
+    assert sf.history_windows(since, since) == []
+
+
+def test_build_accounts_request_carries_an_end_date():
+    req = sf.build_accounts_request(
+        ACCESS_URL, start_date=date(2026, 1, 1), end_date=date(2026, 3, 27)
+    )
+    assert req["params"] == {"start-date": 1767225600, "end-date": 1774569600}
+
+
+def _slice_server(calls, per_slice):
+    """A fake SimpleFIN server answering each request from per_slice, in
+    order, and recording its params."""
+
+    def fake_send(req, **kw):
+        calls.append(dict(req["params"]))
+        return _resp(json_body=per_slice[len(calls) - 1])
+
+    return fake_send
+
+
+def _acct(txns, balance="10.00"):
+    return {
+        "id": "ACT-1",
+        "name": "Demo Checking",
+        "org": {"name": "Demo Bank"},
+        "currency": "USD",
+        "balance": balance,
+        "transactions": txns,
+    }
+
+
+def _txn(txn_id, posted, amount):
+    return {"id": txn_id, "posted": posted, "amount": amount, "payee": txn_id}
+
+
+def test_fetch_history_merges_the_slices(monkeypatch):
+    calls = []
+    per_slice = [
+        {"errors": [], "accounts": [_acct([_txn("OLD", 1759000000, "-5.00")])]},
+        {
+            "errors": ["Demo Bank needs attention"],
+            "accounts": [
+                _acct(
+                    [
+                        _txn("OLD", 1759000000, "-5.00"),  # both slices return it
+                        _txn("MID", 1768000000, "-7.00"),
+                    ]
+                )
+            ],
+        },
+        {
+            "errors": ["Demo Bank needs attention"],
+            "accounts": [_acct([_txn("NEW", 1776000000, "20.00")], balance="99.00")],
+        },
+    ]
+    monkeypatch.setattr(sf, "send", _slice_server(calls, per_slice))
+    data = sf.fetch_history(ACCESS_URL, date(2025, 9, 1), date(2026, 5, 1))
+    assert data["requests"] == 3 == len(calls)
+    assert [a["id"] for a in data["accounts"]] == ["ACT-1"]
+    assert [t["id"] for t in data["accounts"][0]["transactions"]] == [
+        "OLD",
+        "MID",
+        "NEW",
+    ]
+    assert data["accounts"][0]["balance"] == "99.00"  # the latest slice's
+    assert data["errors"] == ["Demo Bank needs attention"]
+
+
+def test_sync_route_fetches_older_history_in_slices(
+    authed_client, db_session, monkeypatch
+):
+    from datetime import datetime, timedelta, timezone
+
+    ba = _mk_bank_account(db_session, name="History Checking")
+    set_setting(db_session, "simplefin_access_url", ACCESS_URL)
+    set_setting(db_session, "simplefin_account_map", json.dumps({"ACT-1": ba.id}))
+    db_session.commit()
+    calls = []
+    per_slice = [
+        {"errors": [], "accounts": [_acct([_txn(f"T{i}", 1759000000 + i, "-1.00")])]}
+        for i in range(10)
+    ]
+    monkeypatch.setattr(sf, "send", _slice_server(calls, per_slice))
+
+    r = authed_client.post("/api/simplefin/sync", json={"history_months": 12})
+    assert r.status_code == 200, r.text
+    today = date.today()
+    since = sf.months_before(today, 12)
+    assert r.json()["since"] == since.isoformat()
+    assert r.json()["imported"] == len(calls) == 5
+
+    def day(epoch):
+        return datetime.fromtimestamp(epoch, tz=timezone.utc).date()
+
+    assert day(calls[0]["start-date"]) == since
+    assert day(calls[-1]["end-date"]) == today + timedelta(days=1)
+    for params in calls:
+        assert (day(params["end-date"]) - day(params["start-date"])).days <= 85
+
+    # an ordinary sync afterwards is one request from the last sync, as before
+    calls.clear()
+    per_slice[:] = [SF_DATA]
+    assert authed_client.post("/api/simplefin/sync").status_code == 200
+    assert len(calls) == 1 and "end-date" not in calls[0]
+
+
+@pytest.mark.parametrize(
+    "body", [{"history_months": 0}, {"history_months": 25}, {"months": 12}]
+)
+def test_sync_route_refuses_a_history_it_cannot_fetch(authed_client, db_session, body):
+    set_setting(db_session, "simplefin_access_url", ACCESS_URL)
+    db_session.commit()
+    r = authed_client.post("/api/simplefin/sync", json=body)
+    assert r.status_code == 422, r.text
+
+
+def test_the_banking_page_offers_older_history():
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[1] / "app/static/js/banking.js").read_text(
+        encoding="utf-8"
+    )
+    assert "BankingPage.showSimpleFINHistory()" in js
+    assert "API.post('/simplefin/sync', { history_months: months })" in js
+    assert '<option value="12" selected>12 months</option>' in js
