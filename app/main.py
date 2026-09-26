@@ -762,6 +762,7 @@ _ADMIN_WRITE_PREFIXES = (
     "/api/backups",
     "/api/companies",
     "/api/migration",
+    "/api/qbo/connect-manual",
     # Staff records carry SSN, pay rate and W-4 elections: creating or
     # editing one is HR, not daily books (GHSA-rh75-6834-f66j).
     "/api/employees",

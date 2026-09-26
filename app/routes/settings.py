@@ -49,6 +49,7 @@ ENUM_SETTINGS = {
     "company_type": frozenset({"business", "nonprofit"}),
     "ocr_engine": frozenset({"auto", "tesseract"}),
     "ask_password_on_start": frozenset({"true", "false"}),
+    "invoice_show_logo": frozenset({"true", "false"}),
 }
 
 

@@ -35,6 +35,7 @@ function el(extra) {
     files: [{ name: 'upload.csv' }], dataset: {},
     classList: { add() {}, remove() {}, toggle() {} },
     querySelector: () => null, querySelectorAll: () => [], addEventListener() {},
+    insertAdjacentHTML(_where, html) { this.innerHTML += html; }, setAttribute() {},
   }, extra || {});
 }
 
@@ -45,7 +46,8 @@ function page(files, extras) {
   const els = {};
   const $ = (sel) => (els[sel] = els[sel] || el());
   const ctx = Object.assign({
-    console, setTimeout, clearTimeout, URL, URLSearchParams, Promise, ArrayBuffer, Uint8Array,
+    console, setTimeout, clearTimeout, setInterval, clearInterval, AbortController,
+    URL, URLSearchParams, Promise, ArrayBuffer, Uint8Array,
     FormData: class { append() {} },
     localStorage: { getItem: () => null },
     location: { hash: '#/' },
@@ -183,13 +185,15 @@ const scenarios = {
     return p.els['#scan-status'].textContent;
   },
   async 'qbo.js import'() {
+    // The import runs on the server (#192): the page posts one start and
+    // says why it was refused in the import log's status line.
     const p = page(['app/static/js/qbo.js']);
     const Q = p.get('QBOPage');
-    let shown = '(nothing shown)';
+    Object.assign(Q, { _mounted: true, _monitorReady: true, _status: { connected: true } });
     Q._getChecked = () => ['customers'];
-    Q._showResult = (_id, result) => { shown = result.errors.map(e => e.message).join(' | '); };
+    Q._pollLog = async () => {};
     await Q.importSelected();
-    return shown;
+    return Q._startError ? p.els['#qbo-run-detail'].textContent : '(nothing shown)';
   },
   async 'qbo.js export'() {
     const p = page(['app/static/js/qbo.js']);
