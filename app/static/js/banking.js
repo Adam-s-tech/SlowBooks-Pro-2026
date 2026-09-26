@@ -142,6 +142,8 @@ const BankingPage = {
                     duplicates are skipped, bank rules suggest categories, and matches to postings you
                     already made are found. Everything else waits in the account's <em>To review</em> list.
                     ${feed.last_sync ? `Last sync: ${escapeHtml(feed.last_sync.replace('T', ' '))}` : 'Not synced yet.'}
+                    The first sync brings in about the last three months; <em>Fetch older history</em> reaches
+                    back as far as your SimpleFIN provider keeps.
                 </p>
                 <div class="table-container"><table>
                     <thead><tr><th scope="col">Bank feed</th><th scope="col" class="amount">Balance</th><th scope="col">Imports into</th></tr></thead>
@@ -149,6 +151,7 @@ const BankingPage = {
                 </table></div>
                 <div class="form-actions" style="margin-top:12px;">
                     <button class="btn btn-primary" onclick="BankingPage.syncSimpleFIN()">Sync Now</button>
+                    <button class="btn btn-secondary" onclick="BankingPage.showSimpleFINHistory()">Fetch older history…</button>
                     <button class="btn btn-secondary" onclick="BankingPage.disconnectSimpleFIN()">Disconnect</button>
                 </div>`;
         }
@@ -183,6 +186,51 @@ const BankingPage = {
             if (r.warnings && r.warnings.length) toast(r.warnings[0], 'error');
             BankingPage.go('#/banking');
         } catch (err) { toast(err.message, 'error'); }
+    },
+
+    // Older history: how far back is the person's choice; how much there is
+    // depends on the SimpleFIN provider. The server fetches it in slices the
+    // Bridge accepts; duplicates are skipped as on any sync.
+    showSimpleFINHistory() {
+        openModal('Fetch older history', `
+            <form onsubmit="BankingPage.fetchSimpleFINHistory(event)">
+                <div class="form-group">
+                    <label for="simplefin-history">Reach back</label>
+                    <select id="simplefin-history" name="history_months">
+                        <option value="3">3 months</option>
+                        <option value="6">6 months</option>
+                        <option value="12" selected>12 months</option>
+                    </select>
+                </div>
+                <p style="font-size:12px; margin:8px 0;">
+                    How much history there is depends on your SimpleFIN provider: the SimpleFIN Bridge keeps
+                    about 90 days, and others, such as BankSync, keep up to a year. Transactions already
+                    imported are skipped; the rest wait in each account's <em>To review</em> list, where
+                    anything from before your books began can be excluded.
+                </p>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Fetch</button>
+                </div>
+            </form>`);
+    },
+
+    async fetchSimpleFINHistory(e) {
+        e.preventDefault();
+        const months = parseInt(e.target.history_months.value, 10);
+        const btn = e.target.querySelector('button[type=submit]');
+        if (btn) { btn.disabled = true; btn.textContent = 'Fetching…'; }
+        try {
+            await BankingPage.saveSimpleFINMap();
+            const r = await API.post('/simplefin/sync', { history_months: months });
+            closeModal();
+            toast(`Fetched back to ${formatDate(r.since)}: ${r.imported} new, ${r.skipped} duplicates skipped`);
+            if (r.warnings && r.warnings.length) toast(r.warnings[0], 'error');
+            BankingPage.go('#/banking');
+        } catch (err) {
+            if (btn) { btn.disabled = false; btn.textContent = 'Fetch'; }
+            toast(err.message, 'error');
+        }
     },
 
     async disconnectSimpleFIN() {

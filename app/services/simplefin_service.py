@@ -24,7 +24,7 @@ import ipaddress
 import json
 import logging
 import socket
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from urllib.parse import urlsplit, urlunsplit
 
@@ -43,6 +43,13 @@ DEFAULT_TIMEOUT = 30.0
 # exceeded — 85 stays cleanly inside regardless of timezone arithmetic.
 FIRST_SYNC_DAYS = 85
 RESYNC_OVERLAP_DAYS = 7
+
+# Older history, on request: a SimpleFIN server keeps as much as its bank
+# connection gives it (the reference Bridge about 90 days, BankSync up to a
+# year). A request may not span more than the Bridge's 90 days, so a longer
+# reach is asked for in slices of this many days, oldest first.
+HISTORY_WINDOW_DAYS = 85
+MAX_HISTORY_MONTHS = 24
 
 
 class SimpleFINError(Exception):
@@ -200,12 +207,21 @@ def _split_credentials(access_url: str) -> tuple[str, tuple[str, str]]:
     return bare, (parts.username, parts.password or "")
 
 
-def build_accounts_request(access_url: str, start_date: date | None = None) -> dict:
+def _epoch(day: date) -> int:
+    return int(datetime.combine(day, time.min, tzinfo=timezone.utc).timestamp())
+
+
+def build_accounts_request(
+    access_url: str, start_date: date | None = None, end_date: date | None = None
+) -> dict:
+    """GET {access_url}/accounts, for transactions on or after start_date
+    and before end_date (the protocol's end-date is exclusive)."""
     bare, auth = _split_credentials(access_url)
     params = {}
     if start_date is not None:
-        epoch = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
-        params["start-date"] = int(epoch.timestamp())
+        params["start-date"] = _epoch(start_date)
+    if end_date is not None:
+        params["end-date"] = _epoch(end_date)
     return {
         "method": "GET",
         "url": bare.rstrip("/") + "/accounts",
@@ -214,8 +230,10 @@ def build_accounts_request(access_url: str, start_date: date | None = None) -> d
     }
 
 
-def fetch_accounts(access_url: str, start_date: date | None = None) -> dict:
-    resp = send(build_accounts_request(access_url, start_date))
+def fetch_accounts(
+    access_url: str, start_date: date | None = None, end_date: date | None = None
+) -> dict:
+    resp = send(build_accounts_request(access_url, start_date, end_date))
     if resp.status_code == 403:
         raise SimpleFINError(
             "The SimpleFIN bridge refused the stored credentials — "
@@ -231,6 +249,74 @@ def fetch_accounts(access_url: str, start_date: date | None = None) -> dict:
     if not isinstance(data, dict) or not isinstance(data.get("accounts"), list):
         raise SimpleFINError("The SimpleFIN bridge returned an unreadable response")
     return data
+
+
+def months_before(day: date, months: int) -> date:
+    """The same day `months` calendar months earlier (the last day of that
+    month when it is shorter: Mar 31 less 1 month is Feb 28)."""
+    index = day.year * 12 + day.month - 1 - months
+    year, month = divmod(index, 12)
+    month += 1
+    for last in (31, 30, 29, 28):
+        try:
+            return date(year, month, min(day.day, last))
+        except ValueError:
+            continue
+    raise ValueError(day)
+
+
+def history_windows(
+    since: date, until: date, days: int = HISTORY_WINDOW_DAYS
+) -> list[tuple[date, date]]:
+    """[since, until) cut into slices of at most `days` days, oldest first,
+    each a (start-date, end-date) pair for one request."""
+    windows = []
+    start = since
+    while start < until:
+        end = min(start + timedelta(days=days), until)
+        windows.append((start, end))
+        start = end
+    return windows
+
+
+def fetch_history(access_url: str, since: date, until: date) -> dict:
+    """Everything from `since` up to (not including) `until`, one request per
+    slice, merged into one answer shaped like fetch_accounts': each account
+    once, with its details from the latest slice and the transactions of
+    every slice (a transaction two slices both return counted once), and
+    each error the server gave once."""
+    accounts: dict[str, dict] = {}
+    order: list[str] = []
+    seen: dict[str, set] = {}
+    errors: list[str] = []
+    windows = history_windows(since, until)
+    for start, end in windows:
+        data = fetch_accounts(access_url, start_date=start, end_date=end)
+        for acct in data.get("accounts", []):
+            key = str(acct.get("id", ""))
+            txns = acct.get("transactions") or []
+            if key not in accounts:
+                order.append(key)
+                seen[key] = set()
+                merged = {**acct, "transactions": []}
+            else:
+                merged = {**acct, "transactions": accounts[key]["transactions"]}
+            for txn in txns:
+                txn_id = str(txn.get("id", ""))
+                if txn_id and txn_id in seen[key]:
+                    continue
+                if txn_id:
+                    seen[key].add(txn_id)
+                merged["transactions"].append(txn)
+            accounts[key] = merged
+        for err in data.get("errors", []) or []:
+            if str(err) not in errors:
+                errors.append(str(err))
+    return {
+        "errors": errors,
+        "accounts": [accounts[k] for k in order],
+        "requests": len(windows),
+    }
 
 
 def account_summaries(data: dict) -> list[dict]:
