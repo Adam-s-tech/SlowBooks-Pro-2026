@@ -139,6 +139,9 @@
 
 [data-theme="dark"] tbody tr:nth-child(even) { background: #181a22; }
 [data-theme="dark"] tbody tr:hover { background: #222838; }
+/* the pay-run view's Employee column keeps its own ground (style.css) */
+[data-theme="dark"] .pay-run-table tbody tr:nth-child(even) td:first-child { background: #181a22; }
+[data-theme="dark"] .pay-run-table tbody tr:hover td:first-child { background: #222838; }
 
 /* Table group header rows (Chart of Accounts type headers) */
 [data-theme="dark"] tbody tr[style*="background:linear-gradient"] td {

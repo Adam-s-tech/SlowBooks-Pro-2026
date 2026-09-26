@@ -173,9 +173,14 @@ const PayrollPage = {
         // (Oregon's transit tax, disability and family-leave premiums) plus
         // garnishments; reimbursements get a column when the run has any.
         const anyReimb = run.stubs.some(s => s.reimbursements);
+        // Each Stub PDF names its employee, and the Employee column stays in
+        // view while the table scrolls sideways: the dialog opened scrolled
+        // to the first Stub PDF, with no name in sight (2.18.0 gate, macbase1
+        // NEW-3).
+        const who = (s) => s.employee_name || `Employee ${s.employee_id}`;
         let rows = run.stubs.map(s => `
             <tr>
-                <td>${escapeHtml(s.employee_name || `Employee ${s.employee_id}`)}</td>
+                <td>${escapeHtml(who(s))}</td>
                 <td class="amount">${s.hours}</td>
                 <td class="amount">${formatCurrency(s.gross_pay)}</td>
                 <td class="amount">${formatCurrency(s.federal_tax)}</td>
@@ -187,11 +192,11 @@ const PayrollPage = {
                 <td class="amount">${formatCurrency((s.pretax_deductions || 0) + (s.posttax_deductions || 0))}</td>
                 ${anyReimb ? `<td class="amount">${formatCurrency(s.reimbursements || 0)}</td>` : ''}
                 <td class="amount" style="font-weight:700;">${formatCurrency(s.net_pay)}</td>
-                <td class="actions"><button class="btn btn-sm btn-secondary" title="Printable pay stub (PDF)" onclick="window.open('/api/payroll/${run.id}/paystub/${s.id}','_blank')">Stub PDF</button></td>
+                <td class="actions"><button class="btn btn-sm btn-secondary" aria-label="${escapeHtml(`Stub PDF — ${who(s)}`)}" title="Printable pay stub (PDF)" onclick="window.open('/api/payroll/${run.id}/paystub/${s.id}','_blank')">Stub PDF — ${escapeHtml(who(s))}</button></td>
             </tr>`).join('');
 
         openModal(`Pay Run: ${run.period_start} to ${run.period_end}`, `
-            <div class="table-container"><table>
+            <div class="table-container table-container--scroll"><table class="pay-run-table">
                 <thead><tr><th scope="col">Employee</th><th scope="col" class="amount">Hours</th><th scope="col" class="amount">Gross</th>
                 <th scope="col" class="amount">Fed</th><th scope="col" class="amount">State</th><th scope="col" class="amount">SS</th>
                 <th scope="col" class="amount">Med</th><th scope="col" class="amount">Other</th><th scope="col">Benefits (EE, +ER)</th><th scope="col" class="amount">Deductions</th>${anyReimb ? '<th scope="col" class="amount">+ Reimb.</th>' : ''}<th scope="col" class="amount">Net</th><th scope="col">Stub</th></tr></thead>
@@ -208,7 +213,7 @@ const PayrollPage = {
             </div>
             <div class="form-actions">
                 <button class="btn btn-secondary" onclick="closeModal()">Close</button>
-            </div>`);
+            </div>`, { wide: true });
     },
 
     async process(id) {

@@ -822,6 +822,23 @@ a:hover { text-decoration: underline; }
     min-width: 1180px;
 }
 
+/* The pay-run view: when the table is wider than the window, the Employee
+   column stays put while the rest scrolls, so each row still says whose
+   pay it is. The dialog used to open scrolled to the first Stub PDF, with
+   the names out of sight (2.18.0 gate, macbase1 NEW-3). The cell needs a
+   ground of its own, or the scrolled columns show through it. */
+.pay-run-table th:first-child,
+.pay-run-table td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    white-space: nowrap;
+    box-shadow: inset -1px 0 0 var(--panel-border);
+}
+.pay-run-table td:first-child { background: var(--panel-bg); }
+.pay-run-table tbody tr:nth-child(even) td:first-child { background: #f7f9fb; }
+.pay-run-table tbody tr:hover td:first-child { background: #e8f0f8; }
+
 .modal-header {
     display: flex;
     justify-content: space-between;
