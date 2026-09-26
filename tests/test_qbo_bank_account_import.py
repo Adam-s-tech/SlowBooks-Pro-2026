@@ -30,8 +30,12 @@ def _mock_accounts(monkeypatch, rows, inactive=()):
 
     monkeypatch.setattr(QBOAccount, "all", classmethod(all_page))
     monkeypatch.setattr(
-        QBOAccount, "query", classmethod(
-            lambda cls, select, *, qb: list(inactive) if "Active = false" in select else []
+        QBOAccount,
+        "query",
+        classmethod(
+            lambda cls, select, *, qb: (
+                list(inactive) if "Active = false" in select else []
+            )
         ),
     )
     monkeypatch.setattr(qbo_import, "get_qbo_client", lambda db: object())
@@ -75,9 +79,7 @@ def test_import_accounts_exposes_banks_in_banking(db_session, monkeypatch):
     }
     assert {
         row.name
-        for row in db_session.query(Account)
-        .filter(Account.bank_kind.isnot(None))
-        .all()
+        for row in db_session.query(Account).filter(Account.bank_kind.isnot(None)).all()
     } == {
         "Late Checking",
         "Late Visa",
@@ -119,7 +121,10 @@ def test_existing_name_match_gets_bank_identity(db_session, monkeypatch):
     assert result == {"imported": 0, "errors": []}
     assert account.bank_kind == "bank"
     assert db_session.query(BankAccount).filter_by(account_id=account.id).count() == 1
-    assert db_session.query(QBOMapping).filter_by(qbo_id="9").one().slowbooks_id == account.id
+    assert (
+        db_session.query(QBOMapping).filter_by(qbo_id="9").one().slowbooks_id
+        == account.id
+    )
 
 
 def test_imports_inactive_historical_account_without_bank_feed(db_session, monkeypatch):
@@ -135,4 +140,7 @@ def test_imports_inactive_historical_account_without_bank_feed(db_session, monke
     assert account.account_type == AccountType.ASSET
     assert account.is_active is False
     assert db_session.query(BankAccount).filter_by(account_id=account.id).count() == 0
-    assert db_session.query(QBOMapping).filter_by(qbo_id="123").one().slowbooks_id == account.id
+    assert (
+        db_session.query(QBOMapping).filter_by(qbo_id="123").one().slowbooks_id
+        == account.id
+    )

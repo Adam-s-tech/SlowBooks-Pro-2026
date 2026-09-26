@@ -54,9 +54,7 @@ def test_update_check_requires_opt_in_even_in_desktop_mode(client, monkeypatch):
         pytest.fail("default update check made an outbound request")
 
     monkeypatch.setattr(httpx.AsyncClient, "get", unexpected_get)
-    assert client.get("/api/system/update-check").json() == {
-        "update_available": False
-    }
+    assert client.get("/api/system/update-check").json() == {"update_available": False}
 
 
 def test_update_check_noop_outside_desktop_mode(client, monkeypatch):

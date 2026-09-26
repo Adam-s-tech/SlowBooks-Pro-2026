@@ -37,7 +37,9 @@ def test_manual_connection_requires_both_values(client, monkeypatch):
     assert FakeAuthClient.calls == []
 
 
-def test_manual_connection_exchanges_code_and_clears_state(client, db_session, monkeypatch):
+def test_manual_connection_exchanges_code_and_clears_state(
+    client, db_session, monkeypatch
+):
     monkeypatch.setattr(qbo_service, "_make_auth_client", FakeAuthClient)
     FakeAuthClient.calls = []
     FakeAuthClient.error = None
@@ -53,7 +55,10 @@ def test_manual_connection_exchanges_code_and_clears_state(client, db_session, m
     assert FakeAuthClient.calls == [("one-time-code", "123")]
     assert qbo_service.is_connected(db_session)
     assert qbo_service._get_setting(db_session, "qbo_realm_id") == "123"
-    assert qbo_service._get_setting(db_session, "qbo_refresh_token") == "test-refresh-token"
+    assert (
+        qbo_service._get_setting(db_session, "qbo_refresh_token")
+        == "test-refresh-token"
+    )
     assert qbo_service._get_setting(db_session, "qbo_oauth_state") == ""
 
 
@@ -70,7 +75,9 @@ def test_automatic_callback_still_checks_state(client, db_session, monkeypatch):
     assert not qbo_service.is_connected(db_session)
 
 
-def test_manual_connection_hides_exchange_error(client, db_session, monkeypatch, caplog):
+def test_manual_connection_hides_exchange_error(
+    client, db_session, monkeypatch, caplog
+):
     monkeypatch.setattr(qbo_service, "_make_auth_client", FakeAuthClient)
     FakeAuthClient.error = "provider-secret-do-not-show"
     response = client.post(
@@ -84,7 +91,9 @@ def test_manual_connection_hides_exchange_error(client, db_session, monkeypatch,
     FakeAuthClient.error = None
 
 
-def test_manual_connection_explains_provider_rejection_without_echo(client, monkeypatch, caplog):
+def test_manual_connection_explains_provider_rejection_without_echo(
+    client, monkeypatch, caplog
+):
     class ProviderResponse:
         status_code = 400
         content = b"invalid_grant: private-code provider-secret-do-not-show"
