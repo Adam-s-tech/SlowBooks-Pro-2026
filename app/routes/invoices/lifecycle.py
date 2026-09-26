@@ -42,17 +42,6 @@ def void_invoice(invoice_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Invoice not found")
     if invoice.status == InvoiceStatus.VOID:
         raise HTTPException(status_code=400, detail="Invoice already voided")
-    # A document the QuickBooks Online import created has no posting of its
-    # own to reverse: the QBO ledger import holds its amounts (#192 review).
-    from app.services.qbo_common import qbo_managed_invoice, qbo_managed_refusal
-
-    if qbo_managed_invoice(db, invoice):
-        raise HTTPException(
-            status_code=400,
-            detail=qbo_managed_refusal(
-                document_label(invoice, terms_from_db(db)).lower()
-            ),
-        )
     # Voiding an invoice with payments applied would reverse the full A/R
     # while the payment's cash-receipt JE + allocations stay on the books —
     # double-counting cash and reversing A/R twice. Require the payment(s)
@@ -66,6 +55,17 @@ def void_invoice(invoice_id: int, db: Session = Depends(get_db)):
             ),
         )
     check_closing_date(db, invoice.date)
+
+    # An invoice or sales receipt the QuickBooks Online import created has
+    # no posting of its own: the ledger import's posting for it is reversed
+    # instead (none if that import never ran, as in 2.17). When that posting
+    # carried the cost of its stock, the stock goes back without a cost
+    # entry of ours.
+    from app.services import qbo_documents
+
+    cost_in_import = qbo_documents.void_invoice_import_posting(
+        db, invoice, document_label(invoice, terms_from_db(db)).lower()
+    )
 
     # Create reversing journal entry if original had one
     if invoice.transaction_id:
@@ -119,6 +119,7 @@ def void_invoice(invoice_id: int, db: Session = Depends(get_db)):
                 original_source_type="invoice",
                 original_source_id=invoice.id,
                 txn_date=invoice.date,
+                post_journal=not cost_in_import,
             )
 
     invoice.status = InvoiceStatus.VOID

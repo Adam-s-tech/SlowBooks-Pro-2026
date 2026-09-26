@@ -301,13 +301,13 @@ def qbo_managed_payment(db: Session, payment) -> bool:
     )
 
 
-def qbo_managed_refusal(what: str) -> str:
-    """Why a document the QBO import created is not voided here."""
-    return (
-        f"This {what} came from QuickBooks Online: its amounts reach the books "
-        "through the QuickBooks Online import, not a posting of its own, so "
-        "voiding it here would not take them out. Void it in QuickBooks Online."
-    )
+# QBOMapping.qbo_sync_token of an import posting (a "ledger" or
+# "journal_entry" mapping) that the import no longer owns. Otherwise it
+# holds QBO's SyncToken (journals) or the posting's fingerprint (ledger).
+CHANGED_HERE = "changed-in-slowbooks"  # voided or replaced here: kept as is
+VOIDED_IN_QBO = "voided-in-qbo"  # reversed by the import: QBO voided it
+DELETED_IN_QBO = "deleted-in-qbo"  # reversed by the import: QBO deleted it
+NOT_OWNED = (CHANGED_HERE, VOIDED_IN_QBO, DELETED_IN_QBO)
 
 
 def ledger_posting(db: Session, txn_type: str, qbo_id) -> QBOMapping | None:

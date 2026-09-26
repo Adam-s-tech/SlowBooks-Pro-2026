@@ -21,6 +21,7 @@ from app.models.transactions import Transaction
 from app.services.accounting import create_journal_entry
 from app.services.closing_date import check_closing_date
 from app.services.qbo_common import (
+    CHANGED_HERE,
     apply_rollup_repair,
     get_mapping_by_qbo_id,
     is_journal_entry_type,
@@ -200,7 +201,8 @@ def _posted_document(db: Session, txn_type: str, qbo_id: str) -> str | None:
     exported to QBO, or one the document import matched by its number.
     QBO's ledger lines for it would count it a second time. A document the
     import created from QBO has no posting of its own; its lines are posted
-    here."""
+    here. CHANGED_HERE when the document was voided or edited here (it may
+    have a posting of its own now, or none): a later import leaves it."""
     from app.models.invoices import Invoice
     from app.models.payments import Payment
 
@@ -210,12 +212,19 @@ def _posted_document(db: Session, txn_type: str, qbo_id: str) -> str | None:
     for mapping in db.query(QBOMapping).filter(
         QBOMapping.entity_type.in_(kinds), QBOMapping.qbo_id == qbo_id
     ):
+        if mapping.qbo_sync_token == CHANGED_HERE:
+            return CHANGED_HERE
         model = Payment if mapping.entity_type == "payment" else Invoice
         document = db.get(model, mapping.slowbooks_id)
         if document is not None and document.transaction_id is not None:
             noun = "payment" if model is Payment else "invoice"
             return f"local {noun} #{document.id}"
     return None
+
+
+def _kept_here() -> None:
+    """One line in the import log: changed here, so the import leaves it."""
+    qbo_progress.skipped("Changed in SlowBooks; kept as it is here")
 
 
 def _replace_import_cogs(db: Session, txn_type: str, qbo_id: str) -> None:
@@ -363,7 +372,23 @@ def import_ledger(
             "errors": [{"entity": "ledger", "message": exc.user_text}],
         }
 
+    tracked = {
+        mapping.qbo_id: mapping
+        for mapping in db.query(QBOMapping)
+        .filter(QBOMapping.entity_type == "ledger")
+        .all()
+    }
+
+    def changed_here(key: str) -> bool:
+        existing = tracked.get(key)
+        if existing is not None:
+            return existing.qbo_sync_token == CHANGED_HERE
+        txn_type, _, qbo_id = key.partition(":")
+        return _posted_document(db, txn_type, qbo_id) == CHANGED_HERE
+
     for (key, number), account_ids in missing_accounts.items():
+        if changed_here(key):
+            continue  # left as it is here, whatever QBO says now
         qbo_progress.append_error(
             errors,
             {
@@ -377,17 +402,14 @@ def import_ledger(
             },
         )
 
-    tracked = {
-        mapping.qbo_id: mapping
-        for mapping in db.query(QBOMapping)
-        .filter(QBOMapping.entity_type == "ledger")
-        .all()
-    }
     pending = []
     repairs = []
     token_updates = []
     for key, entry in entries.items():
         qbo_progress.item(key, entry["number"])
+        if changed_here(key):
+            _kept_here()
+            continue
         if (key, entry["number"]) in missing_accounts:
             continue
         debits = sum((line["debit"] for line in entry["lines"]), Decimal("0"))
@@ -418,6 +440,9 @@ def import_ledger(
             journal_map = get_mapping_by_qbo_id(
                 db, "journal_entry", key.partition(":")[2]
             )
+            if journal_map and journal_map.qbo_sync_token == CHANGED_HERE:
+                _kept_here()
+                continue
             if journal_map:
                 txn = db.get(Transaction, journal_map.slowbooks_id)
                 if not journal_posting_matches(txn, entry["date"], entry["lines"]):

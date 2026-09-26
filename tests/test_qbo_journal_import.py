@@ -541,7 +541,7 @@ def test_failed_second_posting_rolls_back_journals_and_balances(
     assert accounts["1"].balance == Decimal("1000")
 
 
-def test_journal_page_shows_import_and_prevents_void(
+def test_journal_page_shows_import_and_voids_it_like_any_journal(
     client, db_session, qbo, monkeypatch
 ):
     monkeypatch.setattr(qbo_service, "is_connected", lambda db: True)
@@ -554,8 +554,10 @@ def test_journal_page_shows_import_and_prevents_void(
     assert entries[0]["total_debit"] == entries[0]["total_credit"] == 25.54
     assert client.get("/api/journal?source_type=manual").json() == []
     assert client.get(f"/api/journal/{entries[0]['id']}").status_code == 200
-    assert client.post(f"/api/journal/{entries[0]['id']}/void").status_code == 400
-    assert db_session.query(Transaction).count() == 1
+    # 2.18.0 (owner): a QBO journal voids here like any journal; the import
+    # then leaves it alone (tests/test_qbo_journal_voids.py).
+    assert client.post(f"/api/journal/{entries[0]['id']}/void").status_code == 200
+    assert db_session.query(Transaction).count() == 2
 
 
 def test_import_all_keeps_journals_when_report_fails(

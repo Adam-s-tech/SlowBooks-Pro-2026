@@ -28,6 +28,7 @@ from app.models.payments import Payment, PaymentAllocation
 from app.models.qbo_mapping import QBOMapping
 from app.models.transactions import Transaction
 from app.services.qbo_common import (
+    CHANGED_HERE,
     QBO_TO_ACCOUNT_TYPE,
     QBO_TO_ITEM_TYPE,
     create_mapping,
@@ -1507,6 +1508,10 @@ def import_journal_entries(db: Session) -> dict:
                 ) from exc
             mapping = get_mapping_by_qbo_id(db, "journal_entry", qbo_id)
             legacy = ledger_mappings.get(qbo_id, [])
+            if any(m.qbo_sync_token == CHANGED_HERE for m in [mapping, *legacy] if m):
+                # Voided here: a later import leaves it as it is.
+                qbo_progress.skipped("Changed in SlowBooks; kept as it is here")
+                continue
             if (
                 not mapping
                 and not legacy
