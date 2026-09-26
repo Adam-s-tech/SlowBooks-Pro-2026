@@ -341,14 +341,19 @@ const InvoicesPage = {
     logoOptionHtml(settings) {
         if (!settings.company_logo_path) return '';
         const enabled = settings.invoice_show_logo !== 'false';
+        // A company setting: the server takes Settings changes from an
+        // administrator only, so another sign-in sees it locked, and why.
+        const canChange = !App.role || App.role === 'admin';
         return `<div class="invoice-logo-option">
             <img class="invoice-logo-preview" src="${escapeHtml(settings.company_logo_path)}" alt="Company logo" ${enabled ? '' : 'hidden'}>
             <div>
                 <label for="inv-show-logo">
-                    <input id="inv-show-logo" type="checkbox" ${enabled ? 'checked' : ''} onchange="InvoicesPage.setLogoOption(this)">
+                    <input id="inv-show-logo" type="checkbox" ${enabled ? 'checked' : ''} ${canChange ? '' : 'disabled'} onchange="InvoicesPage.setLogoOption(this)">
                     Show company logo on invoices
                 </label>
-                <div class="invoice-logo-help">Applies to all invoices: PDF, Print, and emailed attachments. Changes save immediately.</div>
+                <div class="invoice-logo-help">${canChange
+                    ? 'Applies to all invoices: PDF, Print, and emailed attachments. Changes save immediately.'
+                    : 'Applies to all invoices. Only an administrator can change this, in Settings.'}</div>
                 <div class="invoice-logo-status" role="status" aria-live="polite"></div>
             </div>
         </div>`;

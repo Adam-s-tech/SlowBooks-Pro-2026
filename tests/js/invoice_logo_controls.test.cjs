@@ -122,3 +122,18 @@ test('a configured logo path is escaped in the invoice dialog', () => {
     assert.match(preview(html), /&quot;/);
     assert.doesNotMatch(preview(html), /" onerror=/);
 });
+
+test('a sign-in that cannot change settings sees the option locked, with the reason', () => {
+    // PUT /api/settings is an administrator's (app/main.py); the switch
+    // failed with "Your role doesn't allow this action" for everyone else.
+    const logo = { company_logo_path: '/static/uploads/company_logo.png' };
+    const f = fixture(logo);
+    for (const role of ['bookkeeper', 'readonly']) {
+        f.context.App.role = role;
+        const html = f.page.logoOptionHtml(logo);
+        assert.match(checkbox(html), /disabled/);
+        assert.match(html, /Only an administrator can change this/);
+    }
+    f.context.App.role = 'admin';
+    assert.doesNotMatch(checkbox(f.page.logoOptionHtml(logo)), /disabled/);
+});
