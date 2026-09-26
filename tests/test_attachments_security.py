@@ -35,16 +35,15 @@ def test_rejects_path_traversal_filename(client, seed_accounts):
     # or it's rejected. Either way, the file must not land outside UPLOAD_BASE.
     assert r.status_code in (201, 400)
 
-    # Confirm no file was written under /tmp/secret.pdf or similar
-    from pathlib import Path
+    # Confirm no file was written under /tmp/secret.pdf or similar. The
+    # folder the route writes to (the suite's own data folder, not one
+    # machine's checkout, which this used to name).
+    from app.routes.attachments import UPLOAD_BASE
 
-    attached = Path(
-        "/home/devbase1/Development/bookkeeper/app/static/uploads/attachments"
-    ).resolve()
     # no matter where we ran the test from, there should not be an escape
     import os
 
-    for root, _, files in os.walk(attached):
+    for root, _, files in os.walk(UPLOAD_BASE):
         for f in files:
             assert "etc" not in root and "passwd" not in f
 

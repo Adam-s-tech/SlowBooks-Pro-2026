@@ -8,10 +8,35 @@
 # Rate limiting is disabled by default so per-test counters don't collide.
 # ============================================================================
 
+import atexit
 import os
+import shutil
 import sys
+import tempfile
 from decimal import Decimal
 from pathlib import Path
+
+from cryptography.fernet import Fernet
+
+# ---- The machine's own SlowBooks files stay out of the suite ----
+# Without SLOWBOOKS_DATA_DIR, company_service.data_dir() is the real per-user
+# folder (~/Library/Application Support/SlowBooksPro/data on a Mac), so the
+# suite saw the tester's own companies: a test that renames its company to
+# "Harbor Light Bakery" got a 409 from a real company of that name (2.18.0
+# gate, macbase1). And storage.files_root() is app/static, so attachments,
+# receipt intake and backups were written into the source tree, where a
+# local build could pick them up. One folder per run, set before anything
+# imports the app (the upload roots are read at import) and set always: a
+# SLOWBOOKS_DATA_DIR in the shell would point the suite at real books.
+SUITE_DATA_DIR = Path(tempfile.mkdtemp(prefix="slowbooks-suite-")).resolve()
+atexit.register(shutil.rmtree, SUITE_DATA_DIR, True)
+os.environ["SLOWBOOKS_DATA_DIR"] = str(SUITE_DATA_DIR)
+# The checkout's own .env (a developer's DATABASE_URL, company name and
+# keys) is not read either; CI has none, so a run here is the run CI does.
+os.environ["SLOWBOOKS_ENV_FILE"] = str(SUITE_DATA_DIR / "suite.env")
+# Settings encryption with a key for this run only: without one, crypto
+# writes .slowbooks-master.key next to the code.
+os.environ["SETTINGS_ENCRYPTION_KEY"] = Fernet.generate_key().decode("ascii")
 
 # ---- Environment overrides (must run BEFORE any app imports) ----
 os.environ["APP_DEBUG"] = "true"  # Disable production security checks in test
@@ -281,6 +306,13 @@ def db_engine(_suite_engine, request):
             connection.close()
         except Exception:
             pass
+
+
+@pytest.fixture(scope="session")
+def suite_data_dir():
+    """The run's own data folder (see SUITE_DATA_DIR at the top): what
+    data_dir() and every upload root resolve to during the suite."""
+    return SUITE_DATA_DIR
 
 
 @pytest.fixture(autouse=True)
