@@ -33,6 +33,7 @@ from app.services.qbo_common import (
 )
 from app.services.qbo_documents import (
     amount_of,
+    closed_on,
     reverse_for_import,
     void_document_from_qbo,
     why_not_changed,
@@ -240,15 +241,6 @@ def _document(key: str, number: str) -> str:
     return f"{txn_type} QBO #{qbo_id}" + (
         f" (document {number})" if number and number != key else ""
     )
-
-
-def _closed_on(db: Session, day) -> str | None:
-    from app.services.closing_date import get_closing_date
-
-    closing = get_closing_date(db)
-    if closing is not None and day <= closing:
-        return f"the books are closed through {closing}, and it is dated {day}"
-    return None
 
 
 def _post_entry(db: Session, key: str, entry: dict) -> Transaction:
@@ -538,7 +530,7 @@ def import_ledger(
         fingerprint = _fingerprint(entry)
         if existing and not imported(key):
             # Voided or deleted in QBO earlier, and posting again now.
-            closed = _closed_on(db, entry["date"])
+            closed = closed_on(db, entry["date"])
             if closed:
                 not_applied(key, entry["number"], "restored", closed)
                 continue
@@ -562,7 +554,7 @@ def import_ledger(
                 continue
             repair = legacy_rollup_repair(txn, entry["date"], entry["lines"], accounts)
             if repair:
-                closed = _closed_on(db, entry["date"])
+                closed = closed_on(db, entry["date"])
                 if closed:
                     not_applied(key, entry["number"], "changed", closed)
                     continue

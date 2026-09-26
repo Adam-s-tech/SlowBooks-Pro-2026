@@ -250,6 +250,282 @@ def _sync_bank_identity(db: Session, account: Account, qbo_type: str) -> None:
 
 
 # ============================================================================
+# Documents changed in QuickBooks Online after they were imported
+# ============================================================================
+
+
+_LABEL = {"invoice": "Invoice", "sales_receipt": "Sales receipt", "payment": "Payment"}
+
+
+def _document_values(db, source, kind) -> dict:
+    """What the document import makes of a QBO invoice or sales receipt: the
+    same reading as when it first came in, for bringing one it made up to
+    date when QBO changes it."""
+    customer_id, job_id = _resolve_customer(db, _safe(source, "CustomerRef"))
+    total = _safe_decimal(source, "TotalAmt")
+    tax = Decimal("0")
+    txn_tax = _safe(source, "TxnTaxDetail")
+    if txn_tax:
+        tax = _safe_decimal(txn_tax, "TotalTax")
+    day = _parse_qbo_date(_safe(source, "TxnDate"))
+    lines = []
+    for qbo_line in _safe(source, "Line") or []:
+        if _safe(qbo_line, "DetailType", "") != "SalesItemLineDetail":
+            continue
+        detail = _safe(qbo_line, "SalesItemLineDetail")
+        if not detail:
+            continue
+        item_id = None
+        item_ref = _safe(detail, "ItemRef")
+        if item_ref:
+            item_map = get_mapping_by_qbo_id(db, "item", _safe(item_ref, "value", ""))
+            if item_map:
+                item_id = item_map.slowbooks_id
+        lines.append(
+            {
+                "item_id": item_id,
+                "description": _safe(qbo_line, "Description") or None,
+                "quantity": _safe_decimal(detail, "Qty") or Decimal("1"),
+                "rate": _safe_decimal(detail, "UnitPrice"),
+                "amount": _safe_decimal(qbo_line, "Amount"),
+            }
+        )
+    due = day if kind == "sales_receipt" else _parse_qbo_date(_safe(source, "DueDate"))
+    return {
+        "customer_id": customer_id,
+        "job_id": job_id,
+        "date": day,
+        "due_date": due,
+        "subtotal": total - tax,
+        "tax_amount": tax,
+        "total": total,
+        "lines": lines,
+    }
+
+
+def _same_document(invoice, values) -> bool:
+    header = ("customer_id", "job_id", "date", "due_date", "subtotal", "tax_amount")
+    if any(getattr(invoice, key) != values[key] for key in header + ("total",)):
+        return False
+    ours = [
+        (ln.item_id, ln.description, ln.quantity, ln.rate, ln.amount)
+        for ln in sorted(invoice.lines, key=lambda ln: ln.line_order)
+    ]
+    theirs = [
+        (ln["item_id"], ln["description"], ln["quantity"], ln["rate"], ln["amount"])
+        for ln in values["lines"]
+    ]
+    return ours == theirs
+
+
+def _changed_in_qbo(mapping, source) -> str | None:
+    """QBO's new SyncToken when QBO changed a document the import still owns;
+    None when it did not (or the document changed here)."""
+    token = str(_safe(source, "SyncToken", "") or "")
+    if not token or mapping.qbo_sync_token in NOT_OWNED:
+        return None
+    return token if token != str(mapping.qbo_sync_token or "") else None
+
+
+def _not_applied(errors, entity, source, noun, why) -> None:
+    qbo_progress.append_error(
+        errors,
+        {
+            "entity": entity,
+            "qbo_id": str(_safe(source, "Id", "")),
+            "document_number": _safe(source, "DocNumber")
+            or _safe(source, "PaymentRefNum"),
+            "code": "IMPORT_QBO_CHANGE_NOT_APPLIED",
+            "message": (
+                f"{_source_context(_LABEL[entity], source)} was changed in QuickBooks Online "
+                f"after it was imported, and that was not applied here: {why}. The "
+                f"{noun} here keeps what was imported."
+            ),
+        },
+    )
+
+
+def _refresh_invoice(db, mapping, source, kind, errors) -> None:
+    """Bring an invoice or sales receipt the import made up to date with QBO,
+    while it is still the import's own: not voided or edited here. Its
+    posting follows in the ledger import, under the same conditions."""
+    from app.models.invoices import InvoiceStatus
+    from app.services.inventory_hooks import (
+        reconcile_invoice_inventory_delta,
+        snapshot_invoice_lines,
+    )
+    from app.services.qbo_documents import (
+        closed_on,
+        import_posting,
+        local_cost_live,
+        why_not_changed,
+    )
+
+    invoice = db.get(Invoice, mapping.slowbooks_id)
+    token = _changed_in_qbo(mapping, source)
+    if (
+        token is None
+        or invoice is None
+        or invoice.transaction_id is not None
+        or invoice.status == InvoiceStatus.VOID
+    ):
+        qbo_progress.skipped()
+        return
+    values = _document_values(db, source, kind)
+    noun = "sales receipt" if kind == "sales_receipt" else "invoice"
+    if _same_document(invoice, values):
+        mapping.qbo_sync_token = token  # a change that is not the document's
+        qbo_progress.skipped("Verified: its amounts and lines match QBO")
+        return
+    if values["total"] == 0 and invoice.total != 0:
+        # How QBO shows a void; Posted Ledger Activity brings a void in.
+        qbo_progress.skipped("Reads 0.00 in QuickBooks Online; kept as imported")
+        return
+    found = import_posting(db, mapping)
+    why = (
+        closed_on(db, invoice.date)
+        or closed_on(db, values["date"])
+        or (found and why_not_changed(db, found[1], values["date"]))
+        or (
+            kind == "invoice"
+            and values["total"] < (invoice.amount_paid or 0)
+            and "the payments recorded against it come to more than its new total"
+        )
+    )
+    if why:
+        _not_applied(errors, kind, source, noun, why)
+        return
+    old_lines = snapshot_invoice_lines(invoice)
+    was = invoice.total
+    for key in ("customer_id", "job_id", "date", "due_date", "subtotal"):
+        setattr(invoice, key, values[key])
+    invoice.tax_amount, invoice.total = values["tax_amount"], values["total"]
+    db.query(InvoiceLine).filter(InvoiceLine.invoice_id == invoice.id).delete()
+    db.flush()
+    for order, line in enumerate(values["lines"]):
+        db.add(InvoiceLine(invoice_id=invoice.id, line_order=order, **line))
+    db.flush()
+    db.refresh(invoice)
+    if kind == "sales_receipt":
+        for alloc in invoice.payment_allocations:
+            payment = alloc.payment
+            if payment and payment.transaction_id is None and not payment.is_voided:
+                payment.amount, payment.date = values["total"], values["date"]
+                alloc.amount = values["total"]
+        invoice.amount_paid = values["total"]
+    invoice.balance_due = invoice.total - (invoice.amount_paid or 0)
+    invoice.status = (
+        InvoiceStatus.PAID
+        if invoice.balance_due <= 0 and invoice.total > 0
+        else (
+            InvoiceStatus.PARTIAL
+            if (invoice.amount_paid or 0) > 0
+            else InvoiceStatus.SENT
+        )
+    )
+    reconcile_invoice_inventory_delta(
+        db,
+        invoice,
+        old_lines,
+        txn_date=invoice.date,
+        post_journal=local_cost_live(db, invoice),
+    )
+    mapping.qbo_sync_token = token
+    qbo_progress.emit(
+        "update",
+        f"{_source_context(_LABEL[kind], source)} changed in QuickBooks Online: {noun} "
+        f"{invoice.invoice_number} brought up to date here (total {was:,.2f} "
+        f"-> {invoice.total:,.2f})",
+        code="IMPORT_QBO_CHANGE_APPLIED",
+    )
+
+
+def _refresh_payment(db, mapping, source, errors) -> None:
+    """Bring a payment the import made up to date with QBO (amount, date,
+    the invoices it pays), while it is still the import's own."""
+    from app.models.invoices import InvoiceStatus
+    from app.services.qbo_documents import (
+        closed_on,
+        import_posting,
+        pay_invoice,
+        unpay_invoice,
+        why_not_changed,
+    )
+
+    payment = db.get(Payment, mapping.slowbooks_id)
+    token = _changed_in_qbo(mapping, source)
+    if (
+        token is None
+        or payment is None
+        or payment.is_voided
+        or payment.transaction_id is not None
+    ):
+        qbo_progress.skipped()
+        return
+    amount = _safe_decimal(source, "TotalAmt")
+    day = _parse_qbo_date(_safe(source, "TxnDate"))
+    applied = []
+    for pmt_line in _safe(source, "Line") or []:
+        line_amount = _safe_decimal(pmt_line, "Amount")
+        for linked in _safe(pmt_line, "LinkedTxn") or []:
+            if _safe(linked, "TxnType", "") != "Invoice":
+                continue
+            inv_map = get_mapping_by_qbo_id(db, "invoice", _safe(linked, "TxnId", ""))
+            invoice = db.get(Invoice, inv_map.slowbooks_id) if inv_map else None
+            if invoice is not None:
+                applied.append((invoice, line_amount or amount))
+    ours = sorted((a.invoice_id, a.amount) for a in payment.allocations)
+    if (payment.amount, payment.date) == (amount, day) and ours == sorted(
+        (invoice.id, value) for invoice, value in applied
+    ):
+        mapping.qbo_sync_token = token
+        qbo_progress.skipped("Verified: its amount and invoices match QBO")
+        return
+    if amount == 0 and payment.amount != 0:
+        qbo_progress.skipped("Reads 0.00 in QuickBooks Online; kept as imported")
+        return
+    found = import_posting(db, mapping)
+    why = closed_on(db, payment.date) or closed_on(db, day)
+    why = why or (found and why_not_changed(db, found[1], day))
+    for invoice, value in applied:
+        already = sum(
+            (a.amount for a in payment.allocations if a.invoice_id == invoice.id),
+            Decimal("0"),
+        )
+        if invoice.status == InvoiceStatus.VOID:
+            why = why or f"invoice {invoice.invoice_number} is void here"
+        elif (invoice.amount_paid or 0) - already + value > invoice.total:
+            why = (
+                why
+                or f"it would pay invoice {invoice.invoice_number} more than it owes"
+            )
+    if why:
+        _not_applied(errors, "payment", source, "payment", why)
+        return
+    was = payment.amount
+    for alloc in list(payment.allocations):
+        unpay_invoice(alloc.invoice, alloc.amount)
+        db.delete(alloc)
+    db.flush()
+    payment.amount, payment.date = amount, day
+    for invoice, value in applied:
+        db.add(
+            PaymentAllocation(
+                payment_id=payment.id, invoice_id=invoice.id, amount=value
+            )
+        )
+        pay_invoice(invoice, value)
+    mapping.qbo_sync_token = token
+    qbo_progress.emit(
+        "update",
+        f"{_source_context('Payment', source)} changed in QuickBooks Online: "
+        f"payment #{payment.id} brought up to date here (amount {was:,.2f} -> "
+        f"{amount:,.2f})",
+        code="IMPORT_QBO_CHANGE_APPLIED",
+    )
+
+
+# ============================================================================
 
 # Import functions
 # ============================================================================
@@ -791,7 +1067,13 @@ def import_invoices(db: Session) -> dict:
             if not qbo_id:
                 continue
 
-            if get_mapping_by_qbo_id(db, "invoice", qbo_id):
+            mapping = (
+                db.query(QBOMapping)
+                .filter_by(entity_type="invoice", qbo_id=str(qbo_id))
+                .first()
+            )
+            if mapping:
+                _refresh_invoice(db, mapping, qbo_inv, "invoice", errors)
                 continue
 
             doc_num = _safe(qbo_inv, "DocNumber", "")
@@ -980,7 +1262,13 @@ def import_payments(db: Session) -> dict:
             if not qbo_id:
                 continue
 
-            if get_mapping_by_qbo_id(db, "payment", qbo_id):
+            mapping = (
+                db.query(QBOMapping)
+                .filter_by(entity_type="payment", qbo_id=str(qbo_id))
+                .first()
+            )
+            if mapping:
+                _refresh_payment(db, mapping, qbo_pmt, errors)
                 continue
 
             customer_id, _ = _resolve_customer(db, _safe(qbo_pmt, "CustomerRef"))
@@ -1114,7 +1402,13 @@ def import_sales_receipts(db: Session) -> dict:
             if not qbo_id:
                 continue
 
-            if get_mapping_by_qbo_id(db, "sales_receipt", qbo_id):
+            mapping = (
+                db.query(QBOMapping)
+                .filter_by(entity_type="sales_receipt", qbo_id=str(qbo_id))
+                .first()
+            )
+            if mapping:
+                _refresh_invoice(db, mapping, qbo_sr, "sales_receipt", errors)
                 continue
 
             doc_num = _safe(qbo_sr, "DocNumber", "")

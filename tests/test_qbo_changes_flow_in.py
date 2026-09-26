@@ -32,6 +32,8 @@ from tests.test_qbo_ledger_import import _import as _import_ledger
 from tests.test_qbo_ledger_import import _posting, _setup
 from tests.test_qbo_managed_voids import Books
 
+DAY = date(2026, 8, 3)
+
 
 @pytest.fixture
 def log(monkeypatch):
@@ -342,3 +344,148 @@ def test_a_posting_qbo_voided_and_shows_again_is_posted_again(db_session, monkey
     assert expenses.balance == Decimal("50.00")
     ledger = db_session.query(QBOMapping).filter_by(qbo_id="Purchase:10").one()
     assert ledger.qbo_sync_token not in ("voided-in-qbo", "changed-in-slowbooks")
+
+
+# ---------------------------------------------------------------------------
+# A document the import made, changed in QBO: brought up to date with it
+# ---------------------------------------------------------------------------
+
+
+def _without_empty(value):
+    if isinstance(value, dict):
+        return {k: _without_empty(v) for k, v in value.items() if v is not None}
+    if isinstance(value, list):
+        return [_without_empty(v) for v in value]
+    return value
+
+
+def _edit_in_qbo(books, sdk, index, **fields):
+    """QBO's copy of a document, changed (SyncToken moves on)."""
+    data = _without_empty(books.sources[sdk][index].to_dict())
+    data.update(fields, SyncToken="1")
+    books.sources[sdk][index] = sdk.from_json(data)
+
+
+def _gl_amount(books, qbo_type, qbo_id, amounts):
+    """QBO's General Ledger with one transaction's rows changed:
+    {QBO account id: new amount}."""
+    original = books._gl
+
+    def changed():
+        client = original()
+        for account, rows in client.sections.items():
+            for row in list(rows):
+                if row[:2] == (qbo_type, qbo_id) and account in amounts:
+                    rows[rows.index(row)] = (*row[:3], amounts[account])
+        return client
+
+    books._gl = changed
+
+
+def test_an_invoice_changed_in_qbo_is_brought_up_to_date_with_its_posting(books, log):
+    from quickbooks.objects.invoice import Invoice as QBOInvoice
+
+    from tests.test_qbo_managed_voids import _sale_line
+
+    books.documents()
+    books.ledger()
+    _edit_in_qbo(
+        books, QBOInvoice, 1, TotalAmt=45, Balance=45, Line=[_sale_line(45, "Catering")]
+    )
+    _gl_amount(books, "Invoice", "133", {"84": "45", "79": "45"})
+    books.documents()
+    books.ledger()
+    invoice = books.invoice("1038")
+    assert (invoice.total, invoice.balance_due) == (Decimal("45"), Decimal("45"))
+    assert books.balance("1100") == Decimal("75.00")  # A/R Aging's 30 + 45
+    applied = _logged(log, "IMPORT_QBO_CHANGE_APPLIED")
+    assert any("invoice 1038 brought up to date here" in m for m in applied)
+    assert any("Invoice QBO #133 (document 1038) changed" in m for m in applied)
+
+
+def test_a_payment_changed_in_qbo_is_brought_up_to_date(books):
+    from quickbooks.objects.payment import Payment as QBOPayment
+
+    books.documents()
+    books.ledger()
+    _edit_in_qbo(
+        books,
+        QBOPayment,
+        0,
+        TotalAmt=25,
+        Line=[{"Amount": 25, "LinkedTxn": [{"TxnId": "130", "TxnType": "Invoice"}]}],
+    )
+    _gl_amount(books, "Payment", "131", {"84": "-25", "35": "25"})
+    books.documents()
+    books.ledger()
+    paid = books.invoice("1037")
+    assert (paid.amount_paid, paid.balance_due) == (Decimal("25"), Decimal("25"))
+    assert books.balance("1100") == Decimal("65.00")
+    assert books.balance("1200") == Decimal("55.00")
+
+
+def test_a_sales_receipt_changed_in_qbo_is_brought_up_to_date(books):
+    from quickbooks.objects.salesreceipt import SalesReceipt as QBOSalesReceipt
+
+    from tests.test_qbo_managed_voids import _sale_line
+
+    books.documents()
+    books.ledger()
+    _edit_in_qbo(books, QBOSalesReceipt, 0, TotalAmt=35, Line=[_sale_line(35, "Lunch")])
+    _gl_amount(books, "Sales Receipt", "132", {"79": "35", "35": "35"})
+    books.documents()
+    books.ledger()
+    receipt = books.invoice("SR-9")
+    assert (receipt.total, receipt.balance_due) == (Decimal("35"), Decimal("0"))
+    assert receipt.payment_allocations[0].payment.amount == Decimal("35")
+    assert books.balance("4000") == Decimal("125.00")
+    assert books.balance("1200") == Decimal("55.00")
+
+
+def test_a_document_change_that_cannot_be_applied_leaves_both_as_imported(books):
+    from quickbooks.objects.invoice import Invoice as QBOInvoice
+
+    from tests.test_qbo_managed_voids import _sale_line
+
+    books.documents()
+    books.ledger()
+    books.db.add(Settings(key="closing_date", value="2026-08-31"))
+    books.db.commit()
+    _edit_in_qbo(
+        books, QBOInvoice, 1, TotalAmt=45, Balance=45, Line=[_sale_line(45, "Catering")]
+    )
+    _gl_amount(books, "Invoice", "133", {"84": "45", "79": "45"})
+    result = qbo_import.import_invoices(books.db)
+    [error] = result["errors"]
+    assert error["code"] == "IMPORT_QBO_CHANGE_NOT_APPLIED"
+    assert "The invoice here keeps what was imported." in error["message"]
+    result = qbo_ledger_import_run(books)
+    assert [e["code"] for e in result["errors"]] == ["IMPORT_QBO_CHANGE_NOT_APPLIED"]
+    assert books.invoice("1038").total == Decimal("40")
+    assert books.balance("1100") == Decimal("70.00")
+
+
+def qbo_ledger_import_run(books):
+    from app.services import qbo_ledger_import
+
+    return qbo_ledger_import.import_ledger(books.db, start=DAY, end=DAY)
+
+
+def test_a_document_changed_here_is_not_brought_back_to_qbos_version(client, books):
+    from quickbooks.objects.invoice import Invoice as QBOInvoice
+
+    from tests.test_qbo_managed_voids import _sale_line
+
+    books.documents()
+    books.ledger()
+    invoice = books.invoice("1038")
+    r = client.put(
+        f"/api/invoices/{invoice.id}",
+        json={"lines": [{"description": "Catering", "quantity": 1, "rate": 55}]},
+    )
+    assert r.status_code == 200, r.text
+    _edit_in_qbo(
+        books, QBOInvoice, 1, TotalAmt=45, Balance=45, Line=[_sale_line(45, "Catering")]
+    )
+    books.documents()
+    assert books.invoice("1038").total == Decimal("55")

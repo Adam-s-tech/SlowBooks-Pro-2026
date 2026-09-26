@@ -123,6 +123,7 @@ def reconcile_invoice_inventory_delta(
     invoice,
     old_line_snapshot: list[dict[str, Any]],
     txn_date=None,
+    post_journal: bool = True,
 ) -> None:
     """After an invoice edit that replaced all InvoiceLines, compare the
     old snapshot against the new lines and post compensating movements:
@@ -175,6 +176,7 @@ def reconcile_invoice_inventory_delta(
                 source_id=invoice.id,
                 memo=f"Edit +{delta}",
                 txn_date=date_to_use,
+                post_journal=post_journal,
             )
         elif delta < 0:
             # Qty reduced — reverse the difference
@@ -187,6 +189,7 @@ def reconcile_invoice_inventory_delta(
                 original_source_type="invoice",
                 original_source_id=invoice.id,
                 txn_date=date_to_use,
+                post_journal=post_journal,
             )
 
 

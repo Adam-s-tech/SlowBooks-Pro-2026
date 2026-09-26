@@ -468,7 +468,7 @@ def void_document_from_qbo(db: Session, qbo_type: str, qbo_id: str) -> str | Non
         if payment is None or payment.is_voided or payment.transaction_id is not None:
             return None
         for alloc in payment.allocations:
-            _unpay(alloc.invoice, alloc.amount)
+            unpay_invoice(alloc.invoice, alloc.amount)
         payment.is_voided = True
         mapping.qbo_sync_token = VOIDED_IN_QBO
         return f"payment #{payment.id}"
@@ -514,7 +514,28 @@ def void_document_from_qbo(db: Session, qbo_type: str, qbo_id: str) -> str | Non
     return f"{noun} {invoice.invoice_number}"
 
 
-def _unpay(invoice, amount) -> None:
+def closed_on(db: Session, day) -> str | None:
+    """ "the books are closed through …" when `day` is in a closed period."""
+    from app.services.closing_date import get_closing_date
+
+    closing = get_closing_date(db)
+    if closing is not None and day is not None and day <= closing:
+        return f"the books are closed through {closing}, and it is dated {day}"
+    return None
+
+
+def pay_invoice(invoice, amount) -> None:
+    """Put a payment's amount on an invoice, as recording it does."""
+    invoice.amount_paid = (invoice.amount_paid or Decimal("0")) + amount
+    invoice.balance_due = invoice.total - invoice.amount_paid
+    invoice.status = (
+        InvoiceStatus.PAID
+        if invoice.balance_due <= 0
+        else InvoiceStatus.PARTIAL if invoice.amount_paid > 0 else InvoiceStatus.SENT
+    )
+
+
+def unpay_invoice(invoice, amount) -> None:
     """Take a payment's amount off an invoice it paid, as a payment void does."""
     if invoice is None or invoice.status == InvoiceStatus.VOID:
         return
