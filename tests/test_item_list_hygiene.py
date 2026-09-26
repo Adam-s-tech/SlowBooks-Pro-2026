@@ -77,17 +77,47 @@ def test_every_item_picker_lists_active_items_only(client):
 # ── W-L13: nonprofit-only accounts ───────────────────────────────────────
 
 
-def test_the_business_chart_marks_the_nonprofit_accounts(client, seed_accounts):
+def test_a_new_business_chart_has_no_nonprofit_accounts(tmp_path, monkeypatch):
+    # 2.18.0 gate, skytech W-L13: items stopped offering 4400, but a new
+    # business company still had In-Kind Contributions in its chart, active.
+    import sqlite3
+
+    from app.services import company_service
+
+    data = tmp_path / "slowbooks-data"
+    monkeypatch.setenv("SLOWBOOKS_DATA_DIR", str(data))
+    assert company_service.manifest_create_company("Harbor Signs")["success"]
+    with sqlite3.connect(data / "companies" / "harbor-signs.db") as conn:
+        numbers = {n for (n,) in conn.execute("SELECT account_number FROM accounts")}
+        names = {n for (n,) in conn.execute("SELECT name FROM accounts")}
+    assert {"1000", "4000", "4900", "6960"} <= numbers
+    assert not {"3300", "3400", "4400"} & numbers
+    assert "In-Kind Contributions" not in names
+
+
+def test_nonprofit_setup_adds_4400_marked_nonprofit_only(client, seed_accounts):
+    assert "4400" not in {
+        a["account_number"] for a in client.get("/api/accounts").json()
+    }
+    assert client.post("/api/nonprofit/setup-accounts").status_code == 200
     by_number = {a["account_number"]: a for a in client.get("/api/accounts").json()}
+    assert by_number["4400"]["name"] == "In-Kind Contributions"
     assert by_number["4400"]["nonprofit_only"] is True
     for number in ("4000", "4900", "6960", "5000"):
         assert by_number[number]["nonprofit_only"] is False, number
 
 
-def test_a_business_that_reuses_4400_keeps_it(client, seed_accounts, db_session):
-    seed_accounts["4400"].name = "Consulting Income"
-    db_session.commit()
-    a = client.get(f"/api/accounts/{seed_accounts['4400'].id}").json()
+def test_a_business_that_uses_4400_keeps_it(client, seed_accounts):
+    r = client.post(
+        "/api/accounts",
+        json={
+            "name": "Consulting Income",
+            "account_number": "4400",
+            "account_type": "income",
+        },
+    )
+    assert r.status_code in (200, 201), r.text
+    a = client.get(f"/api/accounts/{r.json()['id']}").json()
     assert a["nonprofit_only"] is False
 
 
