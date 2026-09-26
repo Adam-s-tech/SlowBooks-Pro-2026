@@ -78,3 +78,132 @@ def test_a_foreign_journal_is_balanced_in_its_own_currency(db_session, qbo):
     assert result["imported"] == 0
     assert "does not balance" in result["errors"][0]["message"]
     assert db_session.query(Transaction).count() == 0
+
+
+# ---------------------------------------------------------------------------
+# A QBO transaction that is a local document with its own posting
+# ---------------------------------------------------------------------------
+
+_GL_COLUMNS = [
+    "Date",
+    "Transaction Type",
+    "Num",
+    "Name",
+    "Memo/Description",
+    "Split",
+    "Amount",
+    "Balance",
+]
+
+
+class LedgerClient:
+    """A General Ledger report: {QBO account id: [(type, id, number, amount)]}."""
+
+    def __init__(self, sections):
+        self.sections = sections
+
+    def get_report(self, name, qs):
+        assert name == "GeneralLedger"
+
+        def row(txn_type, txn_id, number, amount):
+            values = [qs["start_date"], txn_type, number, "", "", "", amount, "0"]
+            return {
+                "type": "Data",
+                "ColData": [
+                    {"value": value, **({"id": txn_id} if index == 1 else {})}
+                    for index, value in enumerate(values)
+                ],
+            }
+
+        return {
+            "Header": {
+                "StartPeriod": qs["start_date"],
+                "EndPeriod": qs["end_date"],
+                "ReportBasis": "Accrual",
+            },
+            "Columns": {"Column": [{"ColTitle": title} for title in _GL_COLUMNS]},
+            "Rows": {
+                "Row": [
+                    {
+                        "type": "Section",
+                        "Header": {"ColData": [{"id": account_id}]},
+                        "Rows": {"Row": [row(*line) for line in lines]},
+                    }
+                    for account_id, lines in self.sections.items()
+                ]
+            },
+        }
+
+
+def test_a_qbo_invoice_that_is_a_posted_local_invoice_is_not_posted_again(
+    db_session, seed_accounts, seed_customer, monkeypatch
+):
+    """An invoice written in SlowBooks and exported to QBO (export_invoices
+    maps it), or a QBO invoice the import matched to a local one by its
+    number, is one invoice: QBO's ledger lines for it are its own posting a
+    second time. A QBO invoice imported as a document has no posting of its
+    own, so its ledger lines are posted."""
+    from datetime import date
+
+    from app.models.invoices import Invoice, InvoiceStatus
+    from app.services.accounting import create_journal_entry
+    from app.services.bank_register import gl_balances
+
+    ar, income = seed_accounts["1100"], seed_accounts["4000"]
+    for qbo_id, account in [("84", ar), ("79", income)]:
+        db_session.add(
+            QBOMapping(entity_type="account", qbo_id=qbo_id, slowbooks_id=account.id)
+        )
+    day = date(2026, 8, 3)
+    written_here = Invoice(
+        invoice_number="1001",
+        customer_id=seed_customer.id,
+        date=day,
+        status=InvoiceStatus.SENT,
+        subtotal=Decimal("100"),
+        total=Decimal("100"),
+        balance_due=Decimal("100"),
+    )
+    imported = Invoice(
+        invoice_number="1002",
+        customer_id=seed_customer.id,
+        date=day,
+        status=InvoiceStatus.SENT,
+        subtotal=Decimal("40"),
+        total=Decimal("40"),
+        balance_due=Decimal("40"),
+    )
+    db_session.add_all([written_here, imported])
+    db_session.flush()
+    written_here.transaction_id = create_journal_entry(
+        db_session,
+        day,
+        "Invoice 1001",
+        [
+            {"account_id": ar.id, "debit": Decimal("100"), "credit": Decimal("0")},
+            {"account_id": income.id, "debit": Decimal("0"), "credit": Decimal("100")},
+        ],
+        source_type="invoice",
+        source_id=written_here.id,
+    ).id
+    for qbo_id, invoice in [("55", written_here), ("56", imported)]:
+        db_session.add(
+            QBOMapping(entity_type="invoice", qbo_id=qbo_id, slowbooks_id=invoice.id)
+        )
+    db_session.flush()
+    client = LedgerClient(
+        {
+            "84": [("Invoice", "55", "1001", "100"), ("Invoice", "56", "1002", "40")],
+            "79": [("Invoice", "55", "1001", "100"), ("Invoice", "56", "1002", "40")],
+        }
+    )
+    monkeypatch.setattr(qbo_ledger_import, "get_qbo_client", lambda db: client)
+
+    for _ in range(2):
+        result = qbo_ledger_import.import_ledger(db_session, start=day, end=day)
+        assert result["errors"] == []
+        balances = gl_balances(db_session, [ar.id, income.id])
+        assert balances[ar.id] == Decimal("140")
+        assert balances[income.id] == Decimal("140")
+    posted = db_session.query(QBOMapping).filter_by(entity_type="ledger").all()
+    assert [mapping.qbo_id for mapping in posted] == ["Invoice:56"]

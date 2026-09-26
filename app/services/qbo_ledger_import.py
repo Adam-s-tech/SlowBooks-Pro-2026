@@ -186,6 +186,38 @@ def _account_map(db: Session) -> dict[str, Account]:
     return {qbo_id: accounts.get(next(iter(ids))) for qbo_id, ids in mapped.items()}
 
 
+# A QBO transaction type whose QBOMapping names a local document.
+_MAPPED_DOCUMENTS = {
+    "invoice": ("invoice", "sales_receipt"),
+    "salesreceipt": ("sales_receipt", "invoice"),
+    "payment": ("payment",),
+}
+
+
+def _posted_document(db: Session, txn_type: str, qbo_id: str) -> str | None:
+    """The local document a QBO transaction is mapped to, when that document
+    carries its own posting: an invoice or payment written in SlowBooks and
+    exported to QBO, or one the document import matched by its number.
+    QBO's ledger lines for it would count it a second time. A document the
+    import created from QBO has no posting of its own; its lines are posted
+    here."""
+    from app.models.invoices import Invoice
+    from app.models.payments import Payment
+
+    kinds = _MAPPED_DOCUMENTS.get(txn_type.lower().replace(" ", ""))
+    if not kinds:
+        return None
+    for mapping in db.query(QBOMapping).filter(
+        QBOMapping.entity_type.in_(kinds), QBOMapping.qbo_id == qbo_id
+    ):
+        model = Payment if mapping.entity_type == "payment" else Invoice
+        document = db.get(model, mapping.slowbooks_id)
+        if document is not None and document.transaction_id is not None:
+            noun = "payment" if model is Payment else "invoice"
+            return f"local {noun} #{document.id}"
+    return None
+
+
 @qbo_progress.stage("ledger")
 def import_ledger(
     db: Session,
@@ -314,6 +346,18 @@ def import_ledger(
                     "message": f"QBO posting #{key}, document {entry['number'] or '(missing number)'}, date {entry['date']} does not balance: debit {debits:.2f}, credit {credits:.2f}, difference {debits - credits:.2f}; local account IDs {', '.join(str(line['account_id']) for line in entry['lines'])}",
                 },
             )
+            continue
+        document = _posted_document(db, entry["type"], key.partition(":")[2])
+        if document:
+            qbo_progress.emit(
+                "skip",
+                f"QBO {entry['type']} #{key.partition(':')[2]}, document "
+                f"{entry['number'] or '(missing number)'}, is {document}, which is "
+                "already in the books; its ledger lines were not posted again",
+                level="warning",
+                code="IMPORT_ALREADY_POSTED",
+            )
+            qbo_progress.skipped(f"Already in the books as {document}")
             continue
         if is_journal_entry_type(entry["type"]):
             journal_map = get_mapping_by_qbo_id(
