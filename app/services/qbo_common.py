@@ -214,6 +214,19 @@ def legacy_rollup_repair(txn, txn_date, lines, accounts):
             return None
         target = possible.pop()
         if target != line.account_id:
+            # A line that is cleared, in a reconciliation, or deposited
+            # belongs to its account's statement or deposit: moving it
+            # would leave a finished reconciliation that no longer adds up
+            # (a reconciled entry cannot be voided either). Report it.
+            if line.reconciliation_id or line.cleared or line.deposit_transaction_id:
+                qbo_progress.emit(
+                    "verify",
+                    f"Local transaction #{txn.id}, line #{line.id} is cleared, "
+                    "reconciled or deposited; its account was not changed",
+                    level="warning",
+                    code="IMPORT_REPAIR_REFUSED",
+                )
+                return None
             repair.append((line, target))
     return repair if not any(targets.values()) else None
 

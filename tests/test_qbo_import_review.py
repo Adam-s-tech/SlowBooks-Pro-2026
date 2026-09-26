@@ -207,3 +207,100 @@ def test_a_qbo_invoice_that_is_a_posted_local_invoice_is_not_posted_again(
         assert balances[income.id] == Decimal("140")
     posted = db_session.query(QBOMapping).filter_by(entity_type="ledger").all()
     assert [mapping.qbo_id for mapping in posted] == ["Invoice:56"]
+
+
+# ---------------------------------------------------------------------------
+# The legacy parent-account repair and the bank's reconciled lines
+# ---------------------------------------------------------------------------
+
+
+def _old_rollup_purchase(db_session, monkeypatch, *, reconciled):
+    """Purchase 10 paid from the "Payroll" sub-account of Checking. An older
+    ledger walker posted the payment to Checking, the parent; this build's
+    walker reads it on Payroll. Checking's line may since have been
+    reconciled against Checking's bank statement."""
+    from datetime import date
+
+    from app.models.banking import Reconciliation, ReconciliationStatus
+    from app.services.accounting import create_journal_entry
+
+    checking = Account(name="Checking", account_type=AccountType.ASSET, balance=0)
+    expenses = Account(name="Supplies", account_type=AccountType.EXPENSE, balance=0)
+    db_session.add_all([checking, expenses])
+    db_session.flush()
+    payroll = Account(
+        name="Payroll",
+        account_type=AccountType.ASSET,
+        parent_id=checking.id,
+        balance=0,
+    )
+    db_session.add(payroll)
+    db_session.flush()
+    for qbo_id, account in [("1", checking), ("11", payroll), ("2", expenses)]:
+        db_session.add(
+            QBOMapping(entity_type="account", qbo_id=qbo_id, slowbooks_id=account.id)
+        )
+    day = date(2026, 8, 3)
+    txn = create_journal_entry(
+        db_session,
+        day,
+        "QBO Purchase",
+        [
+            {"account_id": expenses.id, "debit": Decimal("50"), "credit": Decimal("0")},
+            {"account_id": checking.id, "debit": Decimal("0"), "credit": Decimal("50")},
+        ],
+        source_type="qbo_ledger",
+    )
+    db_session.add(
+        QBOMapping(
+            entity_type="ledger",
+            qbo_id="Purchase:10",
+            slowbooks_id=txn.id,
+            qbo_sync_token="old-rollup",
+        )
+    )
+    db_session.flush()
+    db_session.expire(txn, ["lines"])
+    bank_line = next(line for line in txn.lines if line.credit)
+    if reconciled:
+        recon = Reconciliation(
+            account_id=checking.id,
+            statement_date=day,
+            statement_balance=Decimal("-50"),
+            status=ReconciliationStatus.COMPLETED,
+        )
+        db_session.add(recon)
+        db_session.flush()
+        bank_line.cleared = True
+        bank_line.reconciliation_id = recon.id
+    db_session.flush()
+    client = LedgerClient(
+        {"11": [("Purchase", "10", "", "-50")], "2": [("Purchase", "10", "", "50")]}
+    )
+    monkeypatch.setattr(qbo_ledger_import, "get_qbo_client", lambda db: client)
+    return day, bank_line, checking, payroll
+
+
+def test_the_repair_moves_an_unreconciled_parent_line(db_session, monkeypatch):
+    day, bank_line, checking, payroll = _old_rollup_purchase(
+        db_session, monkeypatch, reconciled=False
+    )
+    result = qbo_ledger_import.import_ledger(db_session, start=day, end=day)
+    assert result == {"imported": 0, "errors": []}
+    assert bank_line.account_id == payroll.id
+
+
+def test_the_repair_leaves_a_line_in_a_completed_reconciliation(
+    db_session, monkeypatch
+):
+    """Moving it would take a cleared payment out of Checking's finished
+    reconciliation, which then no longer adds up; a reconciled entry cannot
+    be voided for the same reason. It is reported instead."""
+    day, bank_line, checking, payroll = _old_rollup_purchase(
+        db_session, monkeypatch, reconciled=True
+    )
+    result = qbo_ledger_import.import_ledger(db_session, start=day, end=day)
+    assert result["imported"] == 0
+    assert result["errors"]
+    assert result["errors"][0]["code"] == "IMPORT_POSTING_MISMATCH"
+    assert bank_line.account_id == checking.id
