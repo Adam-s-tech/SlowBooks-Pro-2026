@@ -641,9 +641,16 @@ td.amount, th.amount {
  * sunken 3D edit controls (WS_EX_CLIENTEDGE)
  * ======================================================================== */
 
+/* minmax(0, 1fr), not 1fr: a column may be narrower than what is in it. A
+   select is as wide as its longest option, so one customer with a
+   120-character name widened the first column until the second (Date, Due
+   Date, Class, Exchange Rate) sat past the Edit Invoice dialog's edge,
+   behind a sideways scrollbar (macbase1, F22, still there at the 2.18.0
+   gate). Each field now fills its own column; the open list still shows
+   every name in full. */
 .form-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px 12px;
 }
 
@@ -651,6 +658,7 @@ td.amount, th.amount {
     display: flex;
     flex-direction: column;
     gap: 2px;
+    min-width: 0;
 }
 
 .form-group.full-width {

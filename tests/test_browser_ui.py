@@ -5,6 +5,12 @@ The page is the real index.html with the real scripts and stylesheets; the
 API answers from the fixtures below. Skipped, as one module, where playwright
 or its Chromium is not installed.
 
+- F22, the remainder (2.18.0 gate, macbase1): a customer's 120-character
+  name sized the Customer select, and the Edit Invoice form's second column
+  (Date, Due Date, Class, Exchange Rate) went past the dialog's right edge,
+  behind a sideways scrollbar. The statement dialog had been fixed alone; the
+  form grid now lets its columns shrink, for every form. Checked on the
+  invoice, estimate and sales receipt forms at 1280 x 800.
 - NEW-3 (2.18.0 gate, macbase1): the Pay Run view opened scrolled to the
   first Stub PDF, with the Employee column out of sight, so no button said
   whose stub it was. Checked in the gate's 1280 x 800 window and a narrower
@@ -22,6 +28,29 @@ sync_api = pytest.importorskip("playwright.sync_api")
 ROOT = Path(__file__).resolve().parents[1]
 ORIGIN = "http://slowbooks.test"
 
+LONG_NAME = (
+    "Harbor District Community Events Association: Weddings, Memorials, "
+    "Graduations and Seasonal Market Catering, Astoria, OR"
+)
+assert len(LONG_NAME) == 120
+
+CUSTOMERS = [
+    {
+        "id": 1,
+        "name": "Salt & Pine Catering Co.",
+        "terms": "Net 15",
+        "is_taxable": True,
+    },
+    {"id": 2, "name": LONG_NAME, "terms": "Net 30", "is_taxable": True},
+]
+LINE = {
+    "item_id": None,
+    "description": "Rounding probe",
+    "quantity": 3,
+    "rate": 0.335,
+    "amount": 1.01,
+    "is_taxable": False,
+}
 API = {
     "/health": {"status": "ok", "version": "2.18.0"},
     "/api/auth/status": {
@@ -38,6 +67,43 @@ API = {
         "default_tax_rate": "8.25",
         "invoice_notes": "Thank you for choosing Harbor Light!",
         "walk_in_customer_id": "9",
+    },
+    "/api/customers": CUSTOMERS,
+    "/api/items": [{"id": 1, "name": "Sourdough Loaf", "rate": 8.5}],
+    "/api/classes": [{"id": 1, "name": "Unassigned", "is_system_default": True}],
+    "/api/accounts": [
+        {"id": 1, "name": "Checking", "account_number": "1000", "bank_kind": "bank"}
+    ],
+    "/api/invoices/1": {
+        "id": 1,
+        "invoice_number": "HLB-2005",
+        "customer_id": 1,
+        "date": "2026-09-26",
+        "due_date": "2026-10-11",
+        "terms": "Net 15",
+        "po_number": "",
+        "tax_rate": 0.0825,
+        "notes": "Thank you for choosing Harbor Light!",
+        "currency": "USD",
+        "exchange_rate": 1,
+        "class_id": 1,
+        "job_id": None,
+        "status": "draft",
+        "total": 1.01,
+        "amount_paid": 0,
+        "lines": [LINE],
+    },
+    "/api/estimates/1": {
+        "id": 1,
+        "estimate_number": "E-1001",
+        "customer_id": 1,
+        "date": "2026-09-26",
+        "expiration_date": "2026-10-26",
+        "tax_rate": 0.0825,
+        "notes": "",
+        "class_id": 1,
+        "job_id": None,
+        "lines": [LINE],
     },
     "/api/payroll/1": {
         "id": 1,
@@ -132,6 +198,54 @@ def _open_dialog(page, call, ready):
     # openModal focuses the dialog's first control on the next tick, which
     # scrolls it into view; measure after that
     page.evaluate("() => new Promise((done) => setTimeout(done, 0))")
+
+
+HEADER_FIELDS_OUTSIDE_THE_DIALOG = """() => {
+    const modal = document.getElementById('modal');
+    const body = document.getElementById('modal-body');
+    const box = body.getBoundingClientRect();
+    const edge = box.right - parseFloat(getComputedStyle(body).paddingRight);
+    const out = [];
+    for (const group of body.querySelectorAll('.form-grid > .form-group')) {
+        const label = ((group.querySelector('label') || {}).textContent || '').trim();
+        for (const el of group.querySelectorAll('input, select, textarea')) {
+            if (el.offsetParent === null) continue;  // the hidden quick-add form
+            const r = el.getBoundingClientRect();
+            if (r.right > edge + 0.5) out.push(`${label}: right ${r.right} > ${edge}`);
+        }
+    }
+    if (modal.scrollWidth > modal.clientWidth) {
+        out.push(`the dialog scrolls sideways: ${modal.scrollWidth} > ${modal.clientWidth}`);
+    }
+    return out;
+}"""
+
+
+SALES_FORMS = {
+    "invoice": ("InvoicesPage.showForm(1)", "#invoice-form"),
+    "estimate": ("EstimatesPage.showForm(1)", "#est-form"),
+    "sales receipt": ("SalesReceiptsPage.showForm()", "#sales-receipt-form"),
+}
+
+
+def test_a_long_customer_name_keeps_each_sales_form_header_in_the_dialog(browser):
+    problems = {}
+    for form, (call, ready) in SALES_FORMS.items():
+        page = _open(browser, 1280, 800, "#/invoices")
+        try:
+            _open_dialog(page, call, ready)
+            # the long name is in the list the Customer select sizes itself to
+            assert page.evaluate(
+                "(n) => [...document.querySelectorAll('#modal-body select option')]"
+                ".some(o => o.textContent === n)",
+                LONG_NAME,
+            ), form
+            outside = page.evaluate(HEADER_FIELDS_OUTSIDE_THE_DIALOG)
+            if outside:
+                problems[form] = outside
+        finally:
+            page.close()
+    assert problems == {}
 
 
 PAY_RUN_ROWS = """(scrollToEnd) => {
