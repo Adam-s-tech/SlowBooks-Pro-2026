@@ -156,3 +156,26 @@ def test_a_home_currency_statement_reads_as_before(
     assert (
         act["lines"][1]["description"] == f"Wire · applied to #{inv['invoice_number']}"
     )
+
+
+def test_the_pdf_keeps_each_date_on_one_line(client, db_session, seed_accounts, muller):
+    # 2.18.0 gate, skytech N2: with the longer descriptions the date column
+    # was squeezed until every date broke ("Sep 01, / 2026").
+    import io
+
+    pypdf = pytest.importorskip("pypdf")
+    from app.routes.reports.receivables import statement_activity
+    from app.services.pdf_service import generate_statement_pdf
+    from app.services.settings_service import get_all_settings
+
+    _scenario(client, muller)
+    pdf = generate_statement_pdf(
+        muller,
+        statement_activity(db_session, muller, date(2026, 9, 30)),
+        get_all_settings(db_session),
+        as_of_date=date(2026, 9, 30),
+    )
+    text = pypdf.PdfReader(io.BytesIO(pdf)).pages[0].extract_text()
+    for day in ("Sep 01, 2026", "Sep 02, 2026", "Sep 10, 2026", "Sep 11, 2026"):
+        assert day in text, (day, text[:600])
+    assert "applied to #" in text

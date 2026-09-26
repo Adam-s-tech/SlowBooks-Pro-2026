@@ -20,6 +20,10 @@
     table.activity th.r { text-align: right; }
     table.activity td { padding: 5px 8px; font-size: 9pt; border-bottom: 1px solid #e0e0e0; }
     table.activity td.r { text-align: right; font-variant-numeric: tabular-nums; }
+    /* Date, type, number and the amounts never wrap; Description takes the
+       rest of the width and wraps inside it. */
+    table.activity th, table.activity td.nw, table.activity td.r { white-space: nowrap; }
+    table.activity td.desc { width: 100%; }
     table.activity tr:nth-child(even) { background: #f7f9fb; }
     .aging-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
     .aging-table th { background: #4a4a6a; color: white; padding: 5px 8px; font-size: 8pt; text-transform: uppercase; text-align: right; }
@@ -81,10 +85,10 @@
         {% macro money(v) %}{% if v < 0 %}-{{ (-v) | currency }}{% else %}{{ v | currency }}{% endif %}{% endmacro %}
         {% for line in activity.lines %}
             <tr>
-                <td>{{ line.date | fdate }}</td>
-                <td>{{ line.type }}</td>
-                <td>{{ line.number }}</td>
-                <td>{{ line.description }}</td>
+                <td class="nw">{{ line.date | fdate }}</td>
+                <td class="nw">{{ line.type }}</td>
+                <td class="nw">{{ line.number }}</td>
+                <td class="desc">{{ line.description }}</td>
                 <td class="r"{% if line.amount < 0 %} style="color: #006600;"{% endif %}>{{ money(line.amount) }}</td>
                 <td class="r">{{ money(line.balance) }}</td>
             </tr>
