@@ -12,7 +12,7 @@
 # ============================================================================
 
 from datetime import date
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation
 
 from fastapi import HTTPException
 
@@ -1282,9 +1282,6 @@ def _journal_lines(qbo_entry, accounts) -> list[dict]:
             raise DataProblem(
                 f"{location}: line amount must be finite and non-negative; received {value!r}"
             )
-        amount = (amount * exchange_rate).quantize(
-            Decimal("0.01"), rounding=ROUND_HALF_UP
-        )
         if amount == 0:
             continue  # QBO can return zeroed lines on voided entries.
         account = accounts.get(account_id)
@@ -1304,6 +1301,10 @@ def _journal_lines(qbo_entry, accounts) -> list[dict]:
         raise DataProblem(
             f"{context}: missing its debit and credit lines; received {posting_lines} posting line(s)"
         )
+    # A journal balances in its own currency. Converted line by line, a
+    # foreign one can come out a cent apart, so it converts the way every
+    # foreign-currency posting does: each line at the rate, and the cent of
+    # rounding on the largest line (currency.convert_lines).
     debits = sum((line["debit"] for line in lines), Decimal("0"))
     credits = sum((line["credit"] for line in lines), Decimal("0"))
     if debits != credits:
@@ -1311,7 +1312,17 @@ def _journal_lines(qbo_entry, accounts) -> list[dict]:
             f"{context}: does not balance; debit {debits:.2f}, credit {credits:.2f}, "
             f"difference {debits - credits:.2f}; no lines were imported"
         )
-    return lines
+    from app.services.accounting import _q
+    from app.services.currency import convert_lines
+
+    if exchange_rate == 1:
+        lines = [
+            {**line, "debit": _q(line["debit"]), "credit": _q(line["credit"])}
+            for line in lines
+        ]
+    else:
+        lines = convert_lines(lines, exchange_rate)
+    return [line for line in lines if line["debit"] or line["credit"]]
 
 
 def _non_posting_journal(qbo_entry, client, txn_date):
