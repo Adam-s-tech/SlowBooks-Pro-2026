@@ -54,5 +54,10 @@ def test_the_report_page_explains_it_and_gives_the_entry():
     js = (ROOT / "app/static/js/reports.js").read_text(encoding="utf-8")
     assert "ledger.purchase_tax_to_date" in js
     assert (
-        "sales tax paid to suppliers on bills entered before SlowBooks Pro 2.18" in js
+        "Sales tax paid to suppliers on bills entered before SlowBooks Pro 2.18" in js
     )
+    # The amount is what that tax did to the balance, not a part of what is
+    # owed: "Of that, $59.24" read as part of the $0.33 owed (2.18.0 gate,
+    # macbase1's wording nit).
+    assert "Of that, <strong>${formatCurrency(ledger.purchase_tax)}" not in js
+    assert "'lowered'} that balance by" in js
