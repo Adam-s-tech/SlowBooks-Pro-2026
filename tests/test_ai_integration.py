@@ -518,7 +518,8 @@ def test_ai_config_never_returns_raw_api_key(client, db_session):
 
 def test_openai_request_uses_supported_completion_limit_for_gpt5():
     req = build_request("openai", "sk-fake", "gpt-5.4-mini", "sys", "user")
-    assert req["json"]["max_completion_tokens"] == 1024
+    # 2.17.1 (#185): a reasoning model's budget covers its hidden reasoning.
+    assert req["json"]["max_completion_tokens"] == REASONING_MAX_TOKENS
     assert "max_tokens" not in req["json"]
     assert "temperature" not in req["json"]
 
