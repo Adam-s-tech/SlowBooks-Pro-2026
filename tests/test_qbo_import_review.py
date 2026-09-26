@@ -355,3 +355,21 @@ def test_a_restore_waits_for_a_running_qbo_import(
     r = client.post("/api/backups/restore", json={"filename": name})
     assert r.status_code == 200, r.text
     assert _value(live) == "original"
+
+
+# ---------------------------------------------------------------------------
+# The invoice logo option (#192)
+# ---------------------------------------------------------------------------
+
+
+def test_the_invoice_logo_setting_is_true_or_false(client):
+    """Anything but "false" printed the logo, so an API client's "no",
+    "False" or "0" stored silently and changed nothing. It is one of two
+    values, like the other yes/no settings."""
+    for value in ["no", "False", "0", ""]:
+        r = client.put("/api/settings", json={"invoice_show_logo": value})
+        assert r.status_code == 422, (value, r.text)
+        assert client.get("/api/settings").json()["invoice_show_logo"] == "true"
+    r = client.put("/api/settings", json={"invoice_show_logo": "false"})
+    assert r.status_code == 200, r.text
+    assert r.json()["invoice_show_logo"] == "false"
