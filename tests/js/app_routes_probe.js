@@ -27,6 +27,11 @@ const ctx = {
   window: {},
   document: { addEventListener() {}, querySelectorAll: () => [] },
   location: { hash: '#/' },
+  // App.navigate keeps the address in step with the page it shows
+  history: {
+    pushState: (_s, _t, url) => { ctx.location.hash = url; },
+    replaceState: (_s, _t, url) => { ctx.location.hash = url; },
+  },
   $: (sel) => (sel === '#page-content' ? pageContent : null),
   $$: () => [],
   escapeHtml: (s) => String(s ?? ''),

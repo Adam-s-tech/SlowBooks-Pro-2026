@@ -198,6 +198,66 @@
             && typeof window.pywebview.api.show_picker === "function";
     }
 
+    // The desktop app's own window, as /api/auth/status says (`desktop`).
+    // The bridge is not always there yet when the sign-in screen is drawn:
+    // on macOS pywebview injects it after the page has loaded, so the screen
+    // the app starts on never offered "Choose a different company →", and
+    // someone in the wrong company had no way back (2.18.0 gate, macbase1
+    // NEW-8). The server's word draws the link; a click waits for the bridge.
+    let desktopWindow = false;
+
+    function offersPicker() {
+        return desktopWindow || isDesktopShell();
+    }
+
+    function switchCompanyHTML() {
+        return (
+            '<br><button type="button" id="auth-switch-company" style="' +
+            linkButtonStyle() +
+            '">Choose a different company →</button>'
+        );
+    }
+
+    let waitingForBridge = false;
+
+    function openPicker(errBox) {
+        if (isDesktopShell()) {
+            window.pywebview.api.show_picker();
+            return;
+        }
+        if (waitingForBridge) return; // a second click while waiting
+        waitingForBridge = true;
+        window.addEventListener("pywebviewready", function () {
+            waitingForBridge = false;
+            if (isDesktopShell()) window.pywebview.api.show_picker();
+        }, { once: true });
+        setTimeout(function () {
+            if (waitingForBridge && errBox) {
+                errBox.textContent = "The company list opens in the SlowBooks Pro window.";
+            }
+        }, 5000);
+    }
+
+    function wireSwitchCompany(overlay) {
+        const switchCompany = overlay.querySelector("#auth-switch-company");
+        if (!switchCompany) return;
+        const errBox = overlay.querySelector("#auth-error");
+        switchCompany.addEventListener("click", function () {
+            openPicker(errBox);
+        });
+    }
+
+    // A screen drawn before the bridge arrived, when the server did not say
+    // this is the desktop app: add the link now that the bridge is here.
+    window.addEventListener("pywebviewready", function () {
+        const overlay = document.getElementById(OVERLAY_ID);
+        if (!overlay || !isDesktopShell() || overlay.querySelector("#auth-switch-company")) return;
+        const setupLink = overlay.querySelector("#auth-switch-setup"); // the sign-in view's
+        if (!setupLink) return;
+        setupLink.insertAdjacentHTML("afterend", switchCompanyHTML());
+        wireSwitchCompany(overlay);
+    });
+
     function userSelectHTML() {
         if (!usernames.length) {
             return field("auth-username", "Username", {
@@ -253,11 +313,7 @@
             '<button type="button" id="auth-switch-setup" style="' +
             linkButtonStyle() +
             '">First time? Set up Slowbooks →</button>' +
-            (isDesktopShell()
-                ? '<br><button type="button" id="auth-switch-company" style="' +
-                  linkButtonStyle() +
-                  '">Choose a different company →</button>'
-                : "") +
+            (offersPicker() ? switchCompanyHTML() : "") +
             "</div>" +
             "</form>"
         );
@@ -265,12 +321,7 @@
 
     function wireLogin(overlay, onSuccess) {
         const form = overlay.querySelector("#auth-form");
-        const switchCompany = overlay.querySelector("#auth-switch-company");
-        if (switchCompany) {
-            switchCompany.addEventListener("click", function () {
-                window.pywebview.api.show_picker();
-            });
-        }
+        wireSwitchCompany(overlay);
         const input = overlay.querySelector("#auth-password");
         const userInput = overlay.querySelector("#auth-username");
         const errBox = overlay.querySelector("#auth-error");
@@ -518,6 +569,7 @@
             try {
                 const status = await checkStatus();
                 multiUser = status.multi_user === true;
+                desktopWindow = status.desktop === true;
                 usernames = Array.isArray(status.usernames) ? status.usernames : [];
                 existingCompany = {
                     name: status.company_name || "",

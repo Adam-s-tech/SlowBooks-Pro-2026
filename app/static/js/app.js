@@ -73,7 +73,8 @@ const App = {
         '/deposits':      { page: 'deposits',        label: 'Make Deposits',      render: () => DepositsPage.render() },
         '/deposits/:id':      { page: 'deposits',   label: 'Deposit',       render: (id) => App.withDocument(() => DepositsPage.render(), () => DepositsPage.view(id)) },
         // The Check Register page is the Banking register now (2.10); old bookmarks land there.
-        '/check-register': { page: 'banking',         label: 'Banking',            render: () => { App.navigate('#/banking'); return ''; } },
+        // (replaceState: Back from Banking must not land on the alias, which would send it forward again)
+        '/check-register': { page: 'banking',         label: 'Banking',            render: () => { history.replaceState(null, '', '#/banking'); App.navigate('#/banking'); return ''; } },
         '/cc-charges':    { page: 'cc-charges',      label: 'CC Charges',         render: () => CCChargesPage.render() },
         '/cc-charges/:id':    { page: 'cc-charges', label: 'CC Charge',     render: (id) => App.withDocument(() => CCChargesPage.render(), () => JournalPage.view(id)) },
         '/expenses':      { page: 'expenses',        label: 'Enter Expenses',     render: () => ExpensesPage.render() },
@@ -102,6 +103,14 @@ const App = {
 
     async navigate(hash) {
         const path = hash.replace('#', '') || '/';
+        // Keep the address in step with the page shown. The toolbar's Home,
+        // Quick Entry and Reports (and the shortcuts, search results and the
+        // pages that move on by themselves) came here without changing it,
+        // so the sidebar link of the page left behind then did nothing:
+        // clicking it changed no hash (2.18.0 gate, macbase1 NEW-9).
+        // pushState gives Back an entry, as a link does, and fires no
+        // hashchange to navigate a second time.
+        if ((location.hash || '#/') !== `#${path}`) history.pushState(null, '', `#${path}`);
         let route = App.routes[path];
         let param = null;
         if (!route) {
@@ -789,17 +798,25 @@ const App = {
     async loadCompanySettings() {
         try {
             const s = await API.get('/settings');
-            App.settings = s || {};
             Terms.init(s);
-            const companyEl = $('#status-company');
-            if (companyEl && s.company_name && s.company_name !== 'My Company') {
-                companyEl.textContent = `Company: ${s.company_name}`;
-                // the window / tab title and the topbar brand say whose books these are
-                document.title = `${s.company_name} — Slowbooks Pro 2026`;
-                const brand = $('#topbar-company');
-                if (brand) brand.textContent = s.company_name;
-            }
+            App.showCompany(s);
         } catch (e) { Terms.init(null); /* business words until signed in */ }
+    },
+
+    // The shell's copy of the settings, and the company's name where the
+    // shell shows it. Settings calls this after a save, so a rename shows at
+    // once; it used to wait for the next start, and the Restore dialog
+    // named the company by its old name meanwhile (2.18.0 gate, skytech N4).
+    showCompany(s) {
+        App.settings = s || {};
+        const name = App.settings.company_name;
+        if (!name || name === 'My Company') return;
+        const companyEl = $('#status-company');
+        if (companyEl) companyEl.textContent = `Company: ${name}`;
+        // the window / tab title and the topbar brand say whose books these are
+        document.title = `${name} — Slowbooks Pro 2026`;
+        const brand = $('#topbar-company');
+        if (brand) brand.textContent = name;
     },
 
     // Rewrites the static shell into the company's words. index.html is

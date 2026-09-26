@@ -1,7 +1,7 @@
 # ============================================================================
 # Slowbooks Pro 2026 — Auth routes
 #
-#   GET  /api/auth/status  → {setup_needed, authenticated, multi_user, user?}
+#   GET  /api/auth/status  → {setup_needed, authenticated, multi_user, desktop, user?}
 #   POST /api/auth/setup   → first-time password set (409 if already set)
 #   POST /api/auth/login   → password (+ username once 2+ users exist)
 #   POST /api/auth/logout  → clear session
@@ -10,6 +10,8 @@
 # how you become authenticated in the first place.
 # ============================================================================
 
+import ipaddress
+import os
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -127,6 +129,28 @@ def _company_name(db: Session) -> str:
     return "" if name == placeholder else name
 
 
+def _desktop_window(request: Request) -> bool:
+    """True when the request comes from the desktop app's own window: the
+    launcher's flag, not the windowless Server Edition (--serve-lan), and a
+    request from this machine, as app.main decides for its CSP.
+
+    The sign-in screen offers "Choose a different company →" by it. It used
+    to wait for the launcher's bridge, which macOS injects after the page
+    has loaded: the screen the app starts on never had the link (2.18.0
+    gate, macbase1 NEW-8)."""
+    if os.environ.get("SLOWBOOKS_DESKTOP") != "1":
+        return False
+    if os.environ.get("SLOWBOOKS_SERVER_MODE") == "1":
+        return False
+    host = request.client.host if request.client else ""
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 @router.get("/status")
 def auth_status(request: Request, db: Session = Depends(get_db)):
     """Tell the SPA whether first-run setup is needed and whether the
@@ -167,6 +191,7 @@ def auth_status(request: Request, db: Session = Depends(get_db)):
     # New Company dialog (F3) nor silently renames a file that already holds
     # a company's books (2.9.0 gate).
     out["company_name"] = _company_name(db)
+    out["desktop"] = _desktop_window(request)
     if setup_needed:
         from app.models.transactions import Transaction
 

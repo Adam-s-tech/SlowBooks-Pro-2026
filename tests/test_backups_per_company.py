@@ -10,8 +10,12 @@ confirmation, another company's backup needs a second confirmation, a copy
 made by a newer version is refused, and a safety backup is taken first.
 """
 
+import functools
+import json
 import re
+import shutil
 import sqlite3
+import subprocess
 from contextlib import closing
 from datetime import datetime
 from pathlib import Path
@@ -285,3 +289,72 @@ def test_a_restore_that_fails_part_way_puts_the_books_back(books, client, monkey
     assert "Your books as they were are in the safety backup" in detail
     assert calls[0] == name and "before-restore" in calls[1]
     assert _value(books.live) == "today's books"
+
+
+def test_a_restore_gives_the_company_list_the_restored_books_name(
+    books, client, monkeypatch
+):
+    """2.18.0 gate, skytech N4: after a rename, restoring a backup from before
+    it brought the old name back into the books while the company list (what
+    the picker shows) kept the new one until the next start."""
+    from app.services import company_service
+
+    monkeypatch.setattr(
+        company_service, "DATABASE_URL", "sqlite:///" + books.live.as_posix()
+    )
+    company_service._write_manifest(
+        {
+            "companies": [{"name": "Harbor Light Bakery", "file": books.live.name}],
+            "last_opened": books.live.name,
+        }
+    )
+    before_rename = _backup(client)
+    r = client.put("/api/settings", json={"company_name": "Harbor Light Cafe"})
+    assert r.status_code == 200, r.text
+    assert company_service.current_manifest_name() == "Harbor Light Cafe"
+
+    r = client.post(
+        "/api/backups/restore",
+        json={"filename": before_rename, "allow_other_company": True},
+    )
+    assert r.status_code == 200, r.text
+    # the picker names the company as the restored books do, straight away
+    assert company_service.current_manifest_name() == "Harbor Light Bakery"
+    assert [c["name"] for c in company_service.manifest_list_companies()] == [
+        "Harbor Light Bakery"
+    ]
+
+
+@functools.lru_cache(maxsize=None)
+def _restore_name_steps():
+    out = subprocess.run(
+        ["node", str(ROOT / "tests" / "js" / "restore_name_probe.js")],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",  # node writes UTF-8; Windows would read cp1252
+        timeout=60,
+    )
+    assert out.returncode == 0, out.stderr
+    return {s["step"]: s for s in map(json.loads, out.stdout.splitlines())}
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="needs node")
+def test_the_restore_dialog_names_the_company_as_it_is_now():
+    """2.18.0 gate, skytech N4: after a rename the dialog named the company by
+    the name the window read when it opened."""
+    steps = _restore_name_steps()
+    assert steps["restore-after-a-rename-elsewhere"]["dialog"] == ["Harbor Light Cafe"]
+    # the settings out of reach: the shell's copy, which a save here keeps current
+    assert steps["restore-with-the-settings-out-of-reach"]["dialog"] == [
+        "Harbor Light Bakery & Cafe"
+    ]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="needs node")
+def test_a_rename_saved_in_settings_reaches_the_shell_at_once():
+    saved = _restore_name_steps()["renamed-and-saved-here"]
+    assert saved["shell_copy"] == "Harbor Light Bakery & Cafe"
+    assert saved["status"] == "Company: Harbor Light Bakery & Cafe"
+    assert saved["topbar"] == "Harbor Light Bakery & Cafe"
+    assert saved["title"] == "Harbor Light Bakery & Cafe — Slowbooks Pro 2026"

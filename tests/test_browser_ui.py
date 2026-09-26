@@ -1,0 +1,313 @@
+"""The page in a real browser: what a node probe cannot see (layout, focus,
+scrolling, the address bar), checked in playwright's Chromium.
+
+The page is the real index.html with the real scripts and stylesheets; the
+API answers from the fixtures below. Skipped, as one module, where playwright
+or its Chromium is not installed.
+
+- F22, the remainder (2.18.0 gate, macbase1): a customer's 120-character
+  name sized the Customer select, and the Edit Invoice form's second column
+  (Date, Due Date, Class, Exchange Rate) went past the dialog's right edge,
+  behind a sideways scrollbar. The statement dialog had been fixed alone; the
+  form grid now lets its columns shrink, for every form. Checked on the
+  invoice, estimate and sales receipt forms at 1280 x 800.
+- NEW-3 (2.18.0 gate, macbase1): the Pay Run view opened scrolled to the
+  first Stub PDF, with the Employee column out of sight, so no button said
+  whose stub it was. Checked in the gate's 1280 x 800 window and a narrower
+  one.
+- NEW-9 (2.18.0 gate, macbase1): after the toolbar's Home, the sidebar link
+  of the page just left did nothing. Clicked through with the real toolbar
+  and sidebar, and Back.
+"""
+
+import json
+from pathlib import Path
+from urllib.parse import urlsplit
+
+import pytest
+
+sync_api = pytest.importorskip("playwright.sync_api")
+
+ROOT = Path(__file__).resolve().parents[1]
+ORIGIN = "http://slowbooks.test"
+
+LONG_NAME = (
+    "Harbor District Community Events Association: Weddings, Memorials, "
+    "Graduations and Seasonal Market Catering, Astoria, OR"
+)
+assert len(LONG_NAME) == 120
+
+CUSTOMERS = [
+    {
+        "id": 1,
+        "name": "Salt & Pine Catering Co.",
+        "terms": "Net 15",
+        "is_taxable": True,
+    },
+    {"id": 2, "name": LONG_NAME, "terms": "Net 30", "is_taxable": True},
+]
+LINE = {
+    "item_id": None,
+    "description": "Rounding probe",
+    "quantity": 3,
+    "rate": 0.335,
+    "amount": 1.01,
+    "is_taxable": False,
+}
+API = {
+    "/health": {"status": "ok", "version": "2.18.0"},
+    "/api/auth/status": {
+        "authenticated": True,
+        "setup_needed": False,
+        "multi_user": False,
+        "company_name": "Harbor Light Bakery Two",
+    },
+    "/api/system": {"version": "2.18.0", "desktop": False, "server_mode": False},
+    "/api/settings": {
+        "company_name": "Harbor Light Bakery Two",
+        "company_type": "business",
+        "default_terms": "Net 15",
+        "default_tax_rate": "8.25",
+        "invoice_notes": "Thank you for choosing Harbor Light!",
+        "walk_in_customer_id": "9",
+    },
+    "/api/customers": CUSTOMERS,
+    "/api/items": [{"id": 1, "name": "Sourdough Loaf", "rate": 8.5}],
+    "/api/classes": [{"id": 1, "name": "Unassigned", "is_system_default": True}],
+    "/api/accounts": [
+        {"id": 1, "name": "Checking", "account_number": "1000", "bank_kind": "bank"}
+    ],
+    "/api/invoices/1": {
+        "id": 1,
+        "invoice_number": "HLB-2005",
+        "customer_id": 1,
+        "date": "2026-09-26",
+        "due_date": "2026-10-11",
+        "terms": "Net 15",
+        "po_number": "",
+        "tax_rate": 0.0825,
+        "notes": "Thank you for choosing Harbor Light!",
+        "currency": "USD",
+        "exchange_rate": 1,
+        "class_id": 1,
+        "job_id": None,
+        "status": "draft",
+        "total": 1.01,
+        "amount_paid": 0,
+        "lines": [LINE],
+    },
+    "/api/estimates/1": {
+        "id": 1,
+        "estimate_number": "E-1001",
+        "customer_id": 1,
+        "date": "2026-09-26",
+        "expiration_date": "2026-10-26",
+        "tax_rate": 0.0825,
+        "notes": "",
+        "class_id": 1,
+        "job_id": None,
+        "lines": [LINE],
+    },
+    "/api/payroll/1": {
+        "id": 1,
+        "period_start": "2026-09-13",
+        "period_end": "2026-09-26",
+        "status": "processed",
+        "total_gross": 3726.67,
+        "total_taxes": 751.54,
+        "total_employer_taxes": 352.17,
+        "total_employer_benefits": 0,
+        "total_net": 2975.13,
+        "stubs": [
+            {
+                "id": 1,
+                "employee_id": 1,
+                "employee_name": "Lena Ortiz",
+                "hours": 0,
+                "gross_pay": 2166.67,
+                "federal_tax": 91.67,
+                "state_tax": 144.47,
+                "state_other_employee": 2.17,
+                "ss_tax": 134.33,
+                "medicare_tax": 31.42,
+                "pretax_deductions": 0,
+                "posttax_deductions": 0,
+                "garnishments": 0,
+                "reimbursements": 0,
+                "net_pay": 1762.61,
+                "benefits": [],
+            },
+            {
+                "id": 2,
+                "employee_id": 2,
+                "employee_name": "Jonah Pike",
+                "hours": 80,
+                "gross_pay": 1560,
+                "federal_tax": 60.89,
+                "state_tax": 115.69,
+                "state_other_employee": 1.56,
+                "ss_tax": 96.72,
+                "medicare_tax": 22.62,
+                "pretax_deductions": 0,
+                "posttax_deductions": 0,
+                "garnishments": 0,
+                "reimbursements": 0,
+                "net_pay": 1212.52,
+                "benefits": [],
+            },
+        ],
+    },
+}
+
+
+@pytest.fixture(scope="module")
+def browser():
+    with sync_api.sync_playwright() as p:
+        try:
+            chromium = p.chromium.launch()
+        except Exception as exc:  # the package without its browser
+            pytest.skip(f"playwright's Chromium is not installed: {exc}")
+        yield chromium
+        chromium.close()
+
+
+def _serve(route):
+    url = urlsplit(route.request.url)
+    if f"{url.scheme}://{url.netloc}" != ORIGIN:
+        return route.abort()  # web fonts and the like: not part of the layout
+    if url.path == "/":
+        return route.fulfill(path=str(ROOT / "index.html"))
+    if url.path.startswith("/static/"):
+        f = ROOT / "app" / url.path.lstrip("/")
+        return route.fulfill(path=str(f)) if f.is_file() else route.fulfill(status=404)
+    body = API.get(url.path, [])  # a list the page does not need: empty
+    return route.fulfill(
+        status=200, content_type="application/json", body=json.dumps(body)
+    )
+
+
+def _open(browser, width, height, page_hash):
+    page = browser.new_page(viewport={"width": width, "height": height})
+    page.route("**/*", _serve)
+    page.goto(f"{ORIGIN}/{page_hash}")
+    page.wait_for_function("window.App && document.readyState === 'complete'")
+    page.click("#splash-dismiss")  # the splash covers the page on every start
+    return page
+
+
+def _open_dialog(page, call, ready):
+    page.evaluate(f"() => {call}")
+    page.wait_for_selector(ready)
+    # openModal focuses the dialog's first control on the next tick, which
+    # scrolls it into view; measure after that
+    page.evaluate("() => new Promise((done) => setTimeout(done, 0))")
+
+
+HEADER_FIELDS_OUTSIDE_THE_DIALOG = """() => {
+    const modal = document.getElementById('modal');
+    const body = document.getElementById('modal-body');
+    const box = body.getBoundingClientRect();
+    const edge = box.right - parseFloat(getComputedStyle(body).paddingRight);
+    const out = [];
+    for (const group of body.querySelectorAll('.form-grid > .form-group')) {
+        const label = ((group.querySelector('label') || {}).textContent || '').trim();
+        for (const el of group.querySelectorAll('input, select, textarea')) {
+            if (el.offsetParent === null) continue;  // the hidden quick-add form
+            const r = el.getBoundingClientRect();
+            if (r.right > edge + 0.5) out.push(`${label}: right ${r.right} > ${edge}`);
+        }
+    }
+    if (modal.scrollWidth > modal.clientWidth) {
+        out.push(`the dialog scrolls sideways: ${modal.scrollWidth} > ${modal.clientWidth}`);
+    }
+    return out;
+}"""
+
+
+SALES_FORMS = {
+    "invoice": ("InvoicesPage.showForm(1)", "#invoice-form"),
+    "estimate": ("EstimatesPage.showForm(1)", "#est-form"),
+    "sales receipt": ("SalesReceiptsPage.showForm()", "#sales-receipt-form"),
+}
+
+
+def test_a_long_customer_name_keeps_each_sales_form_header_in_the_dialog(browser):
+    problems = {}
+    for form, (call, ready) in SALES_FORMS.items():
+        page = _open(browser, 1280, 800, "#/invoices")
+        try:
+            _open_dialog(page, call, ready)
+            # the long name is in the list the Customer select sizes itself to
+            assert page.evaluate(
+                "(n) => [...document.querySelectorAll('#modal-body select option')]"
+                ".some(o => o.textContent === n)",
+                LONG_NAME,
+            ), form
+            outside = page.evaluate(HEADER_FIELDS_OUTSIDE_THE_DIALOG)
+            if outside:
+                problems[form] = outside
+        finally:
+            page.close()
+    assert problems == {}
+
+
+PAY_RUN_ROWS = """(scrollToEnd) => {
+    const wrap = document.querySelector('#modal-body .table-container');
+    if (scrollToEnd) wrap.scrollLeft = wrap.scrollWidth;
+    const box = wrap.getBoundingClientRect();
+    const rows = [...wrap.querySelectorAll('tbody tr')].map(tr => {
+        const cell = tr.cells[0];
+        const r = cell.getBoundingClientRect();
+        // what is painted at the middle of the name: the name, not a
+        // column scrolled over it
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        const button = tr.querySelector('button');
+        return {
+            name: cell.textContent.trim(),
+            name_in_view: r.left >= box.left - 0.5 && r.right <= box.right + 0.5
+                && !!hit && cell.contains(hit),
+            label: button.getAttribute('aria-label'),
+            text: button.textContent.trim(),
+        };
+    });
+    return { rows, scrolls: wrap.scrollWidth > wrap.clientWidth };
+}"""
+
+
+def test_each_pay_run_row_says_whose_stub_it_is(browser):
+    # 1280: the window of the report, where the table now fits the dialog;
+    # 900: a narrower one, where it scrolls and the Employee column stays
+    for width, height in ((1280, 800), (900, 700)):
+        page = _open(browser, width, height, "#/payroll")
+        try:
+            _open_dialog(page, "PayrollPage.view(1)", "#modal-body table")
+            seen = [page.evaluate(PAY_RUN_ROWS, False)]
+            if width < 1280:
+                assert seen[0]["scrolls"], "the table should be wider than 900"
+                seen.append(page.evaluate(PAY_RUN_ROWS, True))  # all the way right
+            for view in seen:
+                rows = view["rows"]
+                assert [r["name"] for r in rows] == ["Lena Ortiz", "Jonah Pike"]
+                assert all(r["name_in_view"] for r in rows), (width, rows)
+                for r in rows:
+                    assert r["text"] == f"Stub PDF — {r['name']}"
+                    assert r["label"] == f"Stub PDF — {r['name']}"
+        finally:
+            page.close()
+
+
+def test_a_sidebar_link_works_after_a_toolbar_button(browser):
+    page = _open(browser, 1280, 800, "#/settings")
+    try:
+        page.wait_for_selector("#settings-form")
+        page.click('#topbar .tb-btn[data-nav="#/"]')  # Home
+        page.wait_for_selector('.nav-link.active[data-page="dashboard"]')
+        assert page.evaluate("location.hash") == "#/"
+        page.click('#sidebar a.nav-link[data-page="settings"]')
+        page.wait_for_selector("#settings-form", timeout=5000)
+        # and Back goes to the Dashboard the toolbar opened
+        page.go_back()
+        page.wait_for_selector('.nav-link.active[data-page="dashboard"]')
+        assert page.evaluate("location.hash") == "#/"
+    finally:
+        page.close()

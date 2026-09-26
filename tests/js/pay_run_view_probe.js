@@ -5,6 +5,7 @@
 const stripTags = (s) => { let prev; s = String(s); do { prev = s; s = s.replace(/<[^>]*>/g, ''); } while (s !== prev); return s; };
 const fs = require('fs'), vm = require('vm');
 let modal = '';
+let modalOpts = null;
 const run = {
   id: 3, period_start: '2026-09-13', period_end: '2026-09-26', status: 'draft',
   total_gross: 2166.67, total_taxes: 404.06, total_employer_taxes: 0, total_employer_benefits: 0, total_net: 1762.61,
@@ -23,7 +24,7 @@ const ctx = {
   API: { get: async () => run },
   escapeHtml: (s) => String(s), formatDate: (d) => d, statusBadge: (s) => s, T: (s) => s,
   formatCurrency: (n) => '$' + Number(n || 0).toFixed(2),
-  openModal: (title, html) => { modal = html; }, closeModal: () => {},
+  openModal: (title, html, opts) => { modal = html; modalOpts = opts || null; }, closeModal: () => {},
 };
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync('app/static/js/payroll.js', 'utf8') + '\nthis.P = PayrollPage;', ctx);
@@ -33,6 +34,13 @@ vm.runInContext(fs.readFileSync('app/static/js/payroll.js', 'utf8') + '\nthis.P 
   const body = modal.slice(modal.indexOf('<tbody>'), modal.indexOf('</tbody>'));
   for (const tr of body.split('<tr>').slice(1)) {
     const cells = [...tr.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((m) => stripTags(m[1]).trim());
-    console.log(JSON.stringify(Object.fromEntries(heads.map((h, i) => [h, cells[i]]))));
+    const row = Object.fromEntries(heads.map((h, i) => [h, cells[i]]));
+    // how the Stub PDF button is named, and how the table is laid out
+    row._stub_label = (tr.match(/<button[^>]*aria-label="([^"]*)"/) || [])[1] || null;
+    const layout = modal.match(/<div class="(table-container[^"]*)"><table(?: class="([^"]*)")?>/) || [];
+    row._container = layout[1] || null;
+    row._table = layout[2] || null;
+    row._wide = !!(modalOpts && modalOpts.wide);
+    console.log(JSON.stringify(row));
   }
 })();
