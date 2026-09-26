@@ -724,6 +724,11 @@ const SettingsPage = {
                 ? saved.closing_date : (data.closing_date || '');
             SettingsPage._markClean();
             SettingsPage.showClosingState();
+            // the shell's copy too: a new company name shows in the status
+            // bar, the title and the topbar now, not at the next start
+            if (saved && typeof App !== 'undefined' && typeof App.showCompany === 'function') {
+                App.showCompany(saved);
+            }
             toast('Settings saved');
         } catch (err) {
             toast(err.message, 'error');
@@ -966,10 +971,18 @@ const SettingsPage = {
 
     // Restore had an endpoint and no button (explore 2.17.3, macbase1 F25).
     // It replaces the whole company, so it asks plainly and needs a tick.
-    confirmRestore(filename) {
+    async confirmRestore(filename) {
         const b = (SettingsPage._backups || []).find(x => x.filename === filename) || { filename };
         const when = b.created_at ? SettingsPage._when(b.created_at) : 'when it was made';
-        const company = (App.settings && App.settings.company_name) || 'this company';
+        // The company as it is now. The shell's copy of the settings is read
+        // when the window opens, so after a rename this named the company by
+        // its old name (2.18.0 gate, skytech N4).
+        let company = (App.settings && App.settings.company_name) || '';
+        try {
+            const now = await API.get('/settings');
+            if (now && now.company_name) company = now.company_name;
+        } catch (e) { /* the shell's copy will do */ }
+        company = company || 'this company';
         openModal('Restore a backup', `
             <form id="restore-form" onsubmit="SettingsPage.restoreBackup(event)">
                 <input type="hidden" name="filename" value="${escapeHtml(filename)}">

@@ -4,6 +4,8 @@
 # ============================================================================
 
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -19,6 +21,7 @@ from app.services.backup_service import (
 )
 
 router = APIRouter(prefix="/api/backups", tags=["backups"])
+logger = logging.getLogger(__name__)
 
 
 class BackupCreate(StrictModel):
@@ -178,4 +181,17 @@ def restore(data: RestoreRequest, db: Session = Depends(get_db)):
                 f"restore (safety backup {safety['filename']})."
             ),
         )
+    # The books now carry the backup's company name. The company list (the
+    # picker) kept the name from before the restore, so a backup made before
+    # a rename left the two disagreeing until the next start (2.18.0 gate,
+    # skytech N4). Same rule as a rename in Settings: the books' name wins.
+    restored_name = backup_service.read_backup_facts(filepath.name).get("company_name")
+    if restored_name:
+        from app.services.company_service import sync_manifest_name
+
+        try:
+            sync_manifest_name(restored_name)
+        except OSError:
+            # the books are restored; the list catches up at the next start
+            logger.exception("Could not rename the company list entry")
     return {**result, "safety_backup": safety["filename"]}

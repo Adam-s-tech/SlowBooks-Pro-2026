@@ -789,17 +789,25 @@ const App = {
     async loadCompanySettings() {
         try {
             const s = await API.get('/settings');
-            App.settings = s || {};
             Terms.init(s);
-            const companyEl = $('#status-company');
-            if (companyEl && s.company_name && s.company_name !== 'My Company') {
-                companyEl.textContent = `Company: ${s.company_name}`;
-                // the window / tab title and the topbar brand say whose books these are
-                document.title = `${s.company_name} — Slowbooks Pro 2026`;
-                const brand = $('#topbar-company');
-                if (brand) brand.textContent = s.company_name;
-            }
+            App.showCompany(s);
         } catch (e) { Terms.init(null); /* business words until signed in */ }
+    },
+
+    // The shell's copy of the settings, and the company's name where the
+    // shell shows it. Settings calls this after a save, so a rename shows at
+    // once; it used to wait for the next start, and the Restore dialog
+    // named the company by its old name meanwhile (2.18.0 gate, skytech N4).
+    showCompany(s) {
+        App.settings = s || {};
+        const name = App.settings.company_name;
+        if (!name || name === 'My Company') return;
+        const companyEl = $('#status-company');
+        if (companyEl) companyEl.textContent = `Company: ${name}`;
+        // the window / tab title and the topbar brand say whose books these are
+        document.title = `${name} — Slowbooks Pro 2026`;
+        const brand = $('#topbar-company');
+        if (brand) brand.textContent = name;
     },
 
     // Rewrites the static shell into the company's words. index.html is
