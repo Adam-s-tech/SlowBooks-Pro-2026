@@ -2,8 +2,10 @@ from pydantic import BaseModel
 from pydantic import Field
 from typing import Literal
 
+from app.schemas.common import StrictModel
 
-class QBOImportRunRequest(BaseModel):
+
+class QBOImportRunRequest(StrictModel):
     entities: (
         list[
             Literal[

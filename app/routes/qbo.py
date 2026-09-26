@@ -21,12 +21,12 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from intuitlib.exceptions import AuthClientError
-from pydantic import BaseModel
 from requests.exceptions import RequestException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.routes._roles import require_admin
+from app.schemas.common import StrictModel
 from app.schemas.qbo import (
     QBOImportResult,
     QBOExportResult,
@@ -65,7 +65,7 @@ def get_auth_url(request: Request, db: Session = Depends(get_db)):
         )
 
 
-class ManualConnection(BaseModel):
+class ManualConnection(StrictModel):
     authorization_code: str
     realm_id: str
 
