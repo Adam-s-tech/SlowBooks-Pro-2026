@@ -11,6 +11,7 @@ from app.database import get_db
 from app.routes.payroll._router import router
 from app.routes.payroll.ytd import employee_ytd
 from app.services.payroll_documents import employer_block
+from app.services.request_utils import content_disposition, file_name
 from app.models.payroll import (
     PayRun,
     PayStub,
@@ -59,11 +60,13 @@ def download_paystub(run_id: int, stub_id: int, db: Session = Depends(get_db)):
         {k: str(v) for k, v in ytd.items()},
         ytd_stubs=ytd_stubs,
     )
-    filename = f"paystub_{run_id}_{stub_id}.pdf"
+    # Named for the person and the pay date, not internal ids
+    # ("paystub_1_1.pdf"; 2.18.0 gate, NEW-6).
+    name = file_name("Pay-Stub", run.pay_date, emp.full_name if emp else None)
     return Response(
         content=pdf,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"inline; filename={filename}"},
+        headers={"Content-Disposition": content_disposition(name + ".pdf")},
     )
 
 

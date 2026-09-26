@@ -108,3 +108,27 @@ def test_the_template_reads_the_lines_ytd_not_a_guess():
     ).read_text()
     assert "d.ytd" in html and "total_deductions_ytd" in html
     assert "ytd.get('deductions'" not in html and "'federal' in k" not in html
+
+
+def test_a_state_line_keeps_the_states_capitals(client, db_session, seed_accounts):
+    # "OR income tax" printed as "Or Income Tax".
+    emp = _employee(client, "Mara", "OR", 56333.42)
+    run = _run(client, emp, "2026-09-13", "2026-09-26", "2026-10-01")
+    stub = db_session.get(PayStub, run["stubs"][0]["id"])
+    labels = [d["label"] for d in _deduction_lines(stub)]
+    assert "OR Income Tax" in labels, labels
+    assert not any(lab.startswith("Or ") for lab in labels), labels
+
+
+def test_the_stub_pdf_is_named_for_the_person_and_pay_date(
+    client, db_session, seed_accounts, monkeypatch
+):
+    # NEW-6: it downloaded as "paystub_1_1.pdf".
+    from app.services import paystub_pdf
+
+    monkeypatch.setattr(paystub_pdf, "render_pdf", lambda html, **kw: b"%PDF-1.7")
+    emp = _employee(client, "Lena", "OR", 56333.42)
+    run = _run(client, emp, "2026-09-13", "2026-09-26", "2026-10-01")
+    r = client.get(f"/api/payroll/{run['id']}/paystub/{run['stubs'][0]['id']}")
+    assert r.status_code == 200, r.text
+    assert "Pay-Stub_2026-10-01_Lena-Test.pdf" in r.headers["content-disposition"]

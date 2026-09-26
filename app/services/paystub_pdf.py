@@ -55,7 +55,17 @@ def _humanize(key: str) -> str:
         return key.split(":", 1)[1]
     if key.startswith("garnishment:"):
         return "Garnishment " + key.split(":")[1].replace("_", " ").title()
-    return _DEDUCTION_KEYS.get(key) or key.replace("_", " ").title()
+    known = _DEDUCTION_KEYS.get(key)
+    if known:
+        return known
+    if " " in key:
+        # A state engine's own label ("OR income tax", "NY PFL"): its capitals
+        # are state codes and acronyms, so only its lowercase words are
+        # capitalized. title() printed "Or Income Tax" (2.18.0 gate, NEW-2).
+        return " ".join(
+            w[:1].upper() + w[1:] if w.islower() else w for w in key.split()
+        )
+    return key.replace("_", " ").title()
 
 
 def _is_employer_key(key: str) -> bool:
