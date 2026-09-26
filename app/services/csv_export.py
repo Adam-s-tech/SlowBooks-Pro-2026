@@ -4,7 +4,7 @@
 # ============================================================================
 
 import csv
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 import io
 
 from sqlalchemy.orm import Session
@@ -28,6 +28,13 @@ def _rate_text(value) -> str:
     whole, _, frac = text.partition(".")
     frac = frac.rstrip("0")
     return f"{whole}.{frac.ljust(2, '0')}"
+
+
+def _money_cell(value) -> Decimal:
+    """A money cell to the cent: "-20.00" and "1234.50", where float() wrote
+    "-20.0" and "1234.5" (macbase1, 2.18.0 gate). A Decimal, not a string,
+    so _SafeWriter never takes a negative amount for a formula."""
+    return Decimal(str(value or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 def _csv_safe(value: str) -> str:
@@ -106,7 +113,7 @@ def export_customers(db: Session) -> str:
                 c.bill_state or "",
                 c.bill_zip or "",
                 c.terms or "",
-                float(balances.get(c.id, 0)),
+                _money_cell(balances.get(c.id, 0)),
             ]
         )
     return output.getvalue()
@@ -147,7 +154,7 @@ def export_vendors(db: Session) -> str:
                 v.state or "",
                 v.zip or "",
                 v.terms or "",
-                float(balances.get(v.id, 0)),
+                _money_cell(balances.get(v.id, 0)),
             ]
         )
     return output.getvalue()
@@ -165,8 +172,8 @@ def export_items(db: Session) -> str:
                 i.name,
                 i.item_type.value,
                 i.description or "",
-                float(i.rate or 0),
-                float(i.cost or 0),
+                _rate_text(i.rate or 0),
+                _rate_text(i.cost or 0),
                 i.is_taxable,
             ]
         )
@@ -205,11 +212,11 @@ def export_invoices(db: Session, date_from=None, date_to=None) -> str:
                 inv.date.isoformat(),
                 inv.due_date.isoformat() if inv.due_date else "",
                 inv.status.value,
-                float(inv.subtotal),
-                float(inv.tax_amount),
-                float(inv.total),
-                float(inv.amount_paid),
-                float(inv.balance_due),
+                _money_cell(inv.subtotal),
+                _money_cell(inv.tax_amount),
+                _money_cell(inv.total),
+                _money_cell(inv.amount_paid),
+                _money_cell(inv.balance_due),
             ]
         )
     return output.getvalue()
@@ -226,7 +233,7 @@ def export_accounts(db: Session) -> str:
                 a.account_number or "",
                 a.name,
                 a.account_type.value,
-                float(a.balance or 0),
+                _money_cell(a.balance),
                 a.is_active,
                 a.is_system,
             ]

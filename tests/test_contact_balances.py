@@ -210,6 +210,42 @@ def test_csv_exports_carry_the_computed_balance(client, db_session, seed_account
     assert Decimal(rows[str(vid)]["Balance"]) == Decimal("90.00")
 
 
+def test_csv_money_is_written_to_the_cent(client, db_session, seed_accounts):
+    # macbase1 (2.18.0 gate): a customer in credit exported as "-20.0".
+    from app.models.contacts import Customer
+
+    c = Customer(name="Salt & Pine", is_active=True)
+    db_session.add(c)
+    db_session.commit()
+    r = client.post(
+        "/api/payments",
+        json={
+            "customer_id": c.id,
+            "date": "2026-09-02",
+            "amount": 20,
+            "method": "Check",
+            "allocations": [],
+        },
+    )
+    assert r.status_code == 201, r.text
+    body = client.get("/api/csv/export/customers").text
+    rows = {r["ID"]: r for r in csv.DictReader(io.StringIO(body.lstrip("﻿")))}
+    assert rows[str(c.id)]["Balance"] == "-20.00"
+    inv = client.post(
+        "/api/invoices",
+        json={
+            "customer_id": c.id,
+            "date": "2026-09-03",
+            "tax_rate": 0,
+            "lines": [{"description": "Loaf", "quantity": 1, "rate": 1234.5}],
+        },
+    )
+    assert inv.status_code == 201, inv.text
+    body = client.get("/api/csv/export/invoices").text
+    row = next(csv.DictReader(io.StringIO(body.lstrip("﻿"))))
+    assert row["Total"] == "1234.50" and row["Balance"] == "1234.50", row
+
+
 @contextmanager
 def _count_selects(engine):
     statements = []
