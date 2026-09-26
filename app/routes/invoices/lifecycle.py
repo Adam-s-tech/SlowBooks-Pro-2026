@@ -42,6 +42,17 @@ def void_invoice(invoice_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Invoice not found")
     if invoice.status == InvoiceStatus.VOID:
         raise HTTPException(status_code=400, detail="Invoice already voided")
+    # A document the QuickBooks Online import created has no posting of its
+    # own to reverse: the QBO ledger import holds its amounts (#192 review).
+    from app.services.qbo_common import qbo_managed_invoice, qbo_managed_refusal
+
+    if qbo_managed_invoice(db, invoice):
+        raise HTTPException(
+            status_code=400,
+            detail=qbo_managed_refusal(
+                document_label(invoice, terms_from_db(db)).lower()
+            ),
+        )
     # Voiding an invoice with payments applied would reverse the full A/R
     # while the payment's cash-receipt JE + allocations stay on the books —
     # double-counting cash and reversing A/R twice. Require the payment(s)

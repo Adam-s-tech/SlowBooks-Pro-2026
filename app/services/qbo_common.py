@@ -256,3 +256,55 @@ def rebase_account_balances(db: Session, accounts) -> None:
     for account_id, account in accounts.items():
         account.balance = balances[account_id]
     db.flush()
+
+
+# ---------------------------------------------------------------------------
+# Documents the QBO import created
+# ---------------------------------------------------------------------------
+
+
+def _mapped_from_qbo(db: Session, kinds, slowbooks_id) -> bool:
+    return (
+        db.query(QBOMapping.id)
+        .filter(
+            QBOMapping.entity_type.in_(kinds),
+            QBOMapping.slowbooks_id == slowbooks_id,
+        )
+        .first()
+        is not None
+    )
+
+
+def qbo_managed_invoice(db: Session, invoice) -> bool:
+    """An invoice or sales receipt the QBO import created. It has no posting
+    of its own: its A/R, income and tax reach the books through the QBO
+    ledger import. A local invoice exported to QBO, or matched to a QBO one
+    by its number, is mapped too but keeps its own posting."""
+    return invoice.transaction_id is None and _mapped_from_qbo(
+        db, ("invoice", "sales_receipt"), invoice.id
+    )
+
+
+def qbo_managed_payment(db: Session, payment) -> bool:
+    """A payment the QBO import created: a QBO payment, or the payment half
+    of a QBO sales receipt (which has no mapping of its own). Like the
+    invoices, it has no posting of its own."""
+    if payment.transaction_id is not None:
+        return False
+    if _mapped_from_qbo(db, ("payment",), payment.id):
+        return True
+    return any(
+        alloc.invoice is not None
+        and alloc.invoice.transaction_id is None
+        and _mapped_from_qbo(db, ("sales_receipt",), alloc.invoice_id)
+        for alloc in payment.allocations
+    )
+
+
+def qbo_managed_refusal(what: str) -> str:
+    """Why a document the QBO import created is not voided here."""
+    return (
+        f"This {what} came from QuickBooks Online: its amounts reach the books "
+        "through the QuickBooks Online import, not a posting of its own, so "
+        "voiding it here would not take them out. Void it in QuickBooks Online."
+    )

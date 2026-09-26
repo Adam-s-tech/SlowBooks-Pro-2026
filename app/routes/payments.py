@@ -413,6 +413,12 @@ def void_payment(payment_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Payment not found")
     if payment.is_voided:
         raise HTTPException(status_code=400, detail="Payment already voided")
+    # A payment the QuickBooks Online import created has no posting of its
+    # own to reverse: the QBO ledger import holds its amounts (#192 review).
+    from app.services.qbo_common import qbo_managed_payment, qbo_managed_refusal
+
+    if qbo_managed_payment(db, payment):
+        raise HTTPException(status_code=400, detail=qbo_managed_refusal("payment"))
     check_closing_date(db, payment.date)
     # Money already taken to the bank in a deposit (or received straight
     # into a bank account that has since been reconciled) can't just be
