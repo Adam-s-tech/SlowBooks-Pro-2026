@@ -315,6 +315,10 @@ def test_restart_marks_unfinished_log_interrupted(run_db, monkeypatch):
     store = runs.store_for(run_db)
     state = store.reserve(["accounts"], "eric")
     monkeypatch.setattr(runs, "_BOOT_ID", "new-server-process")
+    # The old process stopped beating when it stopped (a live sibling
+    # worker keeps beating: tests/test_qbo_import_workers.py).
+    later = time.time() + runs.STALE_SECONDS + 1
+    monkeypatch.setattr(runs, "_clock", lambda: later)
     snapshot = store.latest()
     assert snapshot["run"]["run_id"] == state["run_id"]
     assert snapshot["run"]["status"] == "interrupted"

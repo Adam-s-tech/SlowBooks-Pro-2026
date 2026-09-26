@@ -2,7 +2,10 @@
 
 The private sidecar database is separate from the accounting database so
 polling and progress writes stay available during long SQLite imports.
-The application currently runs one server process; threads share this store.
+Threads in one server process share a store; Server Edition runs several
+worker processes (APP_WORKERS), each with its own connection to the same
+file, so a run's owner beats a heartbeat while it works and another
+process calls the run interrupted only once that heartbeat has stopped.
 """
 
 from contextlib import contextmanager
@@ -11,7 +14,8 @@ from hashlib import sha256
 import json
 import logging
 import sqlite3
-from threading import RLock, Thread
+from threading import Event, RLock, Thread
+import time
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -37,6 +41,11 @@ ACTIVE = {"queued", "running"}
 _BOOT_ID = uuid4().hex
 _stores = {}
 _stores_lock = RLock()
+# A working run's process writes its heartbeat this often; a run whose
+# owner has not beaten for STALE_SECONDS is taken to have died with it.
+HEARTBEAT_SECONDS = 5
+STALE_SECONDS = 20
+_clock = time.time
 
 
 def _now():
@@ -53,6 +62,37 @@ class ImportStore:
         self.connection.executescript(
             "CREATE TABLE IF NOT EXISTS latest (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL);"
             "CREATE TABLE IF NOT EXISTS events (sequence INTEGER PRIMARY KEY, payload TEXT NOT NULL);"
+            "CREATE TABLE IF NOT EXISTS owners (boot_id TEXT PRIMARY KEY, heartbeat REAL NOT NULL);"
+        )
+
+    def _write_lock(self):
+        """Take the file's write lock before reading what will be written:
+        another worker process must not change the run in between."""
+        self.connection.execute("BEGIN IMMEDIATE")
+
+    def _beat(self):
+        self.connection.execute(
+            "INSERT OR REPLACE INTO owners VALUES (?, ?)", (_BOOT_ID, _clock())
+        )
+
+    def beat(self):
+        """This process is still working on its run."""
+        with self.lock, self.connection:
+            self._beat()
+
+    def _owner_alive(self, owner):
+        if owner == _BOOT_ID:
+            return True
+        row = self.connection.execute(
+            "SELECT heartbeat FROM owners WHERE boot_id = ?", (owner,)
+        ).fetchone()
+        return bool(row) and _clock() - row[0] < STALE_SECONDS
+
+    def _abandoned(self, state):
+        return bool(
+            state
+            and state["status"] in ACTIVE
+            and not self._owner_alive(state.get("owner"))
         )
 
     def _read(self):
@@ -88,7 +128,7 @@ class ImportStore:
         self._save(state)
 
     def _recover(self, state):
-        if state and state["status"] in ACTIVE and state["owner"] != _BOOT_ID:
+        if self._abandoned(state):
             state.update(
                 status="interrupted",
                 finished_at=_now(),
@@ -106,6 +146,7 @@ class ImportStore:
 
     def reserve(self, entities, actor):
         with self.lock, self.connection:
+            self._write_lock()
             state = self._read()
             self._recover(state)
             if state and state["status"] in ACTIVE:
@@ -142,19 +183,28 @@ class ImportStore:
                 "result": {**{entity: 0 for entity in ENTITY_ORDER}, "errors": []},
             }
             self.connection.execute("DELETE FROM events")
+            self._beat()
             self._append(state, "start", f"Import accepted: {', '.join(entities)}")
             return state
 
     def publish(self, state, action, message, **fields):
         with self.lock, self.connection:
+            self._write_lock()
             current = self._read()
             if current and current["run_id"] == state["run_id"]:
+                # Continue after any row another process added to this run.
+                state["last_sequence"] = max(
+                    state["last_sequence"], current["last_sequence"]
+                )
                 self._append(state, action, message, **fields)
 
     def latest(self, after=0):
         with self.lock, self.connection:
             state = self._read()
-            self._recover(state)
+            if self._abandoned(state):
+                self._write_lock()
+                state = self._read()
+                self._recover(state)
             if not state:
                 return {
                     "run": None,
@@ -385,6 +435,27 @@ class Reporter:
 
 
 @contextmanager
+def _heartbeat(store):
+    """Beat for as long as this process works on its run."""
+    stop = Event()
+
+    def beat():
+        while not stop.wait(HEARTBEAT_SECONDS):
+            try:
+                store.beat()
+            except Exception:
+                logger.warning("Could not record the QBO import heartbeat")
+
+    thread = Thread(target=beat, name="qbo-import-heartbeat", daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        thread.join(timeout=HEARTBEAT_SECONDS)
+
+
+@contextmanager
 def _run_context(db, store, state):
     reporter = Reporter(store, state)
     listeners = [
@@ -395,7 +466,7 @@ def _run_context(db, store, state):
     for name, function in listeners:
         event.listen(db, name, function)
     try:
-        with qbo_progress.reporting(reporter):
+        with _heartbeat(store), qbo_progress.reporting(reporter):
             yield reporter
     except Exception as exc:
         db.rollback()
