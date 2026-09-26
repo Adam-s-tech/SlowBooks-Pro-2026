@@ -147,3 +147,35 @@ def test_the_local_cost_is_taken_back_by_a_reversal(widget_sale, db_session):
     assert sorted((ln.debit, ln.credit) for ln in reversal.lines) == sorted(
         (ln.credit, ln.debit) for ln in local.lines
     )
+
+
+def test_an_edit_makes_the_sale_ours_and_costs_it_here_once(
+    widget_sale, db_session, client
+):
+    """The ledger import costed the sale at QBO's 7.00. Three Widgets
+    instead of two: the invoice becomes ours, QBO's posting is reversed and
+    the sale is costed here at 4.00 a Widget, once."""
+    from app.models.invoices import Invoice
+
+    documents, posted_ledger, cogs, widget = widget_sale
+    documents()
+    posted_ledger()
+    db_session.commit()
+    invoice = db_session.query(Invoice).one()
+    r = client.put(
+        f"/api/invoices/{invoice.id}",
+        json={
+            "lines": [
+                {
+                    "item_id": widget.id,
+                    "description": "Widget",
+                    "quantity": 3,
+                    "rate": 25,
+                }
+            ]
+        },
+    )
+    assert r.status_code == 200, r.text
+    db_session.expire_all()
+    assert cogs() == Decimal("12.00")
+    assert db_session.get(Item, widget.id).quantity_on_hand == Decimal("7")

@@ -310,3 +310,78 @@ def document_of_posting(db: Session, txn):
                 if document is not None and document.status != InvoiceStatus.VOID:
                     return kind, document
     return None
+
+
+# ---------------------------------------------------------------------------
+# Edits: the document becomes ours
+# ---------------------------------------------------------------------------
+
+
+def post_payment_journal(db: Session, payment) -> None:
+    """A payment's own posting (DR the account it went to / CR A/R), for the
+    payment of a QBO sales receipt that becomes ours."""
+    from app.models.contacts import Customer
+    from app.services.accounting import (
+        create_journal_entry,
+        get_ar_account_id,
+        get_undeposited_funds_id,
+    )
+
+    customer = db.get(Customer, payment.customer_id)
+    amount = Decimal(str(payment.amount))
+    txn = create_journal_entry(
+        db,
+        payment.date,
+        f"Payment from {customer.name if customer else 'Unknown'}",
+        [
+            {
+                "account_id": payment.deposit_to_account_id
+                or get_undeposited_funds_id(db),
+                "debit": amount,
+                "credit": Decimal("0"),
+                "description": "Payment received",
+            },
+            {
+                "account_id": get_ar_account_id(db),
+                "debit": Decimal("0"),
+                "credit": amount,
+                "description": "Payment received",
+            },
+        ],
+        source_type="payment",
+        source_id=payment.id,
+        reference=payment.reference or "",
+    )
+    payment.transaction_id = txn.id
+
+
+def adopt_invoice(db: Session, invoice) -> bool:
+    """Make an invoice or sales receipt the QBO import created an ordinary
+    one of ours, before an edit changes its amounts or date. Its import
+    posting is reversed (the stock it moved is costed here again), a sales
+    receipt's payment gets its posting, and the caller posts the invoice's
+    own entry from its edited lines. Returns False for any other invoice."""
+    mapping = invoice_origin(db, invoice)
+    if mapping is None:
+        return False
+    what = "sales receipt" if mapping.entity_type == "sales_receipt" else "invoice"
+    found = import_posting(db, mapping)
+    ledger = None
+    if found:
+        ledger, txn = found
+        reverse_import_posting(
+            db,
+            txn,
+            refusal=(
+                f"This {what}'s posting is on a reconciled bank statement, so its "
+                "amounts and date can't be changed."
+            ),
+        )
+        restore_local_cost(db, invoice)
+    if mapping.entity_type == "sales_receipt":
+        for alloc in invoice.payment_allocations:
+            payment = alloc.payment
+            if payment and not payment.is_voided and payment.transaction_id is None:
+                post_payment_journal(db, payment)
+    mark_changed_here(db, mapping, ledger)
+    return True

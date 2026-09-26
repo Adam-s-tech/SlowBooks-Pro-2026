@@ -216,9 +216,20 @@ def _build_invoice_journal_lines(
 
 
 def _post_invoice_journal(
-    db: Session, invoice, lines, customer_name, *, existing_transaction=None
+    db: Session,
+    invoice,
+    lines,
+    customer_name,
+    *,
+    existing_transaction=None,
+    balance_on_income=False,
 ):
-    """One construction/conversion/posting path for invoice create and edit."""
+    """One construction/conversion/posting path for invoice create and edit.
+
+    `balance_on_income` is for an invoice the QuickBooks Online import
+    created, whose stored lines need not add up to its total (the import
+    keeps QBO's total but not its discount lines): the difference posts to
+    the income account, so the entry carries the total the invoice shows."""
     from app.services.accounting import (
         create_journal_entry,
         get_ar_account_id,
@@ -241,6 +252,20 @@ def _post_invoice_journal(
         invoice.invoice_number,
         face=face,
     )
+    if balance_on_income:
+        short = sum(line["debit"] for line in journal_lines) - sum(
+            line["credit"] for line in journal_lines
+        )
+        if short:
+            journal_lines.append(
+                {
+                    "account_id": get_default_income_account_id(db),
+                    "debit": -short if short < 0 else Decimal("0"),
+                    "credit": short if short > 0 else Decimal("0"),
+                    "description": "Other lines QuickBooks Online totals in "
+                    "(discounts and charges)",
+                }
+            )
     return create_journal_entry(
         db,
         invoice.date,

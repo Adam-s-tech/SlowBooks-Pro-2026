@@ -323,6 +323,16 @@ def update_invoice(invoice_id: int, data: InvoiceUpdate, db: Session = Depends(g
                 detail="Invoice total cannot be less than the amount already paid",
             )
 
+    # An invoice or sales receipt the QuickBooks Online import created
+    # becomes ours when its amounts or date change: the import's posting for
+    # it is reversed here, and it gets a posting of its own below, so A/R is
+    # never counted twice. An edit of its words alone leaves it as it is.
+    from app.services import qbo_documents
+
+    adopting = (needs_recompute or date_changed) and qbo_documents.adopt_invoice(
+        db, invoice
+    )
+
     if needs_recompute or date_changed:
         from sqlalchemy import and_, or_
         from app.models.transactions import Transaction
@@ -436,6 +446,16 @@ def update_invoice(invoice_id: int, data: InvoiceUpdate, db: Session = Depends(g
                 old_line_snapshot,
                 txn_date=invoice.date,
             )
+
+    if adopting:
+        txn = _post_invoice_journal(
+            db,
+            invoice,
+            list(invoice.lines),
+            invoice.customer.name if invoice.customer else "",
+            balance_on_income=True,
+        )
+        invoice.transaction_id = txn.id
 
     # One payment-derived decision for total edits and status-only requests.
     # Unpaid invoices retain the explicitly supported draft/sent lifecycle.
