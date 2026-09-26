@@ -304,3 +304,54 @@ def test_the_repair_leaves_a_line_in_a_completed_reconciliation(
     assert result["errors"]
     assert result["errors"][0]["code"] == "IMPORT_POSTING_MISMATCH"
     assert bank_line.account_id == checking.id
+
+
+# ---------------------------------------------------------------------------
+# Restoring a backup while a QuickBooks Online import is writing
+# ---------------------------------------------------------------------------
+
+
+def test_a_restore_waits_for_a_running_qbo_import(
+    client, db_session, tmp_path, monkeypatch
+):
+    """#192 runs an import in the background, long after its page is left.
+    A restore copied the backup over the books under it, and the import
+    went on writing into the restored books with the accounts and mappings
+    it had read before (tests/test_backups_per_company.py's live file)."""
+    import app.database as db_module
+    from app.services import backup_service, qbo_import_runs, storage
+    from tests.test_backups_per_company import (
+        _KeepTheTestConnection,
+        _change,
+        _make_books,
+        _value,
+    )
+
+    monkeypatch.setenv("SLOWBOOKS_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setattr(storage, "backups_root", lambda: tmp_path / "private")
+    live = tmp_path / "companies" / "harbor-light-bakery.db"
+    live.parent.mkdir()
+    _make_books(live, "Harbor Light Bakery", "original")
+    backups = tmp_path / "backups"
+    backups.mkdir()
+    monkeypatch.setattr(backup_service, "DATABASE_URL", "sqlite:///" + live.as_posix())
+    monkeypatch.setattr(backup_service, "BACKUP_DIR", backups)
+    monkeypatch.setattr(db_module, "engine", _KeepTheTestConnection())
+    r = client.put("/api/settings", json={"company_name": "Harbor Light Bakery"})
+    assert r.status_code == 200, r.text
+    name = client.post("/api/backups").json()["filename"]
+    _change(live, "imported since")
+
+    store = qbo_import_runs.store_for(db_session)
+    run = store.reserve(["accounts"], "eric")
+    r = client.post("/api/backups/restore", json={"filename": name})
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "qbo_import_running"
+    assert "QuickBooks Online import" in r.json()["detail"]["message"]
+    assert _value(live) == "imported since"
+
+    run["status"] = "completed"
+    store.publish(run, "finish", "Completed")
+    r = client.post("/api/backups/restore", json={"filename": name})
+    assert r.status_code == 200, r.text
+    assert _value(live) == "original"
