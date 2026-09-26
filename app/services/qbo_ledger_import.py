@@ -188,8 +188,8 @@ def _account_map(db: Session) -> dict[str, Account]:
 
 # A QBO transaction type whose QBOMapping names a local document.
 _MAPPED_DOCUMENTS = {
-    "invoice": ("invoice", "sales_receipt"),
-    "salesreceipt": ("sales_receipt", "invoice"),
+    "invoice": ("invoice",),
+    "salesreceipt": ("sales_receipt",),
     "payment": ("payment",),
 }
 
