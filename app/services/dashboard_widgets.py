@@ -35,6 +35,27 @@ def _f(v) -> float:
     return float(v or 0)
 
 
+def _owing():
+    """Open invoices with money still owed. A $0.00 invoice made before
+    2.18.0 (which starts one as paid) is still a draft or sent, so on an
+    upgraded company it sat in the Overdue Invoices list at $0.00 and in
+    the overdue count (2.18.0 gate, skytech N7). What makes an invoice
+    overdue is a balance, not its status."""
+    return (Invoice.status.in_(OPEN_INVOICE), Invoice.balance_due > 0)
+
+
+def _bills_owing():
+    """Open bills with money still owed (the payable side of _owing)."""
+    return (Bill.status.in_(OPEN_BILL), Bill.balance_due > 0)
+
+
+def _past_due(column):
+    """Due before today — the local date, as the A/R Aging card and the
+    days-overdue count read it. SQL's CURRENT_DATE is UTC in SQLite, so
+    in a US evening an invoice due today was counted overdue already."""
+    return column < date.today()
+
+
 # ── builders ─────────────────────────────────────────────────────────────
 
 
@@ -59,9 +80,7 @@ def receivables(db: Session) -> dict:
     total = _ar_aging_totals(db)["total"]
     overdue = (
         db.query(func.count(Invoice.id))
-        .filter(
-            Invoice.status.in_(OPEN_INVOICE), Invoice.due_date < func.current_date()
-        )
+        .filter(*_owing(), _past_due(Invoice.due_date))
         .scalar()
     )
     return {"total": _f(total), "overdue_count": int(overdue or 0)}
@@ -70,18 +89,14 @@ def receivables(db: Session) -> dict:
 def overdue_invoices(db: Session) -> dict:
     rows = (
         db.query(Invoice)
-        .filter(
-            Invoice.status.in_(OPEN_INVOICE), Invoice.due_date < func.current_date()
-        )
+        .filter(*_owing(), _past_due(Invoice.due_date))
         .order_by(Invoice.due_date)
         .limit(5)
         .all()
     )
     count = (
         db.query(func.count(Invoice.id))
-        .filter(
-            Invoice.status.in_(OPEN_INVOICE), Invoice.due_date < func.current_date()
-        )
+        .filter(*_owing(), _past_due(Invoice.due_date))
         .scalar()
     )
     today = date.today()
@@ -116,7 +131,7 @@ def payables(db: Session) -> dict:
     )
     overdue = (
         db.query(func.count(Bill.id))
-        .filter(Bill.status.in_(OPEN_BILL), Bill.due_date < func.current_date())
+        .filter(*_bills_owing(), _past_due(Bill.due_date))
         .scalar()
     )
     return {"total": _f(total), "overdue_count": int(overdue or 0)}
@@ -389,12 +404,12 @@ def cash_position(db: Session) -> dict:
     cash = sum(r["balance"] for r in _bank_ledger_rows(db) if r["kind"] == "bank")
     ar_due = _f(
         db.query(func.coalesce(func.sum(Invoice.balance_due), 0))
-        .filter(Invoice.status.in_(OPEN_INVOICE), Invoice.due_date <= horizon)
+        .filter(*_owing(), Invoice.due_date <= horizon)
         .scalar()
     )
     ap_due = _f(
         db.query(func.coalesce(func.sum(Bill.balance_due), 0))
-        .filter(Bill.status.in_(OPEN_BILL), Bill.due_date <= horizon)
+        .filter(*_bills_owing(), Bill.due_date <= horizon)
         .scalar()
     )
     return {
