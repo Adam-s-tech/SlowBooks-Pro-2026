@@ -135,8 +135,16 @@ def test_disabling_invoice_logo_keeps_statement_logo(
     assert '<img class="company-logo"' not in pdf_service.render_invoice_html(
         branded_invoice, company
     )
+    # 2.18.0: a statement is rendered from its dated activity, not from
+    # separate invoice and payment lists.
+    from app.routes.reports.receivables import statement_activity
+
+    as_of = date(2026, 9, 30)
     statement = pdf_service.generate_statement_pdf(
-        seed_customer, [], [], company
+        seed_customer,
+        statement_activity(db_session, seed_customer, as_of),
+        company,
+        as_of,
     ).decode()
     assert '<img class="company-logo"' in statement
 
