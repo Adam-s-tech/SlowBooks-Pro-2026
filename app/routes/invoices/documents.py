@@ -7,11 +7,11 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.invoices import Invoice
-from app.services.pdf_service import generate_invoice_pdf
+from app.services.pdf_service import generate_invoice_pdf, render_invoice_html
 from app.services.settings_service import get_all_settings as get_settings
 from app.services.request_utils import content_disposition
 from app.services.terminology import terms_for
-from app.services.donor_documents import invoice_doc_kind, invoice_pdf_context
+from app.services.donor_documents import invoice_doc_kind
 
 from app.routes.invoices._router import router
 
@@ -55,13 +55,9 @@ def invoice_print_preview(invoice_id: int, db: Session = Depends(get_db)):
     company = get_settings(db)
     from fastapi.responses import HTMLResponse
 
-    from app.services.pdf_service import _render
-
     # The PDF's own renderer, so the printed page and the saved PDF share
-    # one set of filters and helpers (and the logo).
-    html_str = _render(
-        "invoice_pdf.html", company, inv=inv, **invoice_pdf_context(inv, company)
-    )
+    # one set of filters and helpers, and the same logo preference.
+    html_str = render_invoice_html(inv, company)
     # Wrap with auto-print script
     html_str = html_str.replace(
         "</body>", "<script>window.onload=function(){window.print();}</script></body>"

@@ -66,6 +66,7 @@ DEFAULT_SETTINGS = {
     "smtp_use_tls": "true",
     # Feature 15: Company Logo
     "company_logo_path": "",
+    "invoice_show_logo": "true",
     # Report PDF paper size: letter | a4
     "pdf_paper_size": "letter",
     # Opening-balance wizard readiness metadata
