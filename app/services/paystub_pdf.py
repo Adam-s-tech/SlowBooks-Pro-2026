@@ -59,59 +59,105 @@ def _humanize(key: str) -> str:
 
 
 def _is_employer_key(key: str) -> bool:
-    return key in _EMPLOYER_KEYS or key.startswith("employer_benefit:")
+    # The state engines itemize every line under a human label, the
+    # employer's share included ("WA PFML (employer)", "WA L&I (employer)");
+    # those are the company's cost, never the employee's deduction.
+    return (
+        key in _EMPLOYER_KEYS
+        or key.startswith("employer_benefit:")
+        or "employer" in key.lower()
+    )
 
 
-def _deduction_lines(stub) -> list[dict]:
-    """Itemize the employee-side deductions for the current period.
+def _is_state_income_line(key: str) -> bool:
+    """A state engine's own income-tax line ("OR income tax", "State income
+    tax (generic)") — the same money as the generic ``state_income_tax``."""
+    k = key.lower()
+    return "income tax" in k and "local" not in k and key != "state_income_tax"
+
+
+def _parsed_detail(stub) -> dict | None:
+    raw = getattr(stub, "detail_json", None)
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _deduction_items(stub) -> list[tuple[str, str, Decimal]]:
+    """(key, label, amount) for every employee-side deduction on one stub.
 
     Prefers PayStub.detail_json; falls back to the explicit stub columns when
-    the JSON blob is empty, missing or unparseable.
-    """
-    lines: list[dict] = []
-    raw = getattr(stub, "detail_json", None)
-    parsed: dict | None = None
-    if raw:
-        try:
-            data = json.loads(raw)
-            if isinstance(data, dict):
-                parsed = data
-        except (ValueError, TypeError):
-            parsed = None
-
+    the JSON blob is empty, missing or unparseable. The state's own income tax
+    line replaces the generic ``state_income_tax`` total, which is the same
+    money: both were printed, so an Oregon stub counted its income tax twice
+    and Total Deductions came to $548.53 where $404.06 was withheld (2.18.0
+    gate, macbase1 NEW-2)."""
+    parsed = _parsed_detail(stub)
+    items: list[tuple[str, str, Decimal]] = []
     if parsed:
         # Benefit codes are itemized individually; the pre/post-tax totals
         # that also live in the blob would double-count them.
         has_codes = any(
             k.startswith("benefit:") or k.startswith("other_p") for k in parsed
         )
+        itemized_state = any(_is_state_income_line(k) for k in parsed)
         for key, amount in parsed.items():
             if _is_employer_key(key) or key in _ADDITION_KEYS:
                 continue
+            if key.endswith(":note"):
+                continue
             if has_codes and key in ("pretax_deductions", "posttax_deductions"):
                 continue
-            value = _q(amount)
+            if itemized_state and key == "state_income_tax":
+                continue
+            try:
+                value = _q(amount)
+            except Exception:
+                continue  # a note or other text, not an amount
             if value == 0:
                 continue
-            lines.append({"label": _humanize(key), "amount": value})
-        if lines:
-            return lines
+            items.append((key, _humanize(key), value))
+        if items:
+            return items
 
     # Fallback — itemize directly from the stub columns.
     fallback = [
-        ("Federal Income Tax", stub.federal_tax),
-        ("State Income Tax", stub.state_tax),
-        ("State Other (SDI/PFML)", stub.state_other_employee),
-        ("Social Security", stub.ss_tax),
-        ("Medicare", stub.medicare_tax),
-        ("Pre-Tax Deductions", stub.pretax_deductions),
-        ("Post-Tax Deductions", stub.posttax_deductions),
+        ("federal_income_tax", "Federal Income Tax", stub.federal_tax),
+        ("state_income_tax", "State Income Tax", stub.state_tax),
+        ("state_other_employee", "State Other (SDI/PFML)", stub.state_other_employee),
+        ("social_security_employee", "Social Security", stub.ss_tax),
+        ("medicare_employee", "Medicare", stub.medicare_tax),
+        ("pretax_deductions", "Pre-Tax Deductions", stub.pretax_deductions),
+        ("posttax_deductions", "Post-Tax Deductions", stub.posttax_deductions),
     ]
-    for label, amount in fallback:
+    for key, label, amount in fallback:
         value = _q(amount)
         if value != 0:
-            lines.append({"label": label, "amount": value})
-    return lines
+            items.append((key, label, value))
+    return items
+
+
+def _deduction_lines(stub, ytd_stubs=None) -> list[dict]:
+    """The stub's deduction lines, each with its year-to-date: the same line
+    summed over ``ytd_stubs`` (the employee's stubs this year up to this pay
+    date). Without ytd_stubs a line's ytd is None."""
+    ytd: dict[str, Decimal] = {}
+    for other in ytd_stubs or ():
+        for key, _label, amount in _deduction_items(other):
+            ytd[key] = ytd.get(key, Decimal("0")) + amount
+    return [
+        {
+            "key": key,
+            "label": label,
+            "amount": amount,
+            "ytd": _q(ytd[key]) if key in ytd else None,
+        }
+        for key, label, amount in _deduction_items(stub)
+    ]
 
 
 def _addition_lines(stub) -> list[dict]:
@@ -145,14 +191,27 @@ def _addition_lines(stub) -> list[dict]:
     return lines
 
 
-def generate_paystub_pdf(stub, employee, pay_run, company: dict, ytd: dict) -> bytes:
+def generate_paystub_pdf(
+    stub, employee, pay_run, company: dict, ytd: dict, ytd_stubs=None
+) -> bytes:
     """Render an itemized employee pay stub to a PDF.
 
     `ytd` is a caller-supplied dict of year-to-date totals (keys such as
-    gross, federal, ss, medicare, state, net).
+    gross, net). `ytd_stubs` are the employee's stubs this year up to and
+    including this one; each deduction line's YTD is that line summed over
+    them, and Total Deductions YTD is every line's (the template used to
+    guess a line's YTD from its label, and read a total nothing filled in).
     """
-    deductions = _deduction_lines(stub)
+    deductions = _deduction_lines(stub, ytd_stubs)
     total_deductions = sum((d["amount"] for d in deductions), Decimal("0"))
+    total_deductions_ytd = None
+    if ytd_stubs:
+        total_deductions_ytd = _q(
+            sum(
+                (a for other in ytd_stubs for _k, _l, a in _deduction_items(other)),
+                Decimal("0"),
+            )
+        )
     additions = _addition_lines(stub)
     total_additions = sum((a["amount"] for a in additions), Decimal("0"))
 
@@ -164,6 +223,7 @@ def generate_paystub_pdf(stub, employee, pay_run, company: dict, ytd: dict) -> b
         "ytd": ytd or {},
         "deductions": deductions,
         "total_deductions": _q(total_deductions),
+        "total_deductions_ytd": total_deductions_ytd,
         "additions": additions,
         "total_additions": _q(total_additions),
         "gross_pay": _q(stub.gross_pay),

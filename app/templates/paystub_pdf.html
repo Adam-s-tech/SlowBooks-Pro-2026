@@ -125,15 +125,7 @@
                         <td>{{ d.label }}</td>
                         <td class="r">{{ d.amount | currency }}</td>
                         <td class="r">
-                            {%- set k = d.label | lower -%}
-                            {%- if 'federal' in k %}{{ ytd.get('federal', 0) | currency }}
-                            {%- elif 'social' in k %}{{ ytd.get('ss', 0) | currency }}
-                            {%- elif 'medicare' in k %}{{ ytd.get('medicare', 0) | currency }}
-                            {%- elif 'state other' in k %}{{ ytd.get('state_other', 0) | currency }}
-                            {%- elif 'state' in k %}{{ ytd.get('state', 0) | currency }}
-                            {%- elif 'pre-tax' in k %}{{ ytd.get('pretax', 0) | currency }}
-                            {%- elif 'post-tax' in k %}{{ ytd.get('posttax', 0) | currency }}
-                            {%- else %}&mdash;{%- endif -%}
+                            {%- if d.ytd is not none %}{{ d.ytd | currency }}{%- else %}&mdash;{%- endif -%}
                         </td>
                     </tr>
                 {% endfor %}
@@ -143,7 +135,7 @@
                     <tr class="total">
                         <td>Total Deductions</td>
                         <td class="r">{{ total_deductions | currency }}</td>
-                        <td class="r">{{ ytd.get('deductions', 0) | currency }}</td>
+                        <td class="r">{% if total_deductions_ytd is not none %}{{ total_deductions_ytd | currency }}{% else %}&mdash;{% endif %}</td>
                     </tr>
                 </tbody>
             </table>
