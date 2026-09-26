@@ -550,13 +550,26 @@ function currencyFormGroupsHtml(selected, rate) {
             <input name="exchange_rate" type="number" step="0.00000001" value="${rate || 1}"></div>`;
 }
 
+// The fetched rate fills the field only while nobody has typed in it since
+// the currency was chosen: a rate typed while the feed answers is the
+// operator's, and the document books at it. An answer for a currency that
+// has since been changed is dropped too.
 async function prefillFxRate(select) {
     const form = select.closest('form');
     const rateInput = form?.querySelector('[name=exchange_rate]');
     if (!rateInput) return;
+    if (!rateInput.dataset.fxWatched) {
+        rateInput.dataset.fxWatched = '1';
+        rateInput.addEventListener('input', () => { rateInput.dataset.fxTyped = '1'; });
+    }
+    const asked = String((Number(rateInput.dataset.fxAsked) || 0) + 1);
+    rateInput.dataset.fxAsked = asked;
+    delete rateInput.dataset.fxTyped;
+    const currency = select.value;
     try {
-        const data = await API.get(`/fx/rate?from_currency=${select.value}`);
-        if (data.rate) rateInput.value = data.rate;
+        const data = await API.get(`/fx/rate?from_currency=${encodeURIComponent(currency)}`);
+        const untouched = rateInput.dataset.fxAsked === asked && !rateInput.dataset.fxTyped;
+        if (data.rate && untouched && select.value === currency) rateInput.value = data.rate;
     } catch (e) { /* operator enters the rate manually */ }
 }
 
