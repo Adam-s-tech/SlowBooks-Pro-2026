@@ -35,6 +35,7 @@ from app.services.qbo_common import (
     get_mapping_by_qbo_id,
     is_journal_entry_type,
     journal_posting_matches,
+    ledger_posting,
     legacy_rollup_repair,
     posting_mismatch,
     rebase_account_balances,
@@ -854,11 +855,20 @@ def import_invoices(db: Session) -> dict:
             # Phase 11 (audit fix): QBO-imported invoices must also move
             # inventory for tracked items. QBO itself manages inventory so
             # we only touch items that are track_inventory=True on OUR side.
+            # The goods are costed once: here, at the local average cost,
+            # unless the QBO ledger import has already posted this sale,
+            # QBO's own cost of goods included (it takes back a local cost
+            # posted before it: qbo_ledger_import._replace_import_cogs).
             db.flush()
             db.refresh(invoice)
             from app.services.inventory_hooks import post_sale_for_invoice
 
-            post_sale_for_invoice(db, invoice, txn_date=invoice.date)
+            post_sale_for_invoice(
+                db,
+                invoice,
+                txn_date=invoice.date,
+                post_journal=ledger_posting(db, "Invoice", qbo_id) is None,
+            )
 
             imported += 1
             qbo_progress.created()
@@ -1189,7 +1199,12 @@ def import_sales_receipts(db: Session) -> dict:
             db.refresh(invoice)
             from app.services.inventory_hooks import post_sale_for_invoice
 
-            post_sale_for_invoice(db, invoice, txn_date=invoice.date)
+            post_sale_for_invoice(
+                db,
+                invoice,
+                txn_date=invoice.date,
+                post_journal=ledger_posting(db, "Sales Receipt", qbo_id) is None,
+            )
 
             imported += 1
             qbo_progress.created()

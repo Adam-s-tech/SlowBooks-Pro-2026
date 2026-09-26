@@ -308,3 +308,20 @@ def qbo_managed_refusal(what: str) -> str:
         "through the QuickBooks Online import, not a posting of its own, so "
         "voiding it here would not take them out. Void it in QuickBooks Online."
     )
+
+
+def ledger_posting(db: Session, txn_type: str, qbo_id) -> QBOMapping | None:
+    """The QBO ledger import's mapping for QBO transaction `txn_type` #qbo_id
+    ("Invoice", "Sales Receipt"), when it has posted that transaction. The
+    report names types with spaces ("Sales Receipt"); either spelling
+    matches."""
+    wanted = txn_type.lower().replace(" ", "")
+    qbo_id = str(qbo_id)
+    for mapping in db.query(QBOMapping).filter(
+        QBOMapping.entity_type == "ledger",
+        QBOMapping.qbo_id.endswith(f":{qbo_id}", autoescape=True),
+    ):
+        kind, _, mapped_id = mapping.qbo_id.partition(":")
+        if mapped_id == qbo_id and kind.lower().replace(" ", "") == wanted:
+            return mapping
+    return None

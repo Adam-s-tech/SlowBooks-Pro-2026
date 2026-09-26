@@ -218,6 +218,61 @@ def _posted_document(db: Session, txn_type: str, qbo_id: str) -> str | None:
     return None
 
 
+def _replace_import_cogs(db: Session, txn_type: str, qbo_id: str) -> None:
+    """Take back the local cost of goods of a QBO sale the ledger now posts.
+
+    The document import costs a QBO sale of a locally tracked item at the
+    local average cost when the ledger has not posted that sale yet (so the
+    books carry a cost without this import). QBO's own lines for the sale,
+    posted here, carry QBO's cost of goods: the local one is reversed, so
+    the goods are costed once, whichever import ran first. The stock
+    movement stays."""
+    from app.models.invoices import Invoice
+    from app.services.accounting import reversing_lines
+
+    kinds = _MAPPED_DOCUMENTS.get(txn_type.lower().replace(" ", ""))
+    if not kinds or "payment" in kinds:
+        return
+    for mapping in db.query(QBOMapping).filter(
+        QBOMapping.entity_type.in_(kinds), QBOMapping.qbo_id == qbo_id
+    ):
+        document = db.get(Invoice, mapping.slowbooks_id)
+        if document is None or document.transaction_id is not None:
+            continue  # its own posting: _posted_document skipped this sale
+        costs = db.query(Transaction).filter(
+            Transaction.source_type.in_(("invoice", "invoice_edit")),
+            Transaction.source_id == document.id,
+        )
+        for cost in costs.all():
+            taken_back = (
+                db.query(Transaction.id)
+                .filter(
+                    Transaction.source_type == "qbo_cogs_void",
+                    Transaction.source_id == cost.id,
+                )
+                .first()
+            )
+            if taken_back or not cost.lines:
+                continue
+            create_journal_entry(
+                db,
+                cost.date,
+                f"VOID {cost.description or 'COGS'}: the QBO ledger import "
+                f"posts QBO's cost of {txn_type} #{qbo_id}",
+                reversing_lines(cost.lines),
+                source_type="qbo_cogs_void",
+                source_id=cost.id,
+                reference=cost.reference or "",
+            )
+            qbo_progress.emit(
+                "update",
+                f"Local cost of goods #{cost.id} for local invoice #{document.id} "
+                "reversed; QBO's cost of goods for this sale is in its ledger "
+                "posting; pending commit",
+                code="IMPORT_COGS_REPLACED",
+            )
+
+
 @qbo_progress.stage("ledger")
 def import_ledger(
     db: Session,
@@ -499,6 +554,7 @@ def import_ledger(
                         qbo_sync_token=fingerprint,
                     )
                 )
+                _replace_import_cogs(db, entry["type"], key.partition(":")[2])
                 qbo_progress.created(key)
             db.flush()
     except Exception as exc:
