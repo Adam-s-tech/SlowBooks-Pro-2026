@@ -311,8 +311,14 @@ const QBOPage = {
         let data;
         try { data = await response.json(); } catch (_) { /* HTTP status still identifies failures with non-JSON bodies. */ }
         if (!response.ok) {
-            const detail = typeof data?.detail === 'string' ? data.detail : data?.detail?.message;
-            let message = `${action === 'start' ? 'Import request' : 'Import monitor'} failed (HTTP ${response.status})${detail ? `: ${detail}` : '.'}`;
+            // The server's own sentence when it sent one (a 409's
+            // {message, run_id}, a 422's list), the way every page shows a
+            // refusal (API.errorMessage); else what failed, and the status.
+            const fallback = `${action === 'start' ? 'Import request' : 'Import monitor'} failed`;
+            const detail = data?.detail;
+            const said = detail !== undefined && detail !== null && detail !== ''
+                && !(Array.isArray(detail) && !detail.length);
+            let message = said ? API.errorMessage(detail, fallback) : `${fallback} (HTTP ${response.status})`;
             if ([404, 405, 501].includes(response.status)) {
                 message = `Import monitoring is unavailable on the running Slowbooks server (HTTP ${response.status}). Restart the server to load the updated importer, then choose Retry monitor.`;
             } else if (response.status === 401) {

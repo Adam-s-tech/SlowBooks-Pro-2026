@@ -37,6 +37,11 @@ function fixture(fetch) {
         })[character]),
         toast() { throw new Error('Import failures should be recorded in the log, not only in a toast'); },
     };
+    // A refusal's sentence is worded by api.js, as on every page.
+    const api = { window: {} };
+    vm.createContext(api);
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../../app/static/js/api.js'), 'utf8') + '\nthis.API = API;', api);
+    context.API.errorMessage = api.API.errorMessage;
     vm.createContext(context);
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../../app/static/js/qbo.js'), 'utf8') + '\nthis.QBOPage = QBOPage;', context);
     const page = context.QBOPage;
