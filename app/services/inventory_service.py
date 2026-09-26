@@ -189,6 +189,7 @@ def record_sale(
     source_id: int,
     memo: Optional[str] = None,
     txn_date=None,
+    post_journal: bool = True,
 ) -> Optional[InventoryMovement]:
     """Record an inventory ship-out. Uses the current weighted-avg cost for
     the COGS journal entry (DR COGS / CR Inventory Asset).
@@ -196,6 +197,10 @@ def record_sale(
     Returns the movement row (or None if the item isn't inventory-tracked).
     Allows negative on-hand balances — some businesses back-date bills after
     invoicing. Watch your low-stock report.
+
+    `post_journal=False` moves the stock without the COGS entry, for a sale
+    whose cost is already in the books another way (a QuickBooks Online sale
+    the QBO ledger import has posted, cost of goods included).
     """
     if not item.track_inventory:
         return None
@@ -208,7 +213,7 @@ def record_sale(
     cogs_amount = _q(quantity * unit_cost)
 
     txn_id = None
-    if cogs_amount > 0:
+    if cogs_amount > 0 and post_journal:
         asset_id = get_inventory_asset_account_id(db, item)
         cogs_id = get_cogs_account_id(db)
         if asset_id and cogs_id:

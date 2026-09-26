@@ -35,6 +35,7 @@ from app.services.qbo_common import (
     get_mapping_by_qbo_id,
     is_journal_entry_type,
     journal_posting_matches,
+    ledger_posting,
     legacy_rollup_repair,
     posting_mismatch,
     rebase_account_balances,
@@ -175,6 +176,53 @@ def _all_inactive_qbo_accounts(qbo_class, client):
         start_position += len(page)
 
 
+# The QBO import's own postings. Anything else on an account was posted here.
+_QBO_POSTINGS = ("qbo_ledger", "qbo_journal")
+
+
+def _posted_here(db: Session, account_id: int) -> bool:
+    """Does the account carry a posting from anything but the QBO import?"""
+    from sqlalchemy import or_
+
+    from app.models.transactions import TransactionLine
+
+    return (
+        db.query(TransactionLine.id)
+        .join(Transaction, TransactionLine.transaction_id == Transaction.id)
+        .filter(
+            TransactionLine.account_id == account_id,
+            or_(
+                Transaction.source_type.is_(None),
+                Transaction.source_type.notin_(_QBO_POSTINGS),
+            ),
+        )
+        .first()
+        is not None
+    )
+
+
+def _sync_active(db: Session, account: Account, active: bool, qbo_id) -> None:
+    """QBO's Active flag, for an account that carries nothing but the QBO
+    import's postings. An account with postings made here is in use here:
+    QBO switching off an account of the same name, or its own copy of it,
+    does not take it out of the pickers (and QBO does not switch back on
+    one switched off here)."""
+    if account.is_active == active:
+        return
+    if _posted_here(db, account.id):
+        qbo_progress.emit(
+            "verify",
+            f"Account QBO #{qbo_id} is {'active' if active else 'inactive'} in "
+            f"QuickBooks Online; local account #{account.id} ({account.name}) "
+            f"has postings made here, so it stays "
+            f"{'active' if account.is_active else 'inactive'}",
+            level="warning",
+            code="IMPORT_ACCOUNT_ACTIVE_KEPT",
+        )
+        return
+    account.is_active = active
+
+
 def _sync_bank_identity(db: Session, account: Account, qbo_type: str) -> None:
     """Make QBO bank/card chart accounts visible and usable in Banking."""
     bank_kind = {"Bank": "bank", "Credit Card": "credit_card"}.get(qbo_type)
@@ -260,7 +308,7 @@ def import_accounts(db: Session) -> dict:
             if mapping:
                 existing = db.get(Account, mapping.slowbooks_id)
                 if existing is not None:
-                    existing.is_active = active
+                    _sync_active(db, existing, active, qbo_id)
                     if active:
                         _sync_bank_identity(db, existing, qbo_type)
                 continue
@@ -272,7 +320,7 @@ def import_accounts(db: Session) -> dict:
             # Check if name already exists in Slowbooks
             existing = db.query(Account).filter(Account.name == name).first()
             if existing:
-                existing.is_active = active
+                _sync_active(db, existing, active, qbo_id)
                 if active:
                     _sync_bank_identity(db, existing, qbo_type)
                 create_mapping(
@@ -854,11 +902,20 @@ def import_invoices(db: Session) -> dict:
             # Phase 11 (audit fix): QBO-imported invoices must also move
             # inventory for tracked items. QBO itself manages inventory so
             # we only touch items that are track_inventory=True on OUR side.
+            # The goods are costed once: here, at the local average cost,
+            # unless the QBO ledger import has already posted this sale,
+            # QBO's own cost of goods included (it takes back a local cost
+            # posted before it: qbo_ledger_import._replace_import_cogs).
             db.flush()
             db.refresh(invoice)
             from app.services.inventory_hooks import post_sale_for_invoice
 
-            post_sale_for_invoice(db, invoice, txn_date=invoice.date)
+            post_sale_for_invoice(
+                db,
+                invoice,
+                txn_date=invoice.date,
+                post_journal=ledger_posting(db, "Invoice", qbo_id) is None,
+            )
 
             imported += 1
             qbo_progress.created()
@@ -1189,7 +1246,12 @@ def import_sales_receipts(db: Session) -> dict:
             db.refresh(invoice)
             from app.services.inventory_hooks import post_sale_for_invoice
 
-            post_sale_for_invoice(db, invoice, txn_date=invoice.date)
+            post_sale_for_invoice(
+                db,
+                invoice,
+                txn_date=invoice.date,
+                post_journal=ledger_posting(db, "Sales Receipt", qbo_id) is None,
+            )
 
             imported += 1
             qbo_progress.created()
