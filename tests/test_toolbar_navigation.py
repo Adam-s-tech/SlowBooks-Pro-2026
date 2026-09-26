@@ -35,6 +35,7 @@ def _steps():
         cwd=ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",  # node writes UTF-8; Windows would read cp1252
         timeout=60,
     )
     assert out.returncode == 0, out.stderr
