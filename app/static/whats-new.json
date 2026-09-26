@@ -7,7 +7,9 @@
       "Bills need an account on each line (never Advertising by default); bills, purchase orders and credit memos print and save as PDF",
       "Time tracking works end to end, a pay run never pays someone $0.00 without saying so, and tax forms open in the Mac app",
       "Foreign-currency invoices show their currency and can be paid from Receive Payment; unit prices take four decimal places",
-      "Backups are kept per company and can be restored from Settings; Settings refuses values that can't work, in plain words"
+      "Backups are kept per company and can be restored from Settings; Settings refuses values that can't work, in plain words",
+      "QuickBooks Online: import journal entries and posted ledger activity, watched in a live import log (#192, @Sciumo); a switch for the company logo on invoices",
+      "Bank feeds: Fetch older history reaches a SimpleFIN feed back up to a year where the provider keeps it"
     ]
   },
   "2.17.3": {

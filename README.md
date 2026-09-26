@@ -61,7 +61,10 @@ vendor balances show what is owed, a customer's leftover payment can be
 applied later, and every aging report ties to the balance sheet. Time
 tracking works end to end, tax forms open in the Mac app, foreign-currency
 invoices can be paid from the screen, and backups are kept and restored per
-company.
+company. It also brings @Sciumo's QuickBooks Online import of journal
+entries and posted ledger activity, with a live import log (#192), a switch
+for the company logo on invoices, and **Fetch older history** for SimpleFIN
+bank feeds — up to a year where the provider keeps it (#181).
 
 **v2.17 — Your ledger, in a spreadsheet.** Trial Balance and General Ledger
 save as a CSV and a printable PDF, and Profit & Loss and Balance Sheet gain
@@ -107,7 +110,7 @@ against any of eight providers (xAI Grok, Groq, Cloudflare Workers AI,
 Anthropic Claude, OpenAI, Google Gemini, a Cloudflare Worker you host
 yourself, or any OpenAI-compatible endpoint you name) — keys encrypted at rest with versioned, rotatable ciphertext.
 And the whole app is agent-operable: every install serves a
-self-documenting local REST API (535 operations in v2.18) — point Claude
+self-documenting local REST API (538 operations in v2.18) — point Claude
 Code or any agentic CLI at it; the
 [AI setup guide](https://www.slowbookspro.com/ai/) has the paste-prompt.
 

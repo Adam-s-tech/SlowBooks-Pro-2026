@@ -18,7 +18,9 @@ was around it: figures that were never kept up to date, postings a person
 couldn't see, flows that couldn't be finished from the screen, and tax forms
 mapped wrong. Seventy-four findings between them, sixty-eight once the
 overlaps were merged, and this release fixes every one — along with
-twenty-nine more that fixing them turned up.
+twenty-nine more that fixing them turned up. The release gate's own run
+found another twenty-odd, fixed here too. And @Sciumo's QuickBooks Online
+work (#192) and a longer reach for SimpleFIN bank feeds are in it.
 
 #### Money that was wrong
 
@@ -99,6 +101,18 @@ W-3, 940 and 941 count only employees who were paid.
 supplier and payroll payments under Financing. It is built the standard way
 now, from net income, and its net change equals the change in cash.
 
+**A pay stub didn't add up.** An Oregon employee's stub listed the state
+income tax twice, the company's own share of some state premiums appeared
+as the employee's deductions, and the year-to-date column was guessed from
+the labels: Total Deductions read $548.53 where $404.06 was withheld. Every
+line now adds up to what was withheld, each line has its own year to date,
+and the stub says "OR Income Tax".
+
+**A typed exchange rate could be replaced.** Choosing a currency looks up
+the day's rate; a rate typed before that answer arrived was overwritten a
+few seconds later, and the invoice booked at the looked-up rate without a
+word (850 EUR at a typed 1.10 posted as $968.80). A typed rate is kept.
+
 **Tax forms produced nothing in the Mac app.** W-2, W-3, 940, 941 and the
 New-Hire Report open in the viewer as invoices do. The 941 works lines 5a–5d
 from the rates and puts the rounding difference on line 7.
@@ -133,7 +147,8 @@ from the rates and puts the rounding difference on line 7.
 - Converting an estimate makes today's invoice, due by the customer's terms,
   addressed to the customer.
 - Addresses print without a dangling comma, and with the country abroad; the
-  invoice header no longer wraps dates and terms.
+  invoice header no longer wraps dates and terms, and a statement's dates
+  and totals stay on one line.
 - Email Invoice fills in the customer's email and thanks them once.
 - A due date before the invoice date, or a schedule ending before it starts,
   is refused.
@@ -151,6 +166,12 @@ from the rates and puts the rounding difference on line 7.
 - Customers get the company's default terms, a Tax exempt box and an Active
   box; a negative credit limit is refused.
 - Make Deposits names each sales receipt and check.
+- Receive Payment and Apply Credit name an Apply amount that is more than
+  its invoice's balance, instead of reading "Fully allocated" while the
+  save is refused.
+- The dashboard's A/R Aging card shows the report's own figures — the
+  buckets, credits not yet applied, and a total equal to Total Receivables
+  — and an invoice counts as overdue only while something is owed on it.
 
 #### Banking and the books
 
@@ -170,12 +191,17 @@ from the rates and puts the rounding difference on line 7.
 
 #### Payroll and tax forms
 
-- Each employee on a pay run has a Stub PDF naming the company; the pay-run
-  view has an Other column, so every row adds up to Net.
+- Each employee on a pay run has a Stub PDF naming the company and the
+  employee; the Employee column stays in view while the table scrolls, and
+  an Other column makes every row add up to Net.
+- Tax forms, pay stubs and the New-Hire Report save under names that say
+  what they are and whose (W-2_2026_Lena-Ortiz.pdf, 941_2026_Q3.pdf,
+  Pay-Stub_2026-10-01_Lena-Ortiz.pdf). Onboarding offers the New-Hire
+  Report as its PDF, not raw data.
 - A vendor marked "1099 Vendor: Yes" reaches the 1099-NEC and 1096, which
   the Tax Forms page now prints.
 - The Sales Tax report nets credit memos and checks itself against Sales Tax
-  Payable.
+  Payable, and says how much old supplier tax lowered that balance.
 - SSN last 4, pay rate and work state are checked, in words.
 - A garnishment order is ended, not deleted: End order stops it being
   withheld and keeps its record.
@@ -185,35 +211,86 @@ from the rates and puts the rounding difference on line 7.
 - Settings refuses a tax rate outside 0–100%, a next number that isn't a
   whole number, and the like, in words; Save Settings stays in reach and
   leaving with unsaved changes asks first; the closing date shows whether
-  one is set and clears in one click.
+  one is set, clears in one click (on the Mac too), and says what is saved
+  rather than what is typed.
 - The closing-date override password is asked for and works; five wrong
-  passwords lock it for ten minutes.
+  passwords lock it for ten minutes, and the fifth answer says so.
 - A new company opens on setup with its name filled in; the unlock screen
-  names the company.
+  names the company and, in the desktop app, offers "Choose a different
+  company →" from the moment the app starts (the Mac app's first screen
+  never had it).
 - Backups are named for their company, listed per company, and can be
   restored from Settings — with a safety copy first and a second question
-  for another company's backup.
+  for another company's backup. After a rename, Restore names the company
+  as it is now, and restoring an older backup renames the company list's
+  entry at once.
 - An opt-in setting asks for the password each time SlowBooks Pro starts.
 - A refused form says what to fix in a sentence, not validator text.
 
 #### Import, export, lists and search
 
-- Every CSV export opens correctly in Excel (UTF-8 byte-order mark); the IIF
-  export is written for QuickBooks (Windows-1252), at home-currency amounts,
-  and a sales receipt goes across once.
+- Every CSV export opens correctly in Excel (UTF-8 byte-order mark) and
+  writes money to the cent ("-20.00", not "-20.0"); the IIF export is
+  written for QuickBooks (Windows-1252), at home-currency amounts, a sales
+  receipt goes across once, and a blank state or ZIP is left out rather
+  than written as "None".
 - Re-importing our own export no longer creates `'=HYPERLINK…` duplicates; a
   CSV row is checked like the form, and blank terms take the company
   default.
 - One active item per name; items can be made inactive; the item form offers
-  only income accounts, and no nonprofit accounts in a business company.
+  only income accounts, and no nonprofit accounts in a business company —
+  whose chart no longer starts with 4400 In-Kind Contributions (it is added
+  when a company becomes a nonprofit).
 - Account numbers are digits. Search finds documents by amount. Read-only
   sign-ins see no "+ New" buttons.
 - Report PDFs print the company name as written; Save PDF files documents
   under Documents and reports under Reports, named once, and a download
   named after a customer keeps its accents.
+- The toolbar's Home, Quick Entry and Reports move the address with the
+  page, so Back and the sidebar link of the page you left work; a form
+  dialog keeps every field in view beside a very long customer name.
 - Desktop app: the PDF window has **Open in** your PDF app and **Show in
   folder**; the IIF export and file attachments save instead of failing or
   opening as text; upload and import refusals read as sentences.
+
+#### QuickBooks Online (#192, @Sciumo)
+
+- **Journal entries and posted ledger activity import.** Import from QBO
+  now brings journal entries, and the posted activity of QBO's accrual
+  General Ledger (purchases, deposits, transfers, invoices, payments and
+  journals), each validated as a balanced entry before a batch posts and
+  rolled back whole if any fails. The two paths share their mappings, so
+  nothing posts twice, and an invoice or payment that is already a posted
+  SlowBooks document is not posted again. A foreign-currency journal
+  balances in its own currency and converts the way the rest of the books
+  do. Imported journals are listed on Journal Entries and linked from the
+  bank registers; they are voided in QuickBooks Online, not here.
+- **A live import log.** An import runs in the background with a log under
+  the controls — every query, check, posting, skip and error, with the
+  document and account it concerns, an Errors filter, elapsed time and
+  counts — that survives leaving the page. One import runs per company;
+  a restore waits for it; the books stay writable between its steps; and
+  it works when the Docker image runs several worker processes.
+- **Connecting when the redirect can't reach SlowBooks.** An administrator
+  can complete the connection by pasting Intuit's callback address (or the
+  code and Realm ID from Intuit's OAuth Playground). Starting an import or
+  a connection is administrator-only.
+- **Paging and inactive accounts.** Every entity imports all its pages;
+  inactive QBO accounts come in inactive; QBO bank and card accounts get a
+  Banking identity; a subcustomer mapped to a job resolves through its
+  parent.
+
+#### Invoices and bank feeds
+
+- **Show company logo on invoices** — in Settings and on the invoice form,
+  on by default; it governs the invoice PDF, Print and the emailed PDF
+  alike (#192). Only an administrator can change it.
+- **Fetch older history** reaches a SimpleFIN feed back 3, 6 or 12 months —
+  as far as the provider keeps (the SimpleFIN Bridge about 90 days,
+  BankSync a year) — in 85-day slices the Bridge accepts, skipping what is
+  already imported (#181, tested with BankSync by @cnbarry1).
+- The update notice stays on for desktop installs; `SLOWBOOKS_UPDATE_CHECK=0`
+  in `.env` turns it off. Stripe's own SDK telemetry is off.
 
 #### For API clients and agents
 
@@ -238,9 +315,18 @@ from the rates and puts the rounding difference on line 7.
   /api/deposits/{id}`, `GET /api/bill-payments/{id}`; `POST
   /api/backups/restore` now reachable from Settings; `GET` on the
   W-2/W-3/940/941 PDFs; `POST /api/deductions/garnishments/{id}/end` (DELETE
-  is a 405). 535 operations.
+  is a 405); `POST /api/qbo/import-runs`, `GET
+  /api/qbo/import-runs/latest`, `POST /api/qbo/connect-manual`
+  (administrators); `POST /api/simplefin/sync` takes an optional
+  `{"history_months": 1-24}`. 538 operations.
 - Income by Customer `total_sales` excludes tax (new `total_tax`);
   `/api/checks/print` takes `bill_payment_id` only.
+- `GET /api/auth/status` has `desktop`; `GET /api/system` has
+  `update_check_enabled`; CSV money columns are written to the cent;
+  tax-form, pay-stub and New-Hire Report PDFs have descriptive file names.
+- The QBO per-entity import routes (`POST /api/qbo/import`,
+  `/api/qbo/import/{entity}`) are for API clients; the page uses the
+  background import.
 
 #### What you'll notice after upgrading
 
@@ -257,6 +343,14 @@ from the rates and puts the rounding difference on line 7.
   dates; deposits made earlier are matched to the oldest waiting payments,
   so Make Deposits may list different waiting lines for a company with a
   partly deposited batch.
+- Total Receivables on the dashboard is the A/R Aging total as of today, so
+  an invoice dated in the future isn't in it until its date.
+
+#### For developers
+
+- The test suite runs in a data folder of its own: it never reads the
+  machine's companies or the checkout's `.env`, and writes nothing into
+  `app/static`. #192's node test suites run under pytest.
 
 #### Schema
 
