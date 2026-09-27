@@ -139,8 +139,11 @@ def oauth_callback(
 
 
 @router.post("/disconnect")
-def disconnect(db: Session = Depends(get_db)):
-    """Clear stored QBO tokens and disconnect."""
+def disconnect(request: Request, db: Session = Depends(get_db)):
+    """Clear stored QBO tokens and disconnect. The administrator's, as
+    connecting is: a bookkeeper could disconnect the company and not
+    connect it again."""
+    require_admin(request)
     qbo_service.disconnect(db)
     return {"status": "disconnected"}
 

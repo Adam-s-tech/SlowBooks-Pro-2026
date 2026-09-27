@@ -639,6 +639,7 @@ ADMIN_ON_PAGES = {
         "company_name",
         "logo-upload",
         "ocr-engine-pref",
+        "Save AI settings",
     },
     "#/qbo": {"Start connection with Intuit", "Finish QBO connection"},
     "#/companies": {"+ New Company"},
@@ -646,6 +647,7 @@ ADMIN_ON_PAGES = {
 KEEPER_NOTES = {
     "#/settings": [
         "Company settings are changed by an administrator.",
+        "AI settings are changed by an administrator.",
         "Backups are made, downloaded and restored by an administrator.",
     ],
     "#/qbo": [

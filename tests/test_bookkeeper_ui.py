@@ -13,9 +13,11 @@ Edit button had no type, so it submitted the form it sits in.
 
 The pages mark the administrator's controls where they are built, and
 App.adminPass takes them away for any role but admin: a field shows its value
-locked, a button is not offered, and a sentence says why. Everything else
-stays: the lists on Settings (email templates, classes, cost types and codes,
-equipment) and AI Insights, QBO's export and disconnect, and every page the
+locked, a button is not offered, and a sentence says why. AI Insights' key
+and endpoint are company settings too (the endpoint receives the dashboard's
+figures), and disconnecting from QuickBooks Online is the administrator's as
+connecting is. Everything else stays: the lists on Settings (email templates,
+classes, cost types and codes, equipment), QBO's export, and every page the
 server lets a bookkeeper use.
 
 tests/js/admin_controls_probe.js draws those pages for each role, the first
@@ -53,8 +55,7 @@ UPLOAD = "a file"  # the logo picker sends the image itself, not JSON
 # test makes first.
 # ---------------------------------------------------------------------------
 
-# Settings: what a bookkeeper keeps, and the answer it gets. AI Insights'
-# Test answers 400 with no key saved: heard, and no provider is called.
+# Settings: what a bookkeeper keeps, and the answer it gets.
 SETTINGS_KEPT = {
     "Email Templates › Seed Default Templates": [
         ("POST", "/api/email-templates/seed-defaults", None, 200)
@@ -77,21 +78,6 @@ SETTINGS_KEPT = {
         )
     ],
     "Edit Email Template › Cancel": [],
-    "AI Insights › Save AI settings": [
-        ("PUT", "/api/analytics/ai-config", {"provider": "anthropic", "model": ""}, 200)
-    ],
-    "AI Insights › Test": [
-        ("PUT", "/api/analytics/ai-config", {"provider": "anthropic"}, 200),
-        ("POST", "/api/analytics/ai-config/test", {}, 400),
-    ],
-    "AI Insights › Remove": [
-        (
-            "PUT",
-            "/api/analytics/ai-config",
-            {"provider": "anthropic", "api_key": ""},
-            200,
-        )
-    ],
     "Classes › Add Class": [("POST", "/api/classes", {"name": "Wholesale"}, 201)],
     "Classes › Rename": [("PUT", "/api/classes/{klass}", {"name": "Counter"}, 200)],
     "Classes › Archive": [("PUT", "/api/classes/{klass}", {"is_archived": True}, 200)],
@@ -171,9 +157,6 @@ SETTINGS_KEPT_PARTS = {
     "Equipment › #new-eq-code": "Equipment › Add Equipment",
     "Equipment › #new-eq-name": "Equipment › Add Equipment",
     "Equipment › #new-eq-rate": "Equipment › Add Equipment",
-    "AI Insights › #ai-settings-provider": "AI Insights › Save AI settings",
-    "AI Insights › #ai-settings-model-select": "AI Insights › Save AI settings",
-    "AI Insights › #ai-settings-key": "AI Insights › Save AI settings",
     "Edit Email Template › name": "Edit Email Template › Save Template",
     "Edit Email Template › template_type": "Edit Email Template › Save Template",
     "Edit Email Template › subject_template": "Edit Email Template › Save Template",
@@ -210,6 +193,17 @@ SETTINGS_TAKEN = {
         "/api/backups/download/harbor-light_2026-09-25_2210.db",
         None,
     ),
+    "AI Insights › Save AI settings": (
+        "PUT",
+        "/api/analytics/ai-config",
+        {"provider": "anthropic", "model": ""},
+    ),
+    "AI Insights › Test": ("POST", "/api/analytics/ai-config/test", {}),
+    "AI Insights › Remove": (
+        "PUT",
+        "/api/analytics/ai-config",
+        {"provider": "anthropic", "api_key": ""},
+    ),
 }
 # Users and API tokens refuse every API token whatever its role, so these are
 # asked with a bookkeeper's own sign-in. Settings shows the two sections to
@@ -227,6 +221,9 @@ SETTINGS_TAKEN_FROM_A_SIGN_IN = {
     ),
 }
 SETTINGS_TAKEN_PARTS = {
+    "AI Insights › #ai-settings-provider": "AI Insights › Save AI settings",
+    "AI Insights › #ai-settings-model-select": "AI Insights › Save AI settings",
+    "AI Insights › #ai-settings-key": "AI Insights › Save AI settings",
     "Users — Server Edition › #user-new-username": "Users — Server Edition › Add User",
     "Users — Server Edition › #user-new-display": "Users — Server Edition › Add User",
     "Users — Server Edition › #user-new-password": "Users — Server Edition › Add User",
@@ -242,9 +239,6 @@ SETTINGS_TAKEN_PARTS = {
 # QuickBooks Online. Export answers 400 on books not connected to QBO: heard,
 # not refused.
 QBO_KEPT = {
-    "Connection › Disconnect from QuickBooks": [
-        ("POST", "/api/qbo/disconnect", None, 200)
-    ],
     "Export to QuickBooks Online › Export All Data": [
         ("POST", "/api/qbo/export", None, 400)
     ],
@@ -256,6 +250,7 @@ QBO_KEPT = {
     ],
 }
 QBO_TAKEN = {
+    "Connection › Disconnect from QuickBooks": ("POST", "/api/qbo/disconnect", None),
     "Connection › Start connection with Intuit": ("GET", "/api/qbo/auth-url", None),
     "Connection › Finish QBO connection": (
         "POST",
@@ -360,13 +355,14 @@ def test_settings_shows_a_bookkeeper_the_company_settings_locked():
         # a sentence says why, and the backups say whose they are
         assert got["notes"] == [
             "Company settings are changed by an administrator.",
+            "AI settings are changed by an administrator.",
             "Backups are made, downloaded and restored by an administrator.",
         ], run
         # nothing on the page is an edit: leaving never asks
         assert (got["dirty"], got["asked_on_leaving"]) == (False, 0), run
 
 
-def test_settings_leaves_a_bookkeeper_the_lists_templates_and_ai_insights():
+def test_settings_leaves_a_bookkeeper_the_lists_and_templates():
     kept = set(SETTINGS_KEPT) | set(SETTINGS_KEPT_PARTS)
     for run in ("bookkeeper", "bookkeeper_first_page"):
         offered = _yes(_probe()["settings"][run]["offered"])
@@ -410,14 +406,17 @@ def test_quickbooks_online_says_who_connects_and_imports():
         "Connecting to QuickBooks Online is done by an administrator.",
         "Importing from QuickBooks Online is done by an administrator.",
     ]
-    # connected: Disconnect and Export stay, as the server allows
+    # connected: Export stays, as the server allows; Disconnect is the
+    # administrator's, as connecting is
+    offered = _yes(probe["qbo_connected"]["bookkeeper"]["offered"])
     assert {
-        "Connection › Disconnect from QuickBooks",
         "Export to QuickBooks Online › Export All Data",
         "Export to QuickBooks Online › Export Selected",
-    } <= _yes(probe["qbo_connected"]["bookkeeper"]["offered"])
+    } <= offered
+    assert "Connection › Disconnect from QuickBooks" not in offered
     assert probe["qbo_connected"]["bookkeeper"]["notes"] == [
-        "Importing from QuickBooks Online is done by an administrator."
+        "Connecting to and disconnecting from QuickBooks Online are done by an administrator.",
+        "Importing from QuickBooks Online is done by an administrator.",
     ]
     for page in ("qbo", "qbo_connected"):
         assert probe[page]["admin"]["notes"] == probe[page]["readonly"]["notes"] == []

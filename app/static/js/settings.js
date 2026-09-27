@@ -1384,10 +1384,14 @@ const SettingsPage = {
             `${escapeHtml(p.label)}</option>`
         ).join('');
 
+        // The administrator's, like every company setting (the key is a
+        // company-wide credential and the endpoint receives the dashboard's
+        // figures): any other sign-in sees the values locked (App.adminPass).
         return `
+            <div class="hidden" data-admin-note style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">AI settings are changed by an administrator.</div>
             <label class="form-field">
                 <span>Provider</span>
-                <select id="ai-settings-provider">${providerOptions}</select>
+                <select id="ai-settings-provider" data-admin>${providerOptions}</select>
             </label>
             <div id="ai-settings-hint" class="ai-settings-hint">
                 ${escapeHtml(currentSpec.free_tier_hint || '')}
@@ -1395,17 +1399,17 @@ const SettingsPage = {
             </div>
             <label class="form-field">
                 <span>Model</span>
-                <select id="ai-settings-model-select">
+                <select id="ai-settings-model-select" data-admin>
                     ${SettingsPage._modelOptionsHtml(currentSpec, currentModel)}
                 </select>
-                <input type="text" id="ai-settings-model-custom"
+                <input type="text" id="ai-settings-model-custom" data-admin
                        value="${escapeHtml(currentModel || '')}"
                        placeholder="Type a model ID"
                        style="margin-top:6px; ${SettingsPage._isCustomModel(currentSpec, currentModel) ? '' : 'display:none;'}">
             </label>
             <label class="form-field" id="ai-settings-cf-wrap" style="${needsAccount ? '' : 'display:none'}">
                 <span>Cloudflare Account ID</span>
-                <input type="text" id="ai-settings-cf-account"
+                <input type="text" id="ai-settings-cf-account" data-admin
                        value="${escapeHtml(cfg.cloudflare_account_id || '')}"
                        placeholder="32-char hex (from dash.cloudflare.com)">
             </label>
@@ -1421,7 +1425,7 @@ const SettingsPage = {
                 </p>
                 <label class="form-field">
                     <span>Worker URL <em class="ai-worker-required">(https only)</em></span>
-                    <input type="url" id="ai-settings-worker-url"
+                    <input type="url" id="ai-settings-worker-url" data-admin
                            value="${escapeHtml(cfg.worker_url || '')}"
                            placeholder="https://slowbooks-ai.yourname.workers.dev/v1/chat/completions"
                            autocomplete="off" spellcheck="false">
@@ -1446,7 +1450,7 @@ const SettingsPage = {
                 </p>
                 <label class="form-field">
                     <span>Base URL <em class="ai-worker-required">(https only)</em></span>
-                    <input type="url" id="ai-settings-endpoint-url"
+                    <input type="url" id="ai-settings-endpoint-url" data-admin
                            value="${escapeHtml(cfg.endpoint_url || '')}"
                            placeholder="https://api.example.com/v1"
                            autocomplete="off" spellcheck="false">
@@ -1459,16 +1463,16 @@ const SettingsPage = {
                 </p>
             </fieldset>
             <label class="form-field">
-                <span>API Key / Shared Secret ${hasKey ? '<em class="ai-key-saved">(saved &#10003;)</em> <button type="button" class="btn btn-sm" id="ai-settings-key-remove" data-write title="Remove the stored key">Remove</button>' : ''}</span>
-                <input type="password" id="ai-settings-key"
+                <span>API Key / Shared Secret ${hasKey ? '<em class="ai-key-saved">(saved &#10003;)</em> <button type="button" class="btn btn-sm" id="ai-settings-key-remove" data-write data-admin title="Remove the stored key">Remove</button>' : ''}</span>
+                <input type="password" id="ai-settings-key" data-admin
                        placeholder="${hasKey ? 'Leave blank to keep existing' : 'Paste key or openssl rand -hex 32'}"
                        autocomplete="new-password">
             </label>
             <div class="ai-settings-buttons">
-                <button type="button" class="btn btn-secondary btn-sm" data-write id="ai-settings-test">Test</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-write data-admin id="ai-settings-test">Test</button>
                 <span id="ai-settings-test-result" class="ai-settings-test-result"></span>
                 <div class="ai-settings-spacer"></div>
-                <button type="button" class="btn btn-primary btn-sm" data-write id="ai-settings-save">Save AI settings</button>
+                <button type="button" class="btn btn-primary btn-sm" data-write data-admin id="ai-settings-save">Save AI settings</button>
             </div>
         `;
     },

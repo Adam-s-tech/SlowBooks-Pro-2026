@@ -26,6 +26,7 @@ from app.schemas.common import StrictModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.routes._roles import require_admin
 from app.services.rate_limit import limiter
 from app.services.analytics import AnalyticsEngine
 from app.services.ai_service import (
@@ -455,14 +456,21 @@ def get_ai_config(db: Session = Depends(get_db)):
 @router.put("/ai-config")
 def put_ai_config(
     payload: AIConfigUpdate,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """Update AI provider / model / key / account_id.
+
+    The administrator's, like every company setting: the key is a
+    company-wide credential, and the endpoint receives the dashboard's
+    figures when anyone runs an analysis (a bookkeeper could point it at
+    any public address).
 
     If `api_key` is omitted or empty, the existing encrypted value is
     kept. If present and non-empty, it is encrypted with Fernet before
     being stored.
     """
+    require_admin(request)
     provider = (payload.provider or "").strip().lower()
     if provider and provider not in AI_PROVIDERS:
         raise HTTPException(
@@ -540,8 +548,9 @@ def test_ai_config(request: Request, db: Session = Depends(get_db)):
 
     Used by the Settings modal's "Test" button to validate the key
     without running the full dashboard-analysis prompt (which is
-    expensive on paid APIs).
+    expensive on paid APIs). The administrator's, as the settings are.
     """
+    require_admin(request)
     cfg = _read_ai_config(db)
     provider = cfg.get("provider") or ""
     api_key = cfg.get("api_key") or ""

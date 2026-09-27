@@ -60,7 +60,8 @@ const QBOPage = {
                         ${statusText}
                     </div>
                     ${status.connected
-                        ? `<button class="btn btn-secondary" onclick="QBOPage.disconnect()">Disconnect from QuickBooks</button>`
+                        ? `<div class="hidden" data-admin-note style="font-size:11px; color:var(--text-muted);">Connecting to and disconnecting from QuickBooks Online are done by an administrator.</div>
+                           <button class="btn btn-secondary" data-admin onclick="QBOPage.disconnect()">Disconnect from QuickBooks</button>`
                         : `<div class="hidden" data-admin-note style="font-size:11px; color:var(--text-muted);">Connecting to QuickBooks Online is done by an administrator.</div>
                            <button class="btn btn-primary" data-admin onclick="QBOPage.connect()">Start connection with Intuit</button>
                            <form id="qbo-manual-connect" data-write data-admin autocomplete="off" onsubmit="QBOPage.connectManual(event)" style="margin-top:12px;">
