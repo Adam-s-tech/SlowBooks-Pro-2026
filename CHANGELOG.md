@@ -166,6 +166,11 @@ from the rates and puts the rounding difference on line 7.
 - Customers get the company's default terms, a Tax exempt box and an Active
   box; a negative credit limit is refused.
 - Make Deposits names each sales receipt and check.
+- Batch Payments, Receive Payment, Pay Bills, the credit screens and the
+  credit-limit check see every open invoice and bill; they read only the
+  newest 500, so once a company had more, an older unpaid one never
+  appeared (#191). The Invoices and Bills lists show the newest 500, say
+  so, and offer Show all.
 - Receive Payment and Apply Credit name an Apply amount that is more than
   its invoice's balance, instead of reading "Fully allocated" while the
   save is refused.
@@ -333,6 +338,8 @@ from the rates and puts the rounding difference on line 7.
   `{"history_months": 1-24}`. 538 operations.
 - Income by Customer `total_sales` excludes tax (new `total_tax`);
   `/api/checks/print` takes `bill_payment_id` only.
+- `GET /api/invoices` and `GET /api/bills` take `open_only=true` (what can
+  still be paid or credited, filtered on the server; page with `skip`).
 - `GET /api/auth/status` has `desktop`; `GET /api/system` has
   `update_check_enabled`; CSV money columns are written to the cent;
   tax-form, pay-stub and New-Hire Report PDFs have descriptive file names.
