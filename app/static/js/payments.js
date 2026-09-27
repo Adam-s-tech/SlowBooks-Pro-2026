@@ -460,7 +460,7 @@ const PaymentsPage = {
             // over its invoice's balance: the field's max blocks the save
             if (!over && i.dataset.max !== undefined && cents > PaymentsPage._cents(i.dataset.max)) over = i;
         });
-        el.style.color = over || used > availableCents ? '#a4242b' : 'var(--gray-600)';
+        el.style.color = over || used > availableCents ? 'var(--text-danger)' : 'var(--gray-600)';
         el.textContent = over
             ? Terms.text(`The Apply amount for invoice #${over.dataset.number} is more than its balance of ${formatCurrency(over.dataset.max)}.`)
             : used > availableCents

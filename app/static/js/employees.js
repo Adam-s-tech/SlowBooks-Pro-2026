@@ -287,26 +287,26 @@ const EmployeesPage = {
             case_closed: 'Case closed',
         };
         const STATUS_COLORS = {
-            employment_authorized: '#1f7a36',
-            final_non_confirmation: '#a4242b',
-            tnc: '#a4242b',
-            photo_match_required: '#a8761f',
-            pending: '#336699',
+            employment_authorized: 'var(--text-success)',
+            final_non_confirmation: 'var(--text-danger)',
+            tnc: 'var(--text-danger)',
+            photo_match_required: 'var(--text-warning)',
+            pending: 'var(--qb-navy)',
         };
         const status = data.status || 'not_submitted';
-        const color = STATUS_COLORS[status] || '#666';
+        const color = STATUS_COLORS[status] || 'var(--text-muted)';
         return `
             <p style="margin:0 0 6px 0">
                 <strong>Status:</strong> <span style="color:${color};font-weight:600">${escapeHtml(STATUS_LABELS[status] || status)}</span>
             </p>
-            <p style="font-size:12px;color:#666;margin:0 0 4px 0">
+            <p style="font-size:12px;color:var(--text-muted);margin:0 0 4px 0">
                 Case #: ${escapeHtml(data.case_number || '—')}
                 ${data.submitted_at ? `&nbsp;·&nbsp;Submitted ${escapeHtml(data.submitted_at.slice(0, 10))}` : ''}
                 ${data.closed_at ? `&nbsp;·&nbsp;Closed ${escapeHtml(data.closed_at.slice(0, 10))}` : ''}
             </p>
-            ${data.notes ? `<p style="font-size:12px;color:#666;margin:0 0 6px 0;white-space:pre-wrap">${escapeHtml(data.notes)}</p>` : ''}
+            ${data.notes ? `<p style="font-size:12px;color:var(--text-muted);margin:0 0 6px 0;white-space:pre-wrap">${escapeHtml(data.notes)}</p>` : ''}
             <button class="btn btn-sm btn-secondary" onclick="EmployeesPage._showEverifyForm(${id})">Update E-Verify case</button>
-            <p style="font-size:11px;color:#999;margin-top:6px">
+            <p style="font-size:11px;color:var(--text-muted);margin-top:6px">
                 Record-keeping only — submit cases via the federal E-Verify portal.
             </p>`;
     },
@@ -381,12 +381,12 @@ const EmployeesPage = {
         const daysUntilExpiry = expires ? Math.round((expires - now) / 86400000) : null;
         const daysSinceUsed = lastUsed ? Math.round((now - lastUsed) / 86400000) : null;
         const expiryClass = daysUntilExpiry !== null && daysUntilExpiry < 30
-            ? 'style="color:#c0392b;font-weight:600"' : '';
+            ? 'style="color:var(--text-danger);font-weight:600"' : '';
 
         let html = `
             <p style="margin:0 0 4px 0">Portal URL: <a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a>
                 <span style="font-size:11px;color:var(--gray-400);">opens in the employee's browser — the address must be reachable from where they are (this machine only for a desktop install; the LAN or your public name for Server Edition)</span></p>
-            <p style="font-size:12px;color:#666;margin:0 0 4px 0">
+            <p style="font-size:12px;color:var(--text-muted);margin:0 0 4px 0">
                 <span ${expiryClass}>Expires ${expires ? expires.toISOString().slice(0,10) : 'never'}${daysUntilExpiry !== null ? ` (${daysUntilExpiry} days)` : ''}</span>
                 &nbsp;·&nbsp;
                 Last used ${lastUsed ? `${daysSinceUsed} day${daysSinceUsed === 1 ? '' : 's'} ago (${lastUsed.toISOString().slice(0,10)})` : '<em>never</em>'}
@@ -400,12 +400,12 @@ const EmployeesPage = {
         if (Array.isArray(access) && access.length > 0) {
             html += `
                 <details style="margin-top:10px">
-                    <summary style="cursor:pointer;font-size:12px;color:#336699">Recent access (${access.length} most recent)</summary>
+                    <summary style="cursor:pointer;font-size:12px;color:var(--text-link)">Recent access (${access.length} most recent)</summary>
                     <table class="data-table" style="margin-top:6px;font-size:11px">
                         <thead><tr><th scope="col">When</th><th scope="col">IP</th><th scope="col">Path</th><th scope="col">OK?</th></tr></thead>
                         <tbody>
                         ${access.map(a => `
-                            <tr style="${a.success ? '' : 'color:#c0392b'}">
+                            <tr style="${a.success ? '' : 'color:var(--text-danger)'}">
                                 <td>${escapeHtml((a.created_at || '').replace('T',' ').slice(0,19))}</td>
                                 <td>${escapeHtml(a.ip || '')}</td>
                                 <td>${escapeHtml(a.path || '')}</td>

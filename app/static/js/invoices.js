@@ -371,7 +371,7 @@ const InvoicesPage = {
             if (c > PaymentsPage._cents(input.dataset.max)) over = true;
         });
         const bad = over || used > state.due;
-        el.style.color = bad ? '#a4242b' : 'var(--gray-600)';
+        el.style.color = bad ? 'var(--text-danger)' : 'var(--gray-600)';
         el.textContent = over
             ? 'One of the amounts is more than that credit has left.'
             : used > state.due

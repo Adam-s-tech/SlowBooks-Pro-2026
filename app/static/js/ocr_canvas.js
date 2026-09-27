@@ -600,7 +600,7 @@ const OcrCanvas = {
         const el = $('#ocr-canvas-msg');
         if (!el) return;
         el.textContent = text;
-        el.style.color = isError ? '#c0392b' : 'var(--gray-600)';
+        el.style.color = isError ? 'var(--text-danger)' : 'var(--gray-600)';
     },
 };
 

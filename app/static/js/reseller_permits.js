@@ -30,10 +30,10 @@ const ResellerPermitsPage = {
         };
 
         const expiringStrip = expiring.length === 0 ? `
-            <div class="card" style="padding:14px;background:#eaf5ec;border-left:4px solid #1f7a36;margin-bottom:16px">
+            <div class="card note--ok" style="padding:14px;margin-bottom:16px">
                 <strong>All clear.</strong> No active permits expire within 30 days.
             </div>` : `
-            <div class="card" style="padding:14px;background:#fdecea;border-left:4px solid #a4242b;margin-bottom:16px">
+            <div class="card note--alert" style="padding:14px;margin-bottom:16px">
                 <strong>${expiring.length} permit${expiring.length === 1 ? '' : 's'} need attention</strong>
                 — expires within 30 days or already expired:
                 <ul style="margin:8px 0 0 18px;font-size:13px">
@@ -42,7 +42,7 @@ const ResellerPermitsPage = {
                             <strong>${escapeHtml(nameFor(p))}</strong>
                             (${escapeHtml(p.jurisdiction)} · ${escapeHtml(p.permit_number)}):
                             ${p.is_expired
-                                ? `<span style="color:#a4242b">EXPIRED ${escapeHtml(String(Math.abs(p.days_to_expire)))} day${Math.abs(p.days_to_expire) === 1 ? '' : 's'} ago</span>`
+                                ? `<span style="color:var(--text-danger)">EXPIRED ${escapeHtml(String(Math.abs(p.days_to_expire)))} day${Math.abs(p.days_to_expire) === 1 ? '' : 's'} ago</span>`
                                 : `expires in <strong>${p.days_to_expire}</strong> day${p.days_to_expire === 1 ? '' : 's'} (${escapeHtml(p.expires_at || '')})`}
                         </li>`).join('')}
                 </ul>
@@ -52,13 +52,13 @@ const ResellerPermitsPage = {
             <tr><td colspan="8"><em>No reseller permits on file. Click "+ Add Permit" to record one.</em></td></tr>` :
             permits.map(p => {
                 const status = p.is_expired
-                    ? '<span style="color:#a4242b;font-weight:600">Expired</span>'
+                    ? '<span style="color:var(--text-danger);font-weight:600">Expired</span>'
                     : (p.days_to_expire !== null && p.days_to_expire <= 30
-                        ? '<span style="color:#a8761f;font-weight:600">Expires soon</span>'
-                        : (p.is_active ? '<span style="color:#1f7a36">Active</span>' : '<span style="color:#888">Inactive</span>'));
+                        ? '<span style="color:var(--text-warning);font-weight:600">Expires soon</span>'
+                        : (p.is_active ? '<span style="color:var(--text-success)">Active</span>' : '<span style="color:var(--text-muted)">Inactive</span>'));
                 const verifiedText = p.last_verified_at
                     ? `<span title="${escapeHtml(p.verified_by || '')}">${p.last_verified_at.slice(0, 10)}</span>`
-                    : '<span style="color:#a4242b">Never</span>';
+                    : '<span style="color:var(--text-danger)">Never</span>';
                 const verifyBtn = p.verification_url
                     ? `<a class="btn btn-sm btn-secondary" href="${escapeHtml(p.verification_url)}" target="_blank" rel="noopener">Open ${escapeHtml(p.jurisdiction)} lookup</a>`
                     : '';
@@ -101,7 +101,7 @@ const ResellerPermitsPage = {
                     <tbody>${tableBody}</tbody>
                 </table>
             </div>
-            <p style="font-size:12px;color:#888;margin-top:12px">
+            <p style="font-size:12px;color:var(--text-muted);margin-top:12px">
                 Reseller permit verification is manual — click "Open WA lookup" (or your state's lookup) to
                 check the permit on the official state site, then click "Mark verified" here to record that you did.
                 Most states have no public real-time API.
@@ -155,7 +155,7 @@ const ResellerPermitsPage = {
                         <input name="permit_number" value="${escapeHtml(p.permit_number || '')}" required maxlength="50"
                                onkeyup="ResellerPermitsPage._checkFormat()"></div>
                 </div>
-                <p id="permit-format-hint" style="font-size:12px;margin:-6px 0 8px 0;color:#888"></p>
+                <p id="permit-format-hint" style="font-size:12px;margin:-6px 0 8px 0;color:var(--text-muted)"></p>
                 <div class="form-grid">
                     <div class="form-group"><label>Issued</label>
                         <input name="issued_at" type="date" value="${escapeHtml(p.issued_at || '')}"></div>
@@ -281,14 +281,14 @@ const ResellerPermitsPage = {
             ? `<button class="btn btn-primary" onclick="ResellerPermitsPage._openLookup()">
                    Open ${escapeHtml(permit.jurisdiction)} reseller-permit lookup →
                </button>`
-            : `<p style="color:#a8761f;font-size:13px;margin:6px 0">
+            : `<p style="color:var(--text-warning);font-size:13px;margin:6px 0">
                    No automated lookup URL on file for ${escapeHtml(permit.jurisdiction)}.
                    Find your state's tax-agency permit lookup manually.
                </p>`;
 
         openModal(`Verify ${permit.jurisdiction} Permit`, `
             <div style="font-size:13px;line-height:1.6">
-                <p style="margin:0 0 12px 0;color:#666">
+                <p style="margin:0 0 12px 0;color:var(--text-muted)">
                     Round-trip: click <strong>Open lookup</strong>, the official state site opens
                     in a popup, verify there, then come back and record the outcome here.
                     Your <em>Mark verified</em> click is the audit trail — it stamps who and when.
@@ -319,14 +319,14 @@ const ResellerPermitsPage = {
                     ${permit.expires_at ? `<tr>
                         <td><strong>On file expires</strong></td>
                         <td>${escapeHtml(permit.expires_at)} ${permit.is_expired
-                            ? '<span style="color:#a4242b;font-weight:600;margin-left:8px">EXPIRED</span>'
+                            ? '<span style="color:var(--text-danger);font-weight:600;margin-left:8px">EXPIRED</span>'
                             : (permit.days_to_expire !== null && permit.days_to_expire <= 30
-                                ? `<span style="color:#a8761f;margin-left:8px">in ${permit.days_to_expire} days</span>`
+                                ? `<span style="color:var(--text-warning);margin-left:8px">in ${permit.days_to_expire} days</span>`
                                 : '')}</td>
                     </tr>` : ''}
                 </table>
 
-                <div style="background:#f4f6f9;padding:12px;border-radius:4px;margin-bottom:14px">
+                <div class="note--plain" style="padding:12px;border-radius:4px;margin-bottom:14px">
                     <strong>Step 1.</strong> ${lookupBtn}
                 </div>
 
@@ -474,16 +474,16 @@ const ResellerPermitsPage = {
         const rule = ResellerPermitsPage._FORMAT[juris];
         if (!rule) {
             hint.textContent = `No format rule for ${juris || 'this state'} — verify on the state lookup page.`;
-            hint.style.color = '#888';
+            hint.style.color = 'var(--text-muted)';
             return;
         }
         const cleaned = rule.strip(value);
         if (rule.valid(value)) {
             hint.textContent = `✓ Format matches ${juris} (${rule.hint})`;
-            hint.style.color = '#1f7a36';
+            hint.style.color = 'var(--text-success)';
         } else {
             hint.textContent = `⚠ ${juris}: ${rule.hint} (you have ${cleaned.length} digits)`;
-            hint.style.color = '#a8761f';
+            hint.style.color = 'var(--text-warning)';
         }
     },
 };

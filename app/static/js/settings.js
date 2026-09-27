@@ -922,14 +922,14 @@ const SettingsPage = {
                 const pdfNames = { windows: 'built into Windows', macos: 'built into macOS', poppler: 'via poppler-utils' };
                 const pdfNote = s.pdf
                     ? ` &middot; PDFs: ${escapeHtml(pdfNames[s.pdf] || s.pdf)}`
-                    : '<div style="font-size:11px; color:#b45309; margin-top:4px;">PDF scanning is not available on this machine (images still scan). '
+                    : '<div style="font-size:11px; color:var(--text-warning); margin-top:4px;">PDF scanning is not available on this machine (images still scan). '
                       + 'Linux: <code>sudo apt-get install poppler-utils</code>; other platforms: <code>brew install poppler</code> / poppler for Windows on PATH.</div>';
                 el.innerHTML = `<strong style="color:var(--text-success);">${escapeHtml(engineLabel)} is ready</strong>`
                     + (s.version ? ` <span style="color:var(--text-muted);">(${escapeHtml(s.version)})</span>` : '')
                     + ` &middot; languages: ${escapeHtml(langs)}`
                     + pdfNote;
             } else {
-                el.innerHTML = '<strong style="color:#b45309;">No OCR engine is available — scanning is disabled.</strong>'
+                el.innerHTML = '<strong style="color:var(--text-warning);">No OCR engine is available — scanning is disabled.</strong>'
                     + '<div style="font-size:11px; color:var(--text-muted); margin-top:4px;">macOS and Windows normally use the engine built into the OS; installing Tesseract enables scanning anywhere.</div>'
                     + '<div style="font-size:11px; color:var(--text-muted); margin-top:6px;">'
                     + 'Ubuntu: <code>sudo apt-get install tesseract-ocr</code> &middot; '
@@ -1584,7 +1584,7 @@ SettingsPage.loadCostCodes = async function () {
         el.innerHTML = `<div class="table-container"><table>
             <thead><tr><th scope="col">Code</th><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Default account</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
             <tbody>` + codes.map(c => `<tr>
-                <td style="padding-left:${8 + (c.depth || 0) * 16}px">${c.depth ? '<span style="color:#aaa">└ </span>' : ''}<code>${escapeHtml(c.code)}</code></td>
+                <td style="padding-left:${8 + (c.depth || 0) * 16}px">${c.depth ? '<span style="color:var(--text-muted)">└ </span>' : ''}<code>${escapeHtml(c.code)}</code></td>
                 <td>${escapeHtml(c.name)}</td>
                 <td>${escapeHtml(c.cost_type)}</td>
                 <td>${escapeHtml(c.account_name || '')}</td>

@@ -86,7 +86,7 @@ const DashboardPage = {
         </span>` : '';
         let body;
         if (!data) body = '<div style="color:var(--gray-500);font-size:12px">Loading…</div>';
-        else if (data.error) body = `<div style="color:#a4242b;font-size:12px">${escapeHtml(data.error)}</div>`;
+        else if (data.error) body = `<div style="color:var(--text-danger);font-size:12px">${escapeHtml(data.error)}</div>`;
         else body = (DashboardPage.renderers[id] || DashboardPage.renderers._default)(data, meta);
         const stat = meta.size === 'stat';
         return `<div class="card dash-card dash-card--${meta.size}" data-widget="${id}">
@@ -225,17 +225,17 @@ const DashboardPage = {
                 <tbody>${d.items.map(p => `<tr><td>${escapeHtml(p.date)}</td><td>${escapeHtml(p.customer)}</td><td>${escapeHtml(p.method || '')}</td><td class="amount">${formatCurrency(p.amount)}</td></tr>`).join('')}</tbody></table>`;
         },
         pnl_month(d) {
-            const row = (m) => `<tr><td>${escapeHtml(m.label)}</td><td class="amount">${formatCurrency(m.income)}</td><td class="amount">${formatCurrency(m.expenses)}</td><td class="amount" style="font-weight:700;color:${m.net < 0 ? '#a4242b' : '#1f7a36'}">${formatCurrency(m.net)}</td></tr>`;
+            const row = (m) => `<tr><td>${escapeHtml(m.label)}</td><td class="amount">${formatCurrency(m.income)}</td><td class="amount">${formatCurrency(m.expenses)}</td><td class="amount" style="font-weight:700;color:${m.net < 0 ? 'var(--text-danger)' : 'var(--text-success)'}">${formatCurrency(m.net)}</td></tr>`;
             return `<table class="data-table" style="font-size:12px"><thead><tr><th scope="col"></th><th scope="col" class="amount">${T('Income')}</th><th scope="col" class="amount">Expenses</th><th scope="col" class="amount">Net</th></tr></thead>
                 <tbody>${row(d.this_month)}${row(d.last_month)}</tbody></table>
-                <div style="font-size:11px;margin-top:4px;color:${d.net_change < 0 ? '#a4242b' : '#1f7a36'}">${d.net_change >= 0 ? '▲' : '▼'} ${formatCurrency(Math.abs(d.net_change))} vs last month · <a href="#/reports">Full ${T('P&L')}</a></div>`;
+                <div style="font-size:11px;margin-top:4px;color:${d.net_change < 0 ? 'var(--text-danger)' : 'var(--text-success)'}">${d.net_change >= 0 ? '▲' : '▼'} ${formatCurrency(Math.abs(d.net_change))} vs last month · <a href="#/reports">Full ${T('P&L')}</a></div>`;
         },
         pnl_ytd(d) {
             const max = Math.max(...d.months.map(m => Math.abs(m.cumulative)), 1);
             const bars = d.months.map(m => `<div style="flex:1;text-align:center;height:100%;display:flex;flex-direction:column;justify-content:flex-end" title="${m.month} cumulative: ${formatCurrency(m.cumulative)}">
                 <div style="width:80%;margin:0 auto;background:${m.cumulative < 0 ? '#a4242b' : 'var(--qb-blue)'};height:${Math.max(2, Math.abs(m.cumulative) / max * 100)}%;border-radius:2px 2px 0 0"></div>
                 <div style="font-size:9px;color:var(--gray-500);margin-top:2px">${m.month}</div></div>`).join('');
-            return `<div class="card-value" style="color:${d.net < 0 ? '#a4242b' : '#1f7a36'}">${formatCurrency(d.net)}</div>
+            return `<div class="card-value" style="color:${d.net < 0 ? 'var(--text-danger)' : 'var(--text-success)'}">${formatCurrency(d.net)}</div>
                 <div style="font-size:11px;color:var(--gray-500);margin-bottom:6px">net · ${d.year} year to date</div>
                 <table class="data-table" style="font-size:12px"><tbody>
                     <tr><td>${T('Income')}</td><td class="amount">${formatCurrency(d.income)}</td></tr>
@@ -250,7 +250,7 @@ const DashboardPage = {
                 <table class="data-table" style="font-size:12px;margin-top:8px"><tbody>
                     <tr><td>+ ${T('Receivables')} due within 30 days</td><td class="amount">${formatCurrency(d.ar_due_30)}</td></tr>
                     <tr><td>− Payables due within 30 days</td><td class="amount">${formatCurrency(d.ap_due_30)}</td></tr>
-                    <tr style="font-weight:700"><td>30-day forecast</td><td class="amount" style="color:${d.forecast_30 < 0 ? '#a4242b' : '#1f7a36'}">${formatCurrency(d.forecast_30)}</td></tr>
+                    <tr style="font-weight:700"><td>30-day forecast</td><td class="amount" style="color:${d.forecast_30 < 0 ? 'var(--text-danger)' : 'var(--text-success)'}">${formatCurrency(d.forecast_30)}</td></tr>
                 </tbody></table>
                 <div style="font-size:10px;color:var(--gray-500);margin-top:4px">Assumes customers pay on the due date.</div>`;
         },
@@ -269,7 +269,7 @@ const DashboardPage = {
             if (!d.count) return '<div style="color:var(--gray-500);font-size:12px">' + Terms.text('No jobs with a budget or activity yet.') + ' <a href="#/jobs">' + T('Jobs') + ' →</a></div>';
             const pct = v => v === null || v === undefined ? '—' : `${v.toFixed(0)}%`;
             return `<table class="data-table" style="font-size:12px"><thead><tr><th scope="col">${T('Job')}</th><th scope="col" class="amount">Budget</th><th scope="col" class="amount">Committed</th><th scope="col" class="amount">Actual</th><th scope="col" class="amount">Projected</th><th scope="col" class="amount">Variance</th><th scope="col" class="amount">% Used</th></tr></thead>
-                <tbody>${d.items.map(j => `<tr class="clickable" onclick="App.navigate('#/jobs/${j.job_id}')"><td>${escapeHtml(j.customer_name)}: ${escapeHtml(j.job_name)}</td><td class="amount">${formatCurrency(j.revised)}</td><td class="amount">${formatCurrency(j.committed)}</td><td class="amount">${formatCurrency(j.actual)}</td><td class="amount">${formatCurrency(j.projected)}</td><td class="amount" style="font-weight:700;color:${j.revised && j.variance < 0 ? '#a4242b' : '#1f7a36'}">${formatCurrency(j.variance)}</td><td class="amount">${pct(j.pct_used)}</td></tr>`).join('')}</tbody>
+                <tbody>${d.items.map(j => `<tr class="clickable" onclick="App.navigate('#/jobs/${j.job_id}')"><td>${escapeHtml(j.customer_name)}: ${escapeHtml(j.job_name)}</td><td class="amount">${formatCurrency(j.revised)}</td><td class="amount">${formatCurrency(j.committed)}</td><td class="amount">${formatCurrency(j.actual)}</td><td class="amount">${formatCurrency(j.projected)}</td><td class="amount" style="font-weight:700;color:${j.revised && j.variance < 0 ? 'var(--text-danger)' : 'var(--text-success)'}">${formatCurrency(j.variance)}</td><td class="amount">${pct(j.pct_used)}</td></tr>`).join('')}</tbody>
                 <tfoot><tr style="font-weight:700;background:var(--gray-50)"><td>All active jobs</td><td class="amount">${formatCurrency(d.totals.revised)}</td><td class="amount">${formatCurrency(d.totals.committed)}</td><td class="amount">${formatCurrency(d.totals.actual)}</td><td class="amount">${formatCurrency(d.totals.projected)}</td><td class="amount">${formatCurrency(d.totals.variance)}</td><td></td></tr></tfoot></table>`;
         },
         balance_sheet_trend(d) {
