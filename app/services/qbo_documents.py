@@ -581,6 +581,32 @@ def void_document_from_qbo(db: Session, qbo_type: str, qbo_id: str) -> str | Non
     return f"{noun} {invoice.invoice_number}"
 
 
+def paid_past_new_total(invoice, qbo_id, new_total) -> dict | None:
+    """An invoice the QBO import made, changed in QuickBooks Online to a
+    total below the payments recorded against it here. Neither the document
+    import nor the ledger import applies that change, so the invoice and
+    its posting stay in step (it would owe less than nothing). The one line
+    both give for it, in the same words, so a run's log shows it once;
+    None when the change can be applied."""
+    paid = Decimal(str(invoice.amount_paid or 0))
+    new_total = Decimal(str(new_total))
+    if new_total >= paid:
+        return None
+    return {
+        "entity": "invoice",
+        "qbo_id": str(qbo_id),
+        "document_number": invoice.invoice_number,
+        "code": "IMPORT_QBO_CHANGE_NOT_APPLIED",
+        "message": (
+            f"Invoice QBO #{qbo_id} (document {invoice.invoice_number}) was changed "
+            f"in QuickBooks Online to {new_total:,.2f}, but the payments recorded "
+            f"against it here come to {paid:,.2f}, more than its new total. The "
+            "invoice and its posting stay as they were imported; take a payment "
+            "off it here, and the next import brings QuickBooks Online's change in."
+        ),
+    }
+
+
 def closed_on(db: Session, day) -> str | None:
     """ "the books are closed through …" when `day` is in a closed period."""
     from app.services.closing_date import get_closing_date

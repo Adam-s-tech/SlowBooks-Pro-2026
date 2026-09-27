@@ -731,6 +731,7 @@ def _refresh_invoice(db, mapping, source, kind, errors) -> None:
         closed_on,
         import_posting,
         local_cost_live,
+        paid_past_new_total,
         why_not_changed,
     )
 
@@ -761,14 +762,17 @@ def _refresh_invoice(db, mapping, source, kind, errors) -> None:
         closed_on(db, invoice.date)
         or closed_on(db, values["date"])
         or (found and why_not_changed(db, found[1], values["date"]))
-        or (
-            kind == "invoice"
-            and values["total"] < (invoice.amount_paid or 0)
-            and "the payments recorded against it come to more than its new total"
-        )
     )
     if why:
         _not_applied(errors, kind, source, noun, why)
+        return
+    # Paid here past QBO's new total: the ledger import leaves its posting
+    # too, and says so in the same line (qbo_documents.paid_past_new_total).
+    held = kind == "invoice" and paid_past_new_total(
+        invoice, _safe(source, "Id", ""), values["total"]
+    )
+    if held:
+        qbo_progress.append_error(errors, held)
         return
     old_lines = snapshot_invoice_lines(invoice)
     was = invoice.total
