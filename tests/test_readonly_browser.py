@@ -338,8 +338,9 @@ DIALOGS = [
 ]
 JOB_TABS = ("costs", "budget", "transactions", "time")
 # A read the server refuses to a read-only sign-in: the audit log snapshots
-# whole records (app.main._role_allows), and the page says so.
-REFUSED_READS = {"#/audit": "Your role doesn't allow this action"}
+# whole records (app.main._role_allows), and the page says whose it is
+# (it showed the server's refusal until skytech's round-6 note).
+REFUSED_READS = {"#/audit": "Audit Log isn't open to a read-only sign-in"}
 
 
 def _user(company, db_session, username, role):
