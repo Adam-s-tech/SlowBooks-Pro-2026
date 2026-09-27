@@ -104,3 +104,28 @@ def test_success_banner_not_shown_on_unverified_return(unauthed_client, invoice)
     assert resp.status_code == 200
     assert "Payment received" not in resp.text
     assert "being confirmed" in resp.text
+
+
+def test_a_read_only_sign_in_reads_a_link_but_never_makes_one(
+    client, db_session, invoice
+):
+    # 2.18.0 gate (skytech): GET /payment-link made a token when the
+    # invoice had none, a write the read-only role could reach.
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    r = client.post("/api/tokens", json={"label": "reader", "role": "readonly"})
+    assert r.status_code == 201, r.text
+    reader = TestClient(app)
+    reader.headers["Authorization"] = f"Bearer {r.json()['token']}"
+    had = invoice.payment_token
+    ok = reader.get(f"/api/payments/payment-link/{invoice.id}")
+    assert ok.status_code == 200 and f"/pay/{had}" in ok.json()["url"]
+    invoice.payment_token = None
+    db_session.commit()
+    refused = reader.get(f"/api/payments/payment-link/{invoice.id}")
+    assert refused.status_code == 403
+    assert "read-only" in refused.json()["detail"]
+    db_session.refresh(invoice)
+    assert invoice.payment_token is None

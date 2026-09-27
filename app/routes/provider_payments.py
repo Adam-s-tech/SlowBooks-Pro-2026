@@ -188,6 +188,17 @@ def get_payment_link(invoice_id: int, request: Request, db: Session = Depends(ge
         raise HTTPException(status_code=404, detail="Invoice not found")
 
     if not invoice.payment_token:
+        # Making the link writes the invoice's token: a read-only sign-in
+        # reads a link that exists but can't make one (skytech, 2.18.0
+        # gate: this GET was a write the read-only role could reach).
+        from app.routes._roles import current_role
+
+        if current_role(request) == "readonly":
+            raise HTTPException(
+                status_code=403,
+                detail="This invoice has no payment link yet, and a read-only "
+                "sign-in can't make one: ask an administrator or bookkeeper.",
+            )
         invoice.payment_token = str(uuid.uuid4())
         db.commit()
 
