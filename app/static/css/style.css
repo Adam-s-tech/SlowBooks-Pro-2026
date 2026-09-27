@@ -513,12 +513,12 @@ body {
     color: var(--text-primary);
 }
 
-.btn:hover {
+.btn:hover:not(:disabled) {
     background: linear-gradient(180deg, #f0f4f8 0%, #d8dce4 100%);
     border-color: #5f7d99;
 }
 
-.btn:active {
+.btn:active:not(:disabled) {
     background: linear-gradient(180deg, #d0d4d8 0%, #e0e4e8 100%);
 }
 
@@ -529,7 +529,7 @@ body {
     font-weight: 700;
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
     background: linear-gradient(180deg, var(--qb-blue) 0%, var(--qb-navy-mid) 100%);
 }
 
@@ -539,7 +539,7 @@ body {
     border-color: #7f9db9;
 }
 
-.btn-secondary:hover {
+.btn-secondary:hover:not(:disabled) {
     background: linear-gradient(180deg, #f0f4f8 0%, #d8dce4 100%);
 }
 
@@ -550,13 +550,23 @@ body {
     border-color: #992222;
 }
 
-.btn-danger:hover {
+.btn-danger:hover:not(:disabled) {
     background: linear-gradient(180deg, var(--qb-red) 0%, #aa2222 100%);
 }
 
 .btn-sm {
     padding: 2px 8px;
     font-size: 10px;
+}
+
+/* A disabled button looks it: dimmed, a not-allowed cursor, and no hover
+   (the hover rules above skip :disabled). Disabled buttons looked enabled
+   and did nothing when clicked: the QBO page's Import with no connection,
+   Restore before its tick (macbase1 NEW-15, 2.18.0 gate). WCAG exempts an
+   inactive control from contrast. */
+.btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
 }
 
 .btn-group {

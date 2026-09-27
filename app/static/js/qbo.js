@@ -90,9 +90,10 @@ const QBOPage = {
 
                     <div style="margin-bottom:10px;">
                         <button class="btn btn-primary qbo-import-button" style="width:100%;" onclick="QBOPage.importAll()"
-                            disabled>
+                            disabled aria-describedby="qbo-import-why">
                             Import All Data
                         </button>
+                        <div id="qbo-import-why" class="hint" style="margin-top:4px; font-size:11px;" role="status"></div>
                     </div>
 
                     <div style="font-size:10px; font-weight:700; color:var(--text-secondary); text-transform:uppercase; margin-bottom:6px;">
@@ -292,10 +293,22 @@ const QBOPage = {
         return QBOPage._run && ['queued', 'running'].includes(QBOPage._run.status);
     },
 
+    // Why Import can't start right now, or '' when it can: the buttons
+    // are disabled for exactly these, and the line under Import says which.
+    _importBlockedBecause() {
+        if (!QBOPage._status?.connected) return 'Connect to QuickBooks Online above to import.';
+        if (QBOPage._starting || QBOPage._active()) return 'An import is running; its log is below.';
+        if (QBOPage._monitorBlocked) return "The import log isn't available, so an import can't be watched; see the log below.";
+        if (!QBOPage._monitorReady) return 'Checking the import log...';
+        return '';
+    },
+
     _setImportButtons() {
-        $$('.qbo-import-button').forEach(button => {
-            button.disabled = QBOPage._starting || QBOPage._active() || !QBOPage._monitorReady || QBOPage._monitorBlocked || !QBOPage._status?.connected;
-        });
+        const why = QBOPage._importBlockedBecause();
+        $$('.qbo-import-button').forEach(button => { button.disabled = !!why; });
+        const line = typeof document !== 'undefined' && document.getElementById
+            ? document.getElementById('qbo-import-why') : null;
+        if (line) line.textContent = why;
     },
 
     retryMonitor() {
