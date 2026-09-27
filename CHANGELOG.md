@@ -147,8 +147,9 @@ from the rates and puts the rounding difference on line 7.
 - Converting an estimate makes today's invoice, due by the customer's terms,
   addressed to the customer.
 - Addresses print without a dangling comma, and with the country abroad; the
-  invoice header no longer wraps dates and terms, and a statement's dates
-  and totals stay on one line.
+  invoice header no longer wraps dates and terms, a statement's dates and
+  totals stay on one line, and a negative amount prints "-$10.00", not
+  "$-10.00".
 - Email Invoice fills in the customer's email and thanks them once.
 - A due date before the invoice date, or a schedule ending before it starts,
   is refused.
@@ -292,6 +293,11 @@ from the rates and puts the rounding difference on line 7.
   can complete the connection by pasting Intuit's callback address (or the
   code and Realm ID from Intuit's OAuth Playground). Starting an import or
   a connection is administrator-only.
+- **Discounts and bundles.** A QBO discount comes across on its invoice or
+  sales receipt as a line on a Discount item that posts to QBO's discount
+  account, with tax worked out before or after it as QBO had it; a bundle
+  comes across as the lines of its items. Exporting such a document back
+  sends QBO a discount, not a negative sale.
 - **Paging and inactive accounts.** Every entity imports all its pages;
   inactive QBO accounts come in inactive; QBO bank and card accounts get a
   Banking identity; a subcustomer mapped to a job resolves through its
