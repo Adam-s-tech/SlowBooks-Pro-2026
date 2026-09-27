@@ -82,4 +82,17 @@ const log = (step, extra) => console.log(JSON.stringify(Object.assign({ step, di
   // The guard wraps App.navigate once, however often the page renders.
   S._installLeaveGuard();
   log('installed-twice', { wrapped_once: S._leaveGuardInstalled === true });
+
+  // A read-only sign-in: the page is locked, and a locked field is not in
+  // FormData. Locked after the snapshot (the role arrives after a first
+  // page), the page used to compare as changed.
+  S._leaving = false;
+  S._markClean();
+  delete fields.company_name;
+  ctx.App.isReadOnly = () => true;
+  const asked = confirms.length;
+  await ctx.App.navigate('#/reports');
+  const unloadLocked = { prevented: false, preventDefault() { this.prevented = true; } };
+  listeners.beforeunload(unloadLocked);
+  log('read-only', { confirms: confirms.length - asked, left_to: navigated[navigated.length - 1], prevented: unloadLocked.prevented });
 })();

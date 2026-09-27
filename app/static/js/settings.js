@@ -550,6 +550,11 @@ const SettingsPage = {
     // True when a field differs from what was last loaded or saved;
     // `except` leaves one field out of the comparison.
     isDirty(except) {
+        // A read-only sign-in sees the page locked: nothing on it is an edit.
+        // Locking takes the fields out of FormData, so a page locked after
+        // its snapshot (the role arrives after a first page) compared as
+        // changed, and asked a read-only user to leave without saving.
+        if (typeof App !== 'undefined' && App.isReadOnly && App.isReadOnly()) return false;
         const snap = SettingsPage._snapshot;
         const now = SettingsPage._formState(except);
         if (!snap || now === null) return false;
