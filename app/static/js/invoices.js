@@ -670,6 +670,9 @@ const InvoicesPage = {
         $('#inv-customer-select').value = '';
     },
 
+    // A line with a negative price is a discount a QuickBooks Online invoice
+    // came in with (a discount item, or a negative line of its own): its
+    // price box takes a negative number, so the invoice saves as it is.
     lineRowHtml(idx, line, items) {
         const itemOpts = items.map(i => `<option value="${i.id}" ${line.item_id==i.id?'selected':''}>${escapeHtml(i.name)}</option>`).join('');
         // The form has no job / class / cost-code cells, but a line may carry
@@ -681,7 +684,7 @@ const InvoicesPage = {
                 <option value="">--</option>${itemOpts}</select></td>
             <td><input class="line-desc" value="${escapeHtml(line.description || '')}"></td>
             <td><input class="line-qty" type="number" step="0.01" value="${line.quantity || 1}" oninput="InvoicesPage.recalc()"></td>
-            <td><input class="line-rate" type="number" step="0.0001" min="0" value="${Number(line.rate) || 0}" oninput="InvoicesPage.recalc()"></td>
+            <td><input class="line-rate" type="number" step="0.0001" ${Number(line.rate) < 0 ? '' : 'min="0" '}value="${Number(line.rate) || 0}" oninput="InvoicesPage.recalc()"></td>
             <td style="text-align:center"><input type="checkbox" class="line-taxable" title="Sales tax applies to this line" ${line.is_taxable === false ? '' : 'checked'} onchange="InvoicesPage.recalc()"></td>
             <td class="col-amount line-amount">${formatCurrency((line.quantity||1) * (line.rate||0))}</td>
             <td><button type="button" class="btn btn-sm btn-danger" aria-label="Remove line" onclick="InvoicesPage.removeLine(${idx})">X</button></td>

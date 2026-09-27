@@ -27,6 +27,7 @@ from app.routes.invoices.helpers import (
     _compute_totals,
     _post_invoice_journal,
     kept_tax,
+    refuse_negative_lines,
     _reverse_and_delete_journal,
 )
 from app.services.donor_documents import document_label
@@ -101,6 +102,7 @@ def create_invoice(data: InvoiceCreate, db: Session = Depends(get_db)):
     # Parse terms for due date (explicit due_date wins; else derive from terms)
     due_date = data.due_date or _due_date_from_terms(data.date, data.terms)
     refuse_due_before_date(data.date, due_date)
+    refuse_negative_lines(db, data.lines)
     resolve_line_taxable(db, data.lines, customer)
     subtotal, tax_amount, total = _compute_totals(data.lines, data.tax_rate)
     confirm_zero_total(
@@ -296,6 +298,7 @@ def update_invoice(invoice_id: int, data: InvoiceUpdate, db: Session = Depends(g
     if needs_recompute:
         # Validate the proposed total before changing headers, lines or journals.
         if data.lines is not None:
+            refuse_negative_lines(db, data.lines, invoice)
             customer = db.get(
                 Customer, update_data.get("customer_id", invoice.customer_id)
             )

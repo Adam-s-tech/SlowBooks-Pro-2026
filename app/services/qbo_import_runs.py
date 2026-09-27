@@ -261,7 +261,7 @@ class Reporter:
             self.phase = "query"
         elif action in {"validate", "create", "map"}:
             self.phase = "item"
-        if action not in {"skip", "error", "map"}:
+        if action not in {"skip", "error", "map", "note"}:
             self.state["current_step"] = message
         self.store.publish(
             self.state,

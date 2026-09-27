@@ -321,6 +321,211 @@ def _qbo_rate(source, lines, tax) -> Decimal:
     return rate if _q(taxable * rate) == _q(tax) else Decimal("0")
 
 
+def _tax_base(source) -> Decimal | None:
+    """The taxable amount QBO worked its tax out on: the NetAmountTaxable
+    its tax lines share. None when they name different amounts, or none."""
+    detail = _safe(source, "TxnTaxDetail")
+    bases = set()
+    for tax_line in (_safe(detail, "TaxLine") or []) if detail else []:
+        base = _field(_safe(tax_line, "TaxLineDetail"), "NetAmountTaxable")
+        if base is not None:
+            bases.add(Decimal(str(base)))
+    return bases.pop() if len(bases) == 1 else None
+
+
+def _sales_line(db, qbo_line, detail) -> dict:
+    """A QBO sales line (SalesItemLineDetail), as the import stores it."""
+    item_id = None
+    item_ref = _safe(detail, "ItemRef")
+    if item_ref:
+        item_map = get_mapping_by_qbo_id(db, "item", _safe(item_ref, "value", ""))
+        if item_map:
+            item_id = item_map.slowbooks_id
+    taxable = _tax_code(detail)
+    return {
+        "item_id": item_id,
+        "description": _safe(qbo_line, "Description") or None,
+        "quantity": _safe_decimal(detail, "Qty") or Decimal("1"),
+        "rate": _safe_decimal(detail, "UnitPrice"),
+        "amount": _safe_decimal(qbo_line, "Amount"),
+        "is_taxable": True if taxable is None else taxable,
+    }
+
+
+def _discount_item(db, detail) -> int:
+    """The item a QBO discount comes in on: one for each discount account,
+    a service item whose income account is QBO's discount account, so a
+    document of ours books its discount where QBO did. A negative line may
+    stand on it (qbo_common.is_discount_item)."""
+    from app.services.qbo_common import DISCOUNT_ITEM
+
+    ref = _field(detail, "DiscountAccountRef")
+    qbo_account = str(_safe(ref, "value", "") or "") if ref else ""
+    found = (
+        db.query(QBOMapping)
+        .filter_by(entity_type=DISCOUNT_ITEM, qbo_id=qbo_account)
+        .first()
+    )
+    if found is not None and db.get(Item, found.slowbooks_id) is not None:
+        return found.slowbooks_id
+    account = None
+    if qbo_account:
+        account_map = get_mapping_by_qbo_id(db, "account", qbo_account)
+        account = db.get(Account, account_map.slowbooks_id) if account_map else None
+        if account is None:
+            named = _safe(ref, "name", "")
+            raise DataProblem(
+                f"its discount account, QBO #{qbo_account}"
+                + (f" ({named})" if named else "")
+                + ", has not been imported; import Accounts, then this again"
+            )
+    names = {name for (name,) in db.query(Item.name)}
+    name = "Discount"
+    if name in names and account is not None:
+        name = f"Discount ({account.name})"
+    base, n = name, 2
+    while name in names:
+        name, n = f"{base} {n}", n + 1
+    item = Item(
+        name=name,
+        item_type=ItemType.SERVICE,
+        description="Discounts on QuickBooks Online invoices and sales receipts",
+        rate=Decimal("0"),
+        income_account_id=account.id if account is not None else None,
+        is_active=True,
+    )
+    db.add(item)
+    db.flush()
+    if found is not None:
+        found.slowbooks_id = item.id
+    else:
+        create_mapping(db, DISCOUNT_ITEM, item.id, qbo_account)
+    return item.id
+
+
+def _discount_words(qbo_line, detail) -> str:
+    """ "Discount 10%" (a percentage) or "Discount", unless QBO says."""
+    said = _safe(qbo_line, "Description")
+    if said:
+        return said
+    percent = _field(detail, "DiscountPercent")
+    if _field(detail, "PercentBased") and percent:
+        return f"Discount {Decimal(str(percent)).normalize():f}%"
+    return "Discount"
+
+
+def _discount_on_taxed(amount, after, taxed, sold, base) -> Decimal:
+    """How much of a discount comes off the taxable amount. None of it when
+    QBO works the tax out first (ApplyTaxAfterDiscount false). Otherwise
+    what QBO took off it (its taxed lines less the amount it taxed, `base`),
+    or all of it when every line is taxed, or the taxed lines' share."""
+    from app.services.accounting import _q
+
+    if not after or taxed <= 0:
+        return Decimal("0")
+    if base is not None and 0 <= taxed - base <= amount:
+        return taxed - base
+    if taxed >= sold:
+        return amount
+    return _q(amount * taxed / sold)
+
+
+def _document_lines(db, source) -> list[dict]:
+    """The lines the import makes of a QBO invoice or sales receipt, in
+    QBO's order: one for each sales line (SalesItemLineDetail), and its
+    discount (DiscountLineDetail) as a negative line on the discount item
+    for QBO's discount account (_discount_item). The lines add up to QBO's
+    subtotal, an edit here re-totals to QBO's total, and a document of ours
+    books the discount where QBO did. With the tax worked out after the
+    discount (ApplyTaxAfterDiscount), the part of the discount QBO took off
+    the taxable amount is a taxable line, the rest (the untaxed lines'
+    share) an untaxed one, so the taxable amount is QBO's. Subtotal lines
+    are QBO's arithmetic; bundles (GroupLineDetail) are not brought across."""
+    from app.services.accounting import _q
+
+    ordered = []
+    for qbo_line in _safe(source, "Line") or []:
+        kind = _safe(qbo_line, "DetailType", "")
+        if kind == "SalesItemLineDetail":
+            detail = _safe(qbo_line, "SalesItemLineDetail")
+            if detail:
+                ordered.append(_sales_line(db, qbo_line, detail))
+        elif kind == "DiscountLineDetail":
+            ordered.append(qbo_line)
+    sales = [line for line in ordered if isinstance(line, dict)]
+    discounts = len(ordered) - len(sales)
+    if not discounts:
+        return sales
+    taxed = sum((ln["amount"] for ln in sales if ln["is_taxable"]), Decimal("0"))
+    sold = sum((ln["amount"] for ln in sales), Decimal("0"))
+    after = bool(_field(source, "ApplyTaxAfterDiscount"))
+    txn_tax = _safe(source, "TxnTaxDetail")
+    tax = _safe_decimal(txn_tax, "TotalTax") if txn_tax else Decimal("0")
+    base = _tax_base(source) if tax and discounts == 1 else None
+    lines = []
+    for entry in ordered:
+        if isinstance(entry, dict):
+            lines.append(entry)
+            continue
+        amount = _q(abs(_safe_decimal(entry, "Amount")))
+        detail = _safe(entry, "DiscountLineDetail")
+        if not amount or not detail:
+            continue
+        item_id = _discount_item(db, detail)
+        words = _discount_words(entry, detail)
+        on_taxed = _discount_on_taxed(amount, after, taxed, sold, base)
+        parts = [(on_taxed, True), (amount - on_taxed, False)]
+        parts = [(part, taxable) for part, taxable in parts if part]
+        for part, taxable in parts:
+            lines.append(
+                {
+                    "item_id": item_id,
+                    "description": (
+                        words
+                        if len(parts) == 1
+                        else f"{words} on {'taxable' if taxable else 'non-taxable'} lines"
+                    ),
+                    "quantity": Decimal("1"),
+                    "rate": -part,
+                    "amount": -part,
+                    "is_taxable": taxable,
+                }
+            )
+    return lines
+
+
+def _lines_short(lines, subtotal) -> Decimal:
+    """How far a document's lines fall short of QBO's subtotal: 0 when they
+    add up to it, as they do when every line came across."""
+    from app.services.accounting import _q
+
+    return _q(
+        subtotal
+        - sum(
+            (_q(ln["quantity"] * ln["rate"]) for ln in lines),
+            Decimal("0"),
+        )
+    )
+
+
+def _note_lines_short(lines, subtotal) -> None:
+    """Say so in the import log when a document's lines don't add up to its
+    total before tax: a line of a kind the import doesn't bring across (a
+    bundle) makes the difference, which an edit here posts to income."""
+    short = _lines_short(lines, subtotal)
+    if short:
+        qbo_progress.emit(
+            "note",
+            f"Its lines here come to {subtotal - short:.2f} and its total before "
+            f"tax in QuickBooks Online to {subtotal:.2f}: a line of a kind the "
+            "import doesn't bring across (a bundle, for one) makes up the "
+            f"{abs(short):.2f}. If it is edited here, that part of its total "
+            "posts to your income account.",
+            level="warning",
+            code="IMPORT_LINES_SHORT",
+        )
+
+
 def _document_values(db, source, kind) -> dict:
     """What the document import makes of a QBO invoice or sales receipt: the
     same reading as when it first came in, for bringing one it made up to
@@ -332,30 +537,7 @@ def _document_values(db, source, kind) -> dict:
     if txn_tax:
         tax = _safe_decimal(txn_tax, "TotalTax")
     day = _parse_qbo_date(_safe(source, "TxnDate"))
-    lines = []
-    for qbo_line in _safe(source, "Line") or []:
-        if _safe(qbo_line, "DetailType", "") != "SalesItemLineDetail":
-            continue
-        detail = _safe(qbo_line, "SalesItemLineDetail")
-        if not detail:
-            continue
-        item_id = None
-        item_ref = _safe(detail, "ItemRef")
-        if item_ref:
-            item_map = get_mapping_by_qbo_id(db, "item", _safe(item_ref, "value", ""))
-            if item_map:
-                item_id = item_map.slowbooks_id
-        taxable = _tax_code(detail)
-        lines.append(
-            {
-                "item_id": item_id,
-                "description": _safe(qbo_line, "Description") or None,
-                "quantity": _safe_decimal(detail, "Qty") or Decimal("1"),
-                "rate": _safe_decimal(detail, "UnitPrice"),
-                "amount": _safe_decimal(qbo_line, "Amount"),
-                "is_taxable": True if taxable is None else taxable,
-            }
-        )
+    lines = _document_lines(db, source)
     due = day if kind == "sales_receipt" else _parse_qbo_date(_safe(source, "DueDate"))
     return {
         "customer_id": customer_id,
@@ -483,6 +665,7 @@ def _refresh_invoice(db, mapping, source, kind, errors) -> None:
         db.add(InvoiceLine(invoice_id=invoice.id, line_order=order, **line))
     db.flush()
     db.refresh(invoice)
+    _note_lines_short(values["lines"], values["subtotal"])
     if kind == "sales_receipt":
         for alloc in invoice.payment_allocations:
             payment = alloc.payment
@@ -1220,49 +1403,13 @@ def import_invoices(db: Session) -> dict:
             db.add(invoice)
             db.flush()
 
-            # Process line items — only SalesItemLineDetail
-            line_order = 0
-            made = []
-            lines = _safe(qbo_inv, "Line") or []
-            for qbo_line in lines:
-                detail_type = _safe(qbo_line, "DetailType", "")
-                if detail_type != "SalesItemLineDetail":
-                    continue  # Skip SubTotalLineDetail, DiscountLineDetail, etc.
-
-                detail = _safe(qbo_line, "SalesItemLineDetail")
-                if not detail:
-                    continue
-
-                # Resolve item
-                item_id = None
-                item_ref = _safe(detail, "ItemRef")
-                if item_ref:
-                    item_qbo_id = _safe(item_ref, "value", "")
-                    item_map = get_mapping_by_qbo_id(db, "item", item_qbo_id)
-                    if item_map:
-                        item_id = item_map.slowbooks_id
-
-                qty = _safe_decimal(detail, "Qty") or Decimal("1")
-                rate = _safe_decimal(detail, "UnitPrice")
-                amount = _safe_decimal(qbo_line, "Amount")
-                taxable = _tax_code(detail)
-                taxable = True if taxable is None else taxable
-                made.append({"quantity": qty, "rate": rate, "is_taxable": taxable})
-
-                inv_line = InvoiceLine(
-                    invoice_id=invoice.id,
-                    item_id=item_id,
-                    description=_safe(qbo_line, "Description") or None,
-                    quantity=qty,
-                    rate=rate,
-                    amount=amount,
-                    is_taxable=taxable,
-                    line_order=line_order,
-                )
-                db.add(inv_line)
-                line_order += 1
-            # QBO's tax as a rate, when one rate gives it (_qbo_rate).
+            # Its sales lines and its discount (_document_lines), and QBO's
+            # tax as a rate when one rate gives it (_qbo_rate).
+            made = _document_lines(db, qbo_inv)
+            for order, line in enumerate(made):
+                db.add(InvoiceLine(invoice_id=invoice.id, line_order=order, **line))
             invoice.tax_rate = _qbo_rate(qbo_inv, made, tax_amount)
+            _note_lines_short(made, subtotal)
 
             create_mapping(
                 db, "invoice", invoice.id, qbo_id, _safe(qbo_inv, "SyncToken")
@@ -1553,48 +1700,13 @@ def import_sales_receipts(db: Session) -> dict:
             db.add(invoice)
             db.flush()
 
-            # Process line items — only SalesItemLineDetail
-            line_order = 0
-            made = []
-            lines = _safe(qbo_sr, "Line") or []
-            for qbo_line in lines:
-                detail_type = _safe(qbo_line, "DetailType", "")
-                if detail_type != "SalesItemLineDetail":
-                    continue  # Skip SubTotalLineDetail, DiscountLineDetail, etc.
-
-                detail = _safe(qbo_line, "SalesItemLineDetail")
-                if not detail:
-                    continue
-
-                item_id = None
-                item_ref = _safe(detail, "ItemRef")
-                if item_ref:
-                    item_qbo_id = _safe(item_ref, "value", "")
-                    item_map = get_mapping_by_qbo_id(db, "item", item_qbo_id)
-                    if item_map:
-                        item_id = item_map.slowbooks_id
-
-                qty = _safe_decimal(detail, "Qty") or Decimal("1")
-                rate = _safe_decimal(detail, "UnitPrice")
-                amount = _safe_decimal(qbo_line, "Amount")
-                taxable = _tax_code(detail)
-                taxable = True if taxable is None else taxable
-                made.append({"quantity": qty, "rate": rate, "is_taxable": taxable})
-
-                inv_line = InvoiceLine(
-                    invoice_id=invoice.id,
-                    item_id=item_id,
-                    description=_safe(qbo_line, "Description") or None,
-                    quantity=qty,
-                    rate=rate,
-                    amount=amount,
-                    is_taxable=taxable,
-                    line_order=line_order,
-                )
-                db.add(inv_line)
-                line_order += 1
-            # QBO's tax as a rate, when one rate gives it (_qbo_rate).
+            # Its sales lines and its discount (_document_lines), and QBO's
+            # tax as a rate when one rate gives it (_qbo_rate).
+            made = _document_lines(db, qbo_sr)
+            for order, line in enumerate(made):
+                db.add(InvoiceLine(invoice_id=invoice.id, line_order=order, **line))
             invoice.tax_rate = _qbo_rate(qbo_sr, made, tax_amount)
+            _note_lines_short(made, total_amt - tax_amount)
 
             # Payment for the full total, deposited where QBO says
             deposit_account_id = None

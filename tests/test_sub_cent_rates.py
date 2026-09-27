@@ -127,7 +127,15 @@ def test_the_sales_forms_take_four_places():
         "recurring.js",
     ):
         src = (JS / page).read_text(encoding="utf-8")
-        assert '<input class="line-rate" type="number" step="0.0001" min="0"' in src
+        # An invoice's price box takes the negative price of a discount line
+        # a QuickBooks Online invoice came with (2.18.0); every other stays
+        # at zero or more.
+        floor = (
+            "${Number(line.rate) < 0 ? '' : 'min=\"0\" '}"
+            if page == "invoices.js"
+            else 'min="0"'
+        )
+        assert f'<input class="line-rate" type="number" step="0.0001" {floor}' in src
         assert 'class="line-rate" type="number" step="0.01"' not in src, page
 
 
