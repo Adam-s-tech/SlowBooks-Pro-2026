@@ -19,6 +19,8 @@ const ctx = {
   confirm: (msg) => { asked.push(msg); return answer; },
   API: { get: async (path) => { if (!path.startsWith('/invoices?customer_id=')) throw new Error(path); return invoices; } },
 };
+// utils.js's fetchAllPages: every page of a list (one page here)
+ctx.fetchAllPages = (path) => ctx.API.get(path);
 vm.createContext(ctx);
 vm.runInContext(
   fs.readFileSync('app/static/js/invoices.js', 'utf8') + '\nthis.InvoicesPage = InvoicesPage;',

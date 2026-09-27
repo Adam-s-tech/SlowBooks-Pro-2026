@@ -64,7 +64,7 @@ const CustomersPage = {
         try {
             [customer, invoices, payments, permits, jobs, credits] = await Promise.all([
                 API.get(`/customers/${id}`),
-                API.get(`/invoices?customer_id=${id}`).catch(() => []),
+                fetchAllPages(`/invoices?customer_id=${id}`).catch(() => []),
                 API.get(`/payments?customer_id=${id}`).catch(() => []),
                 API.get(`/reseller-permits?entity_type=customer&entity_id=${id}`).catch(() => []),
                 API.get(`/jobs?customer_id=${id}&include_inactive=true`).catch(() => []),

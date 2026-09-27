@@ -177,7 +177,7 @@ const PaymentsPage = {
             return;
         }
         const [invoices, credits] = await Promise.all([
-            API.get(`/invoices?customer_id=${customerId}`),
+            fetchAllPages(`/invoices?customer_id=${customerId}&open_only=true`),
             API.get(`/customers/${customerId}/credits`).catch(() => null),
         ]);
         // One payment is in one currency (the server refuses a mix), so the
@@ -412,7 +412,7 @@ const PaymentsPage = {
         try {
             [credits, invoices] = await Promise.all([
                 API.get(`/customers/${customerId}/credits`),
-                API.get(`/invoices?customer_id=${customerId}`),
+                fetchAllPages(`/invoices?customer_id=${customerId}&open_only=true`),
             ]);
         } catch (err) { toast(err.message, 'error'); return; }
         const credit = credits.credits.find(c => c.kind === kind && c.id === creditId);

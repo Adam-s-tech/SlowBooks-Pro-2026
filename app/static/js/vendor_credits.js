@@ -204,7 +204,7 @@ const VendorCreditsPage = {
 
     async showApply(vcId) {
         const vc = await API.get(`/vendor-credits/${vcId}`);
-        const bills = await API.get(`/bills?vendor_id=${vc.vendor_id}`);
+        const bills = await fetchAllPages(`/bills?vendor_id=${vc.vendor_id}&open_only=true`);
         const open = bills.filter(b => b.status !== 'void' && b.status !== 'paid' && parseFloat(b.balance_due) > 0);
 
         let rows = open.map(b => `

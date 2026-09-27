@@ -203,6 +203,28 @@ function _listTableHtml(state) {
         <thead><tr>${ths}</tr></thead><tbody>${rows.map(row).join('')}</tbody></table>`;
 }
 
+// Every row a list endpoint has, a page at a time (the server sends at most
+// 1,000 a page). For lists that must be complete — the open invoices a
+// payment can go to — never just the newest page (issue #191).
+async function fetchAllPages(path, pageSize = 1000) {
+    const sep = path.includes('?') ? '&' : '?';
+    let all = [];
+    for (let skip = 0; ; skip += pageSize) {
+        const url = path + sep + 'skip=' + skip + '&limit=' + pageSize;
+        const page = await API.get(url);
+        all = all.concat(page);
+        if (page.length < pageSize) return all;
+    }
+}
+
+// A list page shows the newest `cap` rows and says so, with a way to see
+// them all; `rows` came back from a request for cap + 1.
+function listCapNote(rows, cap, showAllCall, noun) {
+    if (rows.length <= cap) return '';
+    return `<p class="list-cap-note" style="margin:0 0 8px; font-size:12px; color:var(--text-muted);">
+        Showing the newest ${cap} ${noun}. <button type="button" class="btn btn-sm btn-secondary" onclick="${showAllCall}">Show all</button></p>`;
+}
+
 function renderListPage({ title, headerHtml = '', filter = null, empty, columns, items, row, sort = null }) {
     let html = `
         <div class="page-header">

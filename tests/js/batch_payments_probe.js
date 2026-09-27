@@ -22,6 +22,8 @@ const ctx = {
     get: async (path) => (path.startsWith('/invoices') ? invoices : []),
   },
 };
+// utils.js's fetchAllPages: every page of a list (one page here)
+ctx.fetchAllPages = (path) => ctx.API.get(path);
 vm.createContext(ctx);
 vm.runInContext(
   fs.readFileSync('app/static/js/batch_payments.js', 'utf8') + '\nthis.BatchPaymentsPage = BatchPaymentsPage;',

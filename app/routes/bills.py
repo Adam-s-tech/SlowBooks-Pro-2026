@@ -39,10 +39,15 @@ router = APIRouter(prefix="/api/bills", tags=["bills"])
 def list_bills(
     vendor_id: int = None,
     status: str = None,
+    open_only: bool = False,
     skip: int = 0,
     limit: int = 500,
     db: Session = Depends(get_db),
 ):
+    """Newest first, a page at a time (500 by default, at most 1,000).
+    open_only: the bills that can still be paid or credited (unpaid or
+    partial, with a balance due), filtered here so an old unpaid bill is
+    never lost behind the newest page (issue #191)."""
     skip, limit = clamp_pagination(skip, limit)
     # Eager-load vendor + lines so a 500-row list doesn't fire 1001
     # follow-up SELECTs through BillResponse.model_validate.
@@ -54,7 +59,12 @@ def list_bills(
         q = q.filter(Bill.vendor_id == vendor_id)
     if status:
         q = q.filter(Bill.status == status)
-    bills = q.order_by(Bill.date.desc()).offset(skip).limit(limit).all()
+    if open_only:
+        q = q.filter(
+            Bill.status.in_((BillStatus.UNPAID, BillStatus.PARTIAL)),
+            Bill.balance_due > 0,
+        )
+    bills = q.order_by(Bill.date.desc(), Bill.id.desc()).offset(skip).limit(limit).all()
     results = []
     for b in bills:
         resp = BillResponse.model_validate(b)

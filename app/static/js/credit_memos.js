@@ -177,7 +177,7 @@ const CreditMemosPage = {
         CreditMemosPage.recalc();
         if (!customerId) return;
         try {
-            const invoices = await API.get(`/invoices?customer_id=${encodeURIComponent(customerId)}`);
+            const invoices = await fetchAllPages(`/invoices?customer_id=${encodeURIComponent(customerId)}&open_only=true`);
             CreditMemosPage._invoices = invoices.filter(i => i.status !== 'void');
         } catch (e) { return; }
         if (!sel || $('#cm-customer-select')?.value !== String(customerId)) return;
@@ -236,7 +236,7 @@ const CreditMemosPage = {
 
     async showApply(cmId) {
         const cm = await API.get(`/credit-memos/${cmId}`);
-        const invoices = await API.get(`/invoices?customer_id=${cm.customer_id}`);
+        const invoices = await fetchAllPages(`/invoices?customer_id=${cm.customer_id}&open_only=true`);
         const openInv = invoices.filter(i => i.status !== 'void' && i.status !== 'paid' && i.balance_due > 0);
 
         let rows = openInv.map(inv => `

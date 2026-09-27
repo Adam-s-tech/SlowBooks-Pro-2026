@@ -110,13 +110,24 @@ const InvoicesPage = {
     // PLEDGE, everything else an INVOICE regardless of company vocabulary.
     docLabel(inv) { return inv.is_pledge ? 'Pledge' : 'Invoice'; }, // literal face
 
+    showAll() {
+        InvoicesPage._showAll = true;
+        App.navigate(location.hash || '#/invoices');
+    },
+
     async render() {
         // Sales receipts are invoices under the hood; they get their own
         // page, so keep them out of this list.
-        const invoices = await API.get('/invoices?is_sales_receipt=false');
+        // The newest 500, and a way to see the rest (issue #191).
+        const all = InvoicesPage._showAll;
+        InvoicesPage._showAll = false;
+        const rows = all ? await fetchAllPages('/invoices?is_sales_receipt=false')
+            : await API.get('/invoices?is_sales_receipt=false&limit=501');
+        const invoices = all ? rows : rows.slice(0, 500);
         return renderListPage({
             title: T('Invoices'),
-            headerHtml: `<button class="btn btn-primary" onclick="InvoicesPage.showForm()">+ ${T('New Invoice')}</button>`,
+            headerHtml: `<button class="btn btn-primary" onclick="InvoicesPage.showForm()">+ ${T('New Invoice')}</button>`
+                + (all ? '' : listCapNote(rows, 500, 'InvoicesPage.showAll()', Terms.text('invoices'))),
             filter: {
                 id: 'inv-status-filter',
                 rowSelector: '.inv-row',
@@ -818,7 +829,7 @@ const InvoicesPage = {
         if (!customer || !(limit > 0)) return true;
         let open = 0;
         try {
-            const invoices = await API.get(`/invoices?customer_id=${encodeURIComponent(customer.id)}`);
+            const invoices = await fetchAllPages(`/invoices?customer_id=${encodeURIComponent(customer.id)}&open_only=true`);
             invoices.forEach(i => {
                 if (i.status === 'void' || (editingId && String(i.id) === String(editingId))) return;
                 open += (parseFloat(i.balance_due) || 0) * (parseFloat(i.exchange_rate) || 1);

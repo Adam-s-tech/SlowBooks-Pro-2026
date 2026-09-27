@@ -5,7 +5,7 @@
 const BatchPaymentsPage = {
     async render() {
         const [invoices, accounts] = await Promise.all([
-            API.get('/invoices'),
+            fetchAllPages('/invoices?open_only=true'),
             API.get('/accounts?account_type=asset'),
         ]);
         // A batch payment is in the home currency, so it pays home-currency

@@ -38,10 +38,16 @@ def list_invoices(
     status: str = None,
     customer_id: int = None,
     is_sales_receipt: bool = None,
+    open_only: bool = False,
     skip: int = 0,
     limit: int = 500,
     db: Session = Depends(get_db),
 ):
+    """Newest first, a page at a time (500 by default, at most 1,000).
+    open_only: the invoices money can still be applied to (draft, sent or
+    partial, with a balance due) — what Receive Payment, Batch Payments
+    and the credit screens offer. Filtered here, so an old open invoice is
+    never lost behind the newest page of paid ones (issue #191)."""
     skip, limit = clamp_pagination(skip, limit)
     # Eager-load customer (used for customer_name) and lines (in the
     # response model). Without these, returning 500 invoices triggered
@@ -53,11 +59,23 @@ def list_invoices(
     )
     if status:
         q = q.filter(Invoice.status == status)
+    if open_only:
+        q = q.filter(
+            Invoice.status.in_(
+                (InvoiceStatus.DRAFT, InvoiceStatus.SENT, InvoiceStatus.PARTIAL)
+            ),
+            Invoice.balance_due > 0,
+        )
     if customer_id:
         q = q.filter(Invoice.customer_id == customer_id)
     if is_sales_receipt is not None:
         q = q.filter(Invoice.is_sales_receipt == is_sales_receipt)
-    invoices = q.order_by(Invoice.date.desc()).offset(skip).limit(limit).all()
+    invoices = (
+        q.order_by(Invoice.date.desc(), Invoice.id.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
     results = []
     for inv in invoices:
         resp = InvoiceResponse.model_validate(inv)

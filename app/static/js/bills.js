@@ -3,14 +3,23 @@
  * Feature 1: Enter bills, pay bills
  */
 const BillsPage = {
+    showAll() {
+        BillsPage._showAll = true;
+        App.navigate(location.hash || '#/bills');
+    },
+
     async render() {
-        const bills = await API.get('/bills');
+        // The newest 500, and a way to see the rest (issue #191).
+        const all = BillsPage._showAll;
+        BillsPage._showAll = false;
+        const rows = all ? await fetchAllPages('/bills') : await API.get('/bills?limit=501');
+        const bills = all ? rows : rows.slice(0, 500);
         return renderListPage({
             title: 'Bills (Accounts Payable)',
             headerHtml: `<div class="btn-group">
                     <button class="btn btn-primary" onclick="BillsPage.showForm()">+ Enter Bill</button>
                     <button class="btn btn-secondary" onclick="BillsPage.showPayForm()">Pay Bills</button>
-                </div>`,
+                </div>` + (all ? '' : listCapNote(rows, 500, 'BillsPage.showAll()', 'bills')),
             filter: {
                 id: 'bill-status-filter',
                 rowSelector: '.bill-row',
@@ -487,11 +496,11 @@ const BillsPage = {
     async showPayForm() {
         const [vendors, bills, accounts] = await Promise.all([
             API.get('/vendors?active_only=true'),
-            API.get('/bills?status=unpaid'),
+            fetchAllPages('/bills?open_only=true'),
             API.get('/accounts?bank=1&active_only=true'),
         ]);
-        const partials = await API.get('/bills?status=partial');
-        const openBills = [...bills, ...partials];
+        // every unpaid or part-paid bill, not just the newest page (#191)
+        const openBills = bills;
 
         const vendorOpts = vendors.map(v => `<option value="${v.id}">${escapeHtml(v.name)}</option>`).join('');
         const acctOpts = accounts.map(a => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
