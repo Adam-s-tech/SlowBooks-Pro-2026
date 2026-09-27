@@ -28,7 +28,7 @@ const CompaniesPage = {
                 <h2>Company Files</h2>
                 <div>
                     ${CompaniesPage._isDesktop() ? '<button class="btn btn-secondary" onclick="CompaniesPage.switchCompany()">Switch company…</button> ' : ''}
-                    <button class="btn btn-primary" onclick="CompaniesPage.showCreate()">+ New Company</button>
+                    <button class="btn btn-primary" data-admin onclick="CompaniesPage.showCreate()">+ New Company</button>
                 </div>
             </div>
             <p style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">
@@ -36,7 +36,9 @@ const CompaniesPage = {
                 ${CompaniesPage._isDesktop()
                     ? 'Switch company takes you back to the company picker; this company is signed out.'
                     : 'On Server Edition the served company is chosen on the host PC.'}
-            </p>`;
+            </p>
+            <!-- Creating one is the administrator's (POST /api/companies) -->
+            <p class="hidden" data-admin-note style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">New company files are created by an administrator.</p>`;
 
         if (companies.length === 0) {
             html += '<div class="empty-state"><p>No additional companies created</p></div>';

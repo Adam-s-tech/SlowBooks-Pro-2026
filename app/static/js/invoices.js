@@ -402,12 +402,14 @@ const InvoicesPage = {
         const enabled = settings.invoice_show_logo !== 'false';
         // A company setting: the server takes Settings changes from an
         // administrator only, so another sign-in sees it locked, and why.
+        // Marked data-admin as well, for a view opened before the role is
+        // known (App.adminPass locks it then).
         const canChange = !App.role || App.role === 'admin';
         return `<div class="invoice-logo-option">
             <img class="invoice-logo-preview" src="${escapeHtml(settings.company_logo_path)}" alt="Company logo" ${enabled ? '' : 'hidden'}>
             <div>
                 <label for="inv-show-logo">
-                    <input id="inv-show-logo" type="checkbox" ${enabled ? 'checked' : ''} ${canChange ? '' : 'disabled'} onchange="InvoicesPage.setLogoOption(this)">
+                    <input id="inv-show-logo" type="checkbox" data-admin ${enabled ? 'checked' : ''} ${canChange ? '' : 'disabled'} onchange="InvoicesPage.setLogoOption(this)">
                     Show company logo on invoices
                 </label>
                 <div class="invoice-logo-help">${canChange

@@ -4,9 +4,11 @@
  * for company name and tax rate.
  */
 const SettingsPage = {
-    // A backup is the whole company, password hashes and payroll records
-    // included: only an administrator downloads one (the server refuses
-    // the rest).
+    // The settings this page saves, the logo and the backups are the
+    // administrator's: the server refuses them to every other role. A
+    // backup is the whole company, password hashes and payroll records
+    // included, so only an administrator downloads one too. What is drawn
+    // before the role is known is marked data-admin (App.adminPass).
     _isAdmin() {
         return typeof App === 'undefined' || !App.role || App.role === 'admin';
     },
@@ -59,8 +61,14 @@ const SettingsPage = {
             <div class="page-header">
                 <h2>Company Settings</h2>
             </div>
-            <form id="settings-form" onsubmit="SettingsPage.save(event)"
+            <!-- data-admin-fields: the fields this form saves (PUT /api/settings)
+                 are the administrator's. Any other sign-in sees them locked, with
+                 the sentence below (App.adminPass). AI Insights and the lists
+                 further down (templates, classes, cost types and codes, equipment)
+                 save themselves, and a bookkeeper keeps them. -->
+            <form id="settings-form" data-admin-fields onsubmit="SettingsPage.save(event)"
                 oninput="SettingsPage._updateDirty()" onchange="SettingsPage._updateDirty()">
+                <div class="hint hint--locked hidden" data-admin-note style="margin-bottom:10px;">Company settings are changed by an administrator.</div>
                 <div class="settings-section">
                     <h3>Company Information</h3>
                     <div class="form-grid">
@@ -100,9 +108,9 @@ const SettingsPage = {
                         <div class="form-group">
                             ${s.company_logo_path && !(logo && logo.missing) ? `<img id="company-logo-preview" src="${escapeHtml(s.company_logo_path)}" style="max-width:200px; max-height:80px; margin-bottom:8px; display:block;">` : ''}
                             ${SettingsPage._logoNote(logo)}
-                            ${SettingsPage._isAdmin() ? `<input type="file" id="logo-upload" accept="image/*" onchange="SettingsPage.uploadLogo(this)">
-                            ${s.company_logo_path ? `<button type="button" class="btn btn-sm btn-secondary" data-write style="margin-left:6px;" onclick="SettingsPage.removeLogo()">Remove logo</button>` : ''}
-                            <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">PNG, JPG, GIF, WebP, or SVG &middot; max 5 MB &middot; 200&times;80 px recommended.</div>`
+                            ${SettingsPage._isAdmin() ? `<input type="file" id="logo-upload" data-admin accept="image/*" onchange="SettingsPage.uploadLogo(this)">
+                            ${s.company_logo_path ? `<button type="button" class="btn btn-sm btn-secondary" data-admin data-write style="margin-left:6px;" onclick="SettingsPage.removeLogo()">Remove logo</button>` : ''}
+                            <div data-admin style="font-size:10px; color:var(--text-muted); margin-top:4px;">PNG, JPG, GIF, WebP, or SVG &middot; max 5 MB &middot; 200&times;80 px recommended.</div>`
                             : `<div id="logo-admin-only" style="font-size:10px; color:var(--text-muted);">Only an administrator can change the logo.</div>`}
                             ${s.company_logo_path ? `<div style="margin-top:8px;">
                                 <label for="invoice-show-logo" style="font-weight:normal;">
@@ -182,7 +190,7 @@ const SettingsPage = {
                                     aria-describedby="closing-date-state"
                                     oninput="SettingsPage.showClosingState()" onchange="SettingsPage.showClosingState()"
                                     oninvalid="SettingsPage.closingDateInvalid()">
-                                <button type="button" class="btn btn-sm btn-secondary" id="closing-date-clear" data-write
+                                <button type="button" class="btn btn-sm btn-secondary" id="closing-date-clear" data-admin data-write
                                     onclick="SettingsPage.clearClosingDate()" ${s.closing_date ? '' : 'disabled'}>Clear</button>
                             </div>
                             <!-- An empty date field shows today's date in grey on macOS, which
@@ -222,7 +230,7 @@ const SettingsPage = {
                                 <option value="false" ${s.smtp_use_tls === 'false' ? 'selected' : ''}>No</option>
                             </select></div>
                     </div>
-                    <button type="button" class="btn btn-sm btn-secondary" data-write onclick="SettingsPage.testEmail()" style="margin-top:8px;">
+                    <button type="button" class="btn btn-sm btn-secondary" data-admin data-write onclick="SettingsPage.testEmail()" style="margin-top:8px;">
                         Send Test Email</button>
                 </div>
 
@@ -340,7 +348,7 @@ const SettingsPage = {
                     <div id="ocr-status" style="font-size:12px;">Checking…</div>
                     <div style="margin-top:8px; display:flex; align-items:center; gap:8px;">
                         <label for="ocr-engine-pref" style="font-size:11px;">OCR engine:</label>
-                        <select id="ocr-engine-pref" style="font-size:11px;"
+                        <select id="ocr-engine-pref" data-admin style="font-size:11px;"
                             onchange="SettingsPage.saveOcrEngine(this.value)">
                             <option value="auto">Automatic (recommended) — built-in engine first</option>
                             <option value="tesseract">Prefer Tesseract (if installed)</option>
@@ -463,13 +471,14 @@ const SettingsPage = {
                         company with the backup; a safety backup of the books as they are is taken first,
                         so a restore can be undone by restoring that one.
                     </div>
-                    <div style="display:flex; gap:8px; margin-bottom:12px;" data-write>
+                    <div style="display:flex; gap:8px; margin-bottom:12px;" data-admin data-write>
                         <button type="button" class="btn btn-primary" onclick="SettingsPage.createBackup()">Create Backup</button>
                     </div>
+                    <div class="hidden" data-admin-note style="font-size:11px; color:var(--text-muted); margin-bottom:8px;">Backups are made, downloaded and restored by an administrator.</div>
                     <div id="backup-list"></div>
                 </div>
 
-                <div class="settings-section" id="settings-users" style="display:none;">
+                <div class="settings-section" id="settings-users" data-admin style="display:none;">
                     <h3>Users &mdash; Server Edition</h3>
                     <p style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">
                         Add a second user and this deployment becomes
@@ -495,7 +504,7 @@ const SettingsPage = {
                     <button type="button" class="btn btn-primary" onclick="SettingsPage.createUser()">Add User</button>
                 </div>
 
-                <div class="settings-section" id="settings-api-tokens" style="display:none;">
+                <div class="settings-section" id="settings-api-tokens" data-admin style="display:none;">
                     <h3>API Tokens &mdash; agents &amp; integrations</h3>
                     <p style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">
                         Scoped credentials for non-humans: AI agents, the receipt
@@ -529,7 +538,7 @@ const SettingsPage = {
                 <!-- Always in reach: the one Save for the settings above sat at
                      the very bottom, after 25 other buttons, and the first
                      "Save" on the page was AI Insights' (explore 2.17.3, L16). -->
-                <div class="form-actions" id="settings-savebar" data-write
+                <div class="form-actions" data-admin id="settings-savebar" data-write
                     style="position:sticky; bottom:0; z-index:5; align-items:center; background:var(--content-bg);
                            padding-bottom:10px; box-shadow:0 -4px 8px -6px rgba(0,0,0,0.25);">
                     <span id="settings-dirty-note" role="status" aria-live="polite"
@@ -574,10 +583,12 @@ const SettingsPage = {
     // True when a field differs from what was last loaded or saved;
     // `except` leaves one field out of the comparison.
     isDirty(except) {
-        // A read-only sign-in sees the page locked: nothing on it is an edit.
-        // Locking takes the fields out of FormData, so a page locked after
-        // its snapshot (the role arrives after a first page) compared as
-        // changed, and asked a read-only user to leave without saving.
+        // Only an administrator saves these fields: any other sign-in sees
+        // them locked, and nothing on the page is an edit. Locking takes the
+        // fields out of FormData, so a page locked after its snapshot (the
+        // role arrives after a first page) compared as changed, and asked a
+        // read-only user, then a bookkeeper, to leave without saving.
+        if (!SettingsPage._isAdmin()) return false;
         if (typeof App !== 'undefined' && App.isReadOnly && App.isReadOnly()) return false;
         const snap = SettingsPage._snapshot;
         const now = SettingsPage._formState(except);
@@ -1011,8 +1022,8 @@ const SettingsPage = {
                     <td>${(b.file_size / 1024).toFixed(1)} KB</td>
                     <td>${escapeHtml(SettingsPage._when(b.created_at))}</td>
                     <td class="actions">
-                        ${SettingsPage._isAdmin() ? `<a href="/api/backups/download/${encodeURIComponent(b.filename)}" class="btn btn-sm btn-secondary" download>Download</a>` : ''}
-                        <button type="button" class="btn btn-sm btn-secondary" data-write data-filename="${escapeHtml(b.filename)}"
+                        ${SettingsPage._isAdmin() ? `<a href="/api/backups/download/${encodeURIComponent(b.filename)}" class="btn btn-sm btn-secondary" data-admin download>Download</a>` : ''}
+                        <button type="button" class="btn btn-sm btn-secondary" data-admin data-write data-filename="${escapeHtml(b.filename)}"
                             onclick="SettingsPage.confirmRestore(this.dataset.filename)">Restore…</button>
                     </td>
                 </tr>`).join('')}</tbody>

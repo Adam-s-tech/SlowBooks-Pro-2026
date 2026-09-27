@@ -145,11 +145,13 @@ const App = {
         // every other role, reads included, and the sidebar leaves them out.
         // A bookmark or a typed address still opened them half loaded, on
         // buttons that answered 403; a read-only user's View Checklist even
-        // tried to set up a checklist (2.18.0 gate, W-L17 leftovers). The
-        // role can arrive while the first page loads: asked again after.
+        // tried to set up a checklist (2.18.0 gate, W-L17 leftovers). So is
+        // Migrate Data, whose dry run and import are refused to every other
+        // role. The role can arrive while the first page loads: asked again
+        // after.
         const adminOnly = () => App.ADMIN_ONLY_PAGES.includes(route.page) && App.role !== 'admin';
         const showAdminOnly = () => {
-            $('#page-content').innerHTML = App._adminOnlyHtml(route.label);
+            $('#page-content').innerHTML = App._adminOnlyHtml(route.label, route.page);
             App.setStatus(`${route.label} — administrators only`);
         };
         if (adminOnly()) return showAdminOnly();
@@ -190,10 +192,17 @@ const App = {
         </div>`;
     },
 
-    _adminOnlyHtml(label) {
+    // Why a page is the administrator's; payroll and HR unless named here.
+    _ADMIN_ONLY_WHY: {
+        migrate: "Bringing books in from another program is open to an administrator's sign-in only.",
+    },
+
+    _adminOnlyHtml(label, page) {
+        const why = App._ADMIN_ONLY_WHY[page]
+            || "Payroll and staff records open to an administrator's sign-in only.";
         return `<div class="empty-state">
             <h3>${escapeHtml(label)} is for administrators</h3>
-            <p>Payroll and staff records open to an administrator's sign-in only.
+            <p>${escapeHtml(why)}
                An administrator can change your role under Settings → Users.</p>
             <p style="margin-top:12px;">
                 <a href="#/" class="btn btn-secondary">Return to Dashboard</a>
@@ -214,6 +223,8 @@ const App = {
 
     isReadOnly() { return App.role === 'readonly'; },
 
+    isAdmin() { return App.role === 'admin'; },
+
     setRole(role) {
         App.role = role || 'admin';
         document.body.classList.toggle('role-readonly', App.isReadOnly());
@@ -223,26 +234,69 @@ const App = {
             App.navigate(location.hash);
         }
         const page = document.getElementById('page-content');
-        if (!App.isReadOnly() || !page) return;
-        // the toolbar's shortcuts to new documents, and batch entry
-        document.querySelectorAll('#topbar .tb-btn[data-action], #topbar .tb-btn[data-nav="#/quick-entry"]')
-            .forEach(b => b.classList.add('hidden'));
-        // the sidebar's pages that only enter things (Batch Payments...),
-        // and the Audit Log, which the server refuses this role
-        App.hideWriteControls(document.getElementById('sidebar'));
-        document.querySelectorAll('#sidebar a[href="#/audit"]').forEach(l => {
-            (l.closest('li') || l).classList.add('hidden');
-        });
+        if (App.isAdmin() || !page) return;
+        if (App.isReadOnly()) {
+            // the toolbar's shortcuts to new documents, and batch entry
+            document.querySelectorAll('#topbar .tb-btn[data-action], #topbar .tb-btn[data-nav="#/quick-entry"]')
+                .forEach(b => b.classList.add('hidden'));
+            // the sidebar's pages that only enter things (Batch Payments...),
+            // and the Audit Log, which the server refuses this role
+            App.hideWriteControls(document.getElementById('sidebar'));
+            document.querySelectorAll('#sidebar a[href="#/audit"]').forEach(l => {
+                (l.closest('li') || l).classList.add('hidden');
+            });
+        }
         const roots = [page, document.getElementById('modal-body')].filter(Boolean);
-        roots.forEach(App.readOnlyPass);
-        if (!App._roObserver) {
+        roots.forEach(App.rolePass);
+        if (!App._roleObserver) {
             // Pages re-render in place (tabs, filters), and pages and dialogs
             // fill in after they open (Settings' lists, a report's figures):
             // keep them clean. The skytech sweep at 2.18.0 still found AR
             // Aging's Apply Late Fees on offer, drawn after the dialog opened.
-            App._roObserver = new MutationObserver(() => roots.forEach(App.readOnlyPass));
-            roots.forEach(r => App._roObserver.observe(r, { childList: true, subtree: true }));
+            App._roleObserver = new MutationObserver(() => roots.forEach(App.rolePass));
+            roots.forEach(r => App._roleObserver.observe(r, { childList: true, subtree: true }));
         }
+    },
+
+    // What a sign-in other than the administrator's gets of a page or a
+    // dialog: the administrator's controls taken away, and for a read-only
+    // sign-in every write as well.
+    rolePass(root) {
+        App.adminPass(root);
+        App.readOnlyPass(root);
+    },
+
+    // ---- The administrator's controls (Server Edition) ---------------------
+    // Some writes are the administrator's: company settings, backups, new
+    // company files, the logo, connecting and importing from QuickBooks
+    // Online (app.main's _ADMIN_WRITE_PREFIXES, and the routes that call
+    // require_admin). The server refuses them to every other role, but a
+    // bookkeeper was offered them: the whole Settings page could be filled
+    // in before Save Settings answered "Admin role required". They are
+    // marked where they are built, and for any role but admin:
+    //   data-admin         a control only an administrator can use is hidden;
+    //                      a field so marked shows its value, locked
+    //   data-admin-fields  a form whose fields only an administrator saves
+    //                      (Settings) shows its named fields locked: they are
+    //                      what it sends
+    //   data-admin-note    the sentence that says why, drawn hidden where the
+    //                      controls are, is shown
+    // A read-only sign-in's forms carry its own sentence, so the notes stay
+    // hidden for it: one sentence, not two.
+    adminPass(root) {
+        if (!root || App.isAdmin()) return;
+        root.querySelectorAll('[data-admin]').forEach(el => {
+            const field = /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName);
+            if (field) el.disabled = true;
+            // a field shows its value; a file chooser has none to show
+            if (!field || el.type === 'file') el.classList.add('hidden');
+        });
+        root.querySelectorAll('form[data-admin-fields]').forEach(form => {
+            form.querySelectorAll('input[name], select[name], textarea[name]')
+                .forEach(el => { el.disabled = true; });
+        });
+        if (App.isReadOnly()) return;
+        root.querySelectorAll('[data-admin-note]').forEach(el => el.classList.remove('hidden'));
     },
 
     // What a read-only sign-in can't do, named by the page method a button
@@ -943,7 +997,9 @@ const App = {
     // served raw, so the sidebar and toolbar arrive as business-worded
     // HTML; this runs once at boot, before the first page renders.
     // Sidebar entries the server serves to admins only (app.main RBAC).
-    ADMIN_ONLY_PAGES: ['employees', 'payroll', 'hr-onboarding', 'hr-benefits', 'hr-deductions', 'hr-tax-forms', 'users'],
+    // Migrate Data too: its dry run and its import are refused to every
+    // other role, so a bookkeeper had a page on which nothing worked.
+    ADMIN_ONLY_PAGES: ['employees', 'payroll', 'hr-onboarding', 'hr-benefits', 'hr-deductions', 'hr-tax-forms', 'users', 'migrate'],
 
     applyTerminology() {
         for (const r of Object.values(App.routes)) r.label = T(r.label);

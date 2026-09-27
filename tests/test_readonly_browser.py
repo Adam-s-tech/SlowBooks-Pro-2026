@@ -525,8 +525,10 @@ def test_a_read_only_sign_in_leaves_settings_unasked(
     page.on("dialog", lambda d: (asked.append(d.message), d.dismiss()))
     try:
         # the order of a first page: Settings is in before the role is known
-        page.evaluate("""() => { App._roObserver.disconnect(); App._roObserver = null;
-            App.role = 'admin'; document.body.classList.remove('role-readonly'); }""")
+        page.evaluate(
+            """() => { App._roleObserver.disconnect(); App._roleObserver = null;
+            App.role = 'admin'; document.body.classList.remove('role-readonly'); }"""
+        )
         _visit(page, handled, "#/settings")
         page.evaluate("() => App.setRole('readonly')")
         settle(page, handled)
