@@ -145,31 +145,41 @@ def render_pdf(html_str: str) -> bytes:
         return doc.write_pdf()
 
 
+def _money(body: str, negative: bool, code=None) -> str:
+    """An amount's digits with its sign and currency: "-$10.00", the minus
+    before the dollar sign (a discount line printed "$-10.00"), or with an
+    ISO `code` "EUR -10.00". An amount that rounds to nothing has no sign."""
+    sign = "-" if negative and body.strip("0.,") else ""
+    return f"{code} {sign}{body}" if code else f"{sign}${body}"
+
+
 def _format_currency(value, code=None):
-    """Dollars ("$1,234.50"), or with an ISO `code` "EUR 1,234.50". A
-    document in a foreign currency passes its code, so a euro invoice never
-    prints as dollars (2.17.3 exploratory W-M2)."""
+    """Dollars ("$1,234.50", "-$10.00"), or with an ISO `code` "EUR
+    1,234.50". A document in a foreign currency passes its code, so a euro
+    invoice never prints as dollars (2.17.3 exploratory W-M2)."""
     try:
         v = float(value or 0)
     except (TypeError, ValueError):
         v = 0.0
-    return f"{code} {v:,.2f}" if code else f"${v:,.2f}"
+    return _money(f"{abs(v):,.2f}", v < 0, code)
 
 
 def _format_rate(value, code=None):
     """A unit price: two places ("$12.50"), or up to four when it has them
-    ("$0.045"); sales line rates are kept to four places."""
+    ("$0.045"); sales line rates are kept to four places. A discount's is
+    negative: "-$10.00"."""
     from decimal import Decimal, InvalidOperation
 
     try:
         d = Decimal(str(value or 0))
     except (InvalidOperation, ValueError):
         d = Decimal("0")
-    if d == d.quantize(Decimal("0.01")):
-        body = f"{d:,.2f}"
+    a = abs(d)
+    if a == a.quantize(Decimal("0.01")):
+        body = f"{a:,.2f}"
     else:
-        body = format(d.normalize(), ",f")
-    return f"{code} {body}" if code else f"${body}"
+        body = format(a.normalize(), ",f")
+    return _money(body, d < 0, code)
 
 
 def document_currency_code(doc, company_settings: dict) -> str:

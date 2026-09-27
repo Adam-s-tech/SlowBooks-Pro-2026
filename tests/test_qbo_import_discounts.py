@@ -316,9 +316,9 @@ def test_a_qbo_invoice_keeps_a_negative_line_of_its_own_on_an_edit(client, books
 def test_a_line_the_import_does_not_bring_is_named_and_posts_plainly(
     client, books, monkeypatch
 ):
-    """A bundle (GroupLineDetail) is not brought across: the import log
-    says so, and an edit posts that part of the total to income, said
-    plainly on the entry."""
+    """A line of a kind the import doesn't know (one QBO adds later) is not
+    brought across: the import log says so, and an edit posts that part of
+    the total to income, said plainly on the entry."""
     notes = []
     emit = qbo_progress.emit
     monkeypatch.setattr(
@@ -329,13 +329,13 @@ def test_a_line_the_import_does_not_bring_is_named_and_posts_plainly(
             emit(action, message, **fields),
         ),
     )
-    bundle = {
+    unknown = {
         "Id": "2",
         "Amount": 20,
-        "DetailType": "GroupLineDetail",
-        "GroupLineDetail": {"GroupItemRef": {"value": "40", "name": "Kit"}},
+        "DetailType": "NewKindLineDetail",
+        "NewKindLineDetail": {},
     }
-    lines = [_line(1, 100, "Catering", "NON"), bundle]
+    lines = [_line(1, 100, "Catering", "NON"), unknown]
     books.invoices(_discounted("161", "1061", lines, 120))
     [(action, message, fields)] = [n for n in notes if n[0] == "note"]
     assert fields == {"level": "warning", "code": "IMPORT_LINES_SHORT"}

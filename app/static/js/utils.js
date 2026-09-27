@@ -1,6 +1,6 @@
 /**
- * Shared formatting + DOM helpers. Negative currency prints
- * parentheses instead of a minus sign — classic accountant move.
+ * Shared formatting + DOM helpers. Negative currency prints with the
+ * minus before the dollar sign ("-$10.00"), as the printed documents do.
  */
 
 function $(sel, parent = document) { return parent.querySelector(sel); }
