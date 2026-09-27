@@ -122,3 +122,17 @@ def test_with_a_payment_off_it_the_next_import_brings_the_change_in(
     invoice = books.invoice("1038")
     assert (invoice.total, invoice.balance_due) == (Decimal("30"), Decimal("30"))
     assert books.balance("1100") == _aging(books) == Decimal("60.00")
+
+
+def test_import_all_carries_the_line_once(books, paid_here, monkeypatch):
+    """POST /api/qbo/import answers with the result of every step: the line
+    both the invoices step and the ledger step give is in it once."""
+    ledger = qbo_ledger_import.import_ledger
+    monkeypatch.setattr(
+        qbo_ledger_import,
+        "import_ledger",
+        lambda db, **kw: ledger(db, start=DAY, end=DAY),
+    )
+    result = qbo_import.import_all(books.db)
+    assert [e["message"] for e in result["errors"]].count(HELD) == 1
+    assert books.balance("1100") == _aging(books) == Decimal("35.00")

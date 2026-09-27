@@ -2442,6 +2442,19 @@ def import_journal_entries(db: Session) -> dict:
 # ============================================================================
 
 
+def _add_errors(errors: list, more: list) -> None:
+    """A step's errors, less any the run has already: a change both the
+    document import and the ledger import leave says so in the same line
+    (qbo_documents.paid_past_new_total), which the result carries once, as
+    the run's log does."""
+    seen = {(e.get("entity"), e.get("qbo_id"), e.get("message")) for e in errors}
+    for error in more:
+        key = (error.get("entity"), error.get("qbo_id"), error.get("message"))
+        if key not in seen:
+            seen.add(key)
+            errors.append(error)
+
+
 def import_all(db: Session) -> dict:
     """Import all entity types from QBO in dependency order.
 
@@ -2463,42 +2476,42 @@ def import_all(db: Session) -> dict:
     # 1. Accounts first (items reference income/expense accounts)
     r = import_accounts(db)
     result["accounts"] = r["imported"]
-    result["errors"].extend(r["errors"])
+    _add_errors(result["errors"], r["errors"])
 
     # 2. Customers (invoices + payments reference customers)
     r = import_customers(db)
     result["customers"] = r["imported"]
-    result["errors"].extend(r["errors"])
+    _add_errors(result["errors"], r["errors"])
 
     # 3. Vendors
     r = import_vendors(db)
     result["vendors"] = r["imported"]
-    result["errors"].extend(r["errors"])
+    _add_errors(result["errors"], r["errors"])
 
     # 4. Items (invoice lines reference items)
     r = import_items(db)
     result["items"] = r["imported"]
-    result["errors"].extend(r["errors"])
+    _add_errors(result["errors"], r["errors"])
 
     # 5. Invoices (payments reference invoices)
     r = import_invoices(db)
     result["invoices"] = r["imported"]
-    result["errors"].extend(r["errors"])
+    _add_errors(result["errors"], r["errors"])
 
     # 6. Payments
     r = import_payments(db)
     result["payments"] = r["imported"]
-    result["errors"].extend(r["errors"])
+    _add_errors(result["errors"], r["errors"])
 
     # 7. Sales receipts (self-contained invoice + payment pairs)
     r = import_sales_receipts(db)
     result["sales_receipts"] = r["imported"]
-    result["errors"].extend(r["errors"])
+    _add_errors(result["errors"], r["errors"])
 
     # 8. Query journals directly so report failures cannot hide them.
     r = import_journal_entries(db)
     result["journal_entries"] = r["imported"]
-    result["errors"].extend(r["errors"])
+    _add_errors(result["errors"], r["errors"])
 
     # 9. Post all QBO financial activity after the chart is mapped. These
     # report postings also cover the documents above; they must be posted once.
@@ -2506,7 +2519,7 @@ def import_all(db: Session) -> dict:
 
     r = import_ledger(db)
     result["ledger"] = r["imported"]
-    result["errors"].extend(r["errors"])
+    _add_errors(result["errors"], r["errors"])
 
     db.commit()
     return result
