@@ -29,6 +29,21 @@ def test_rejects_unknown_entity_type(client, seed_accounts):
 
 
 def test_rejects_path_traversal_filename(client, seed_accounts):
+    from pathlib import Path
+
+    from app.services import storage
+
+    # A checkout whose suite ran before 2.18 still has that era's files in
+    # app/static/uploads: what matters is that this upload writes none.
+    app_static = Path(__file__).resolve().parents[1] / "app" / "static"
+    roots = (storage.files_root(), app_static)
+
+    def on_disk():
+        return {
+            f: f.stat().st_mtime_ns for root in roots for f in root.rglob("secret.pdf")
+        }
+
+    before = on_disk()
     # Path(...).name strips directory prefixes; this verifies the fallback still holds.
     r = _upload(client, "invoice", 1, "../../secret.pdf")
     # Either the filename gets stripped to "secret.pdf" and accepted,
@@ -37,14 +52,7 @@ def test_rejects_path_traversal_filename(client, seed_accounts):
     assert r.status_code in (201, 400)
     if r.status_code == 201:
         assert r.json()["filename"] == "secret.pdf"
-
-    from pathlib import Path
-
-    from app.services import storage
-
-    app_static = Path(__file__).resolve().parents[1] / "app" / "static"
-    for root in (storage.files_root(), app_static):
-        assert not list(root.rglob("secret.pdf")), root
+    assert on_disk() == before
 
 
 def test_rejects_disallowed_mime(client, seed_accounts):
