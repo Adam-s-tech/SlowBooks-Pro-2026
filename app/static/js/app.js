@@ -205,14 +205,57 @@ const App = {
         }
     },
 
+    // What a read-only sign-in can't do, named by the page method a button
+    // calls: the server refuses every one ("Your role doesn't allow this
+    // action"), so the button isn't shown (skytech W-L17, 2.18.0 gate: a
+    // read-only sign-in still saw Edit, Mark Sent, Void, Duplicate and
+    // Upload on an invoice). Opening a record's form stays: it opens locked,
+    // with the read-only note, and for some records it is the only view.
+    // Reads stay too: View, Print, Save PDF, reports and IIF/CSV exports.
+    WRITE_ACTIONS: new Set([
+        'InvoicesPage.void', 'InvoicesPage.markSent', 'InvoicesPage.duplicate', 'InvoicesPage.uploadAttachment',
+        'InvoicesPage.deleteAttachment', 'InvoicesPage.showApplyCredit', 'InvoicesPage.showWriteOff',
+        'InvoicesPage.emailInvoice', 'InvoicesPage.copyPaymentLink', 'InvoicesPage.checkPaymentStatus',
+        'EstimatesPage.convert', 'SalesReceiptsPage.void', 'CreditMemosPage.void', 'CreditMemosPage.showApply',
+        'CreditMemosPage.doApply', 'PaymentsPage.void', 'PaymentsPage.showApplyCredit', 'DepositsPage.voidDeposit',
+        'DepositsPage.makeDeposit', 'BillsPage.void', 'BillsPage.voidBillPayment', 'BillsPage.uploadAttachment',
+        'BillsPage.deleteAttachment', 'BillsPage.showPayForm', 'VendorCreditsPage.void', 'VendorCreditsPage.showApply',
+        'VendorCreditsPage.doApply', 'PurchaseOrdersPage.convertToBill', 'PurchaseOrdersPage.doConvert',
+        'ExpensesPage.void', 'ExpensesPage.uploadAttachment', 'ExpensesPage.deleteAttachment', 'CCChargesPage.voidCharge',
+        'JournalPage.void', 'JobCostsPage.voidEntry', 'JobCostsPage.showAllocate', 'JobsPage.postTime', 'JobsPage.remove',
+        'JobsPage.saveBudget', 'JobsPage.seedBudget', 'InKindPage.voidEntry', 'ReleasesPage.voidEntry',
+        'AllocationsPage.voidEntry', 'AllocationsPage.deleteRule', 'AllocationsPage.showRun', 'RecurringPage.generateNow',
+        'RecurringPage.del', 'ResellerPermitsPage.del', 'ResellerPermitsPage.verifyWorkflow', 'TimeEntriesPage.approve',
+        'TimeEntriesPage.reject', 'PayrollPage.process', 'PTOPage.approveRequest', 'PTOPage.rejectRequest',
+        'PTOPage.runAccrual', 'PTOPage.revalue', 'DeductionsPage.endGarnishment', 'BenefitsPage.endEnrollment',
+        'BenefitsPage.retireCode', 'BenefitsPage.seedStandard', 'BenefitsPage.setupAccounts', 'BenefitsPage.rebuildYTD',
+        'BenefitsPage.createRemittanceBill', 'BenefitsPage.deleteRate', 'BenefitsPage.deleteGroup',
+        'OnboardingPage.completeTask', 'FixedAssetsPage.showPostPurchaseForm', 'FixedAssetsPage.showDisposeForm',
+        'FixedAssetsPage.showDepreciationForm', 'FixedAssetsPage.showImportForm', 'ItemsPage.showAdjust',
+        'BankingPage.voidEntry', 'BankingPage.voidTransfer', 'BankingPage.showEntryForm', 'BankingPage.showTransferForm',
+        'BankingPage.showAccountForm', 'BankingPage.showOFXImport', 'BankingPage.confirmOFXImport', 'BankingPage.startReconcile',
+        'BankingPage.finishReconcile', 'BankingPage.abandonReconcile', 'BankingPage.matchLine', 'BankingPage.showMatch',
+        'BankingPage.excludeLine', 'BankingPage.findMatches', 'BankingPage.addAll', 'BankingPage.postLegacy',
+        'BankingPage.dismissLegacy', 'BankingPage.syncSimpleFIN', 'BankingPage.disconnectSimpleFIN',
+        'BankingPage.showSimpleFINHistory', 'BankRulesPage.deleteRule', 'BankRulesPage.applyAll', 'TaxPage.showPaySalesTax',
+        'ReportsPage.sendCollectionLetters', 'ReportsPage.batchEmailStatements', 'ReportsPage.emailGivingStatements',
+        'ReportsPage.applyLateFees', 'ReportsPage.deleteSaved', 'QBOPage.importAll', 'QBOPage.importSelected',
+        'QBOPage.exportAll', 'QBOPage.exportSelected', 'QBOPage.connect', 'QBOPage.disconnect', 'IIFPage.importFile',
+        'IIFPage.importQbReportCsv', 'MigrationPage.doImport', 'OpeningBalancesPage.save', 'BudgetsPage.saveAll',
+    ]),
+
     // "+ New Invoice", "+ Record Payment", "New Account": a create button is
-    // labelled "+ …", or is the page header's primary action.
+    // labelled "+ …", or is the page header's primary action; and every
+    // button that calls one of WRITE_ACTIONS.
     hideWriteControls(root) {
         if (!root || !App.isReadOnly()) return;
         root.querySelectorAll('button, a.btn').forEach(el => {
             const label = (el.textContent || '').trim();
             const headerAction = el.classList.contains('btn-primary') && el.closest('.page-header');
-            if (label.startsWith('+') || headerAction) el.classList.add('hidden');
+            const call = /^\s*(\w+Page\.\w+)\(/.exec(el.getAttribute('onclick') || '');
+            if (label.startsWith('+') || headerAction || (call && App.WRITE_ACTIONS.has(call[1]))) {
+                el.classList.add('hidden');
+            }
         });
     },
 
