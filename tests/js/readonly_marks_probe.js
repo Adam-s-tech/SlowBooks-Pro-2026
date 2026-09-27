@@ -1,7 +1,8 @@
 // app.js's read-only pass on a fake page (2.18.0 gate, W-L17 leftovers):
 // what data-write, a file chooser, a page's own form and a dialog that fills
-// in later come to for a read-only sign-in, and for an admin. Elements are a
-// small tree with just the selectors app.js asks for. Prints one JSON object.
+// in later come to for a read-only sign-in, and for an admin; and the
+// administrator's pages (Payroll, HR) opened by address. Elements are a small
+// tree with just the selectors app.js asks for. Prints one JSON object.
 const fs = require('fs'), vm = require('vm');
 
 function matchOne(el, sel) {
@@ -87,6 +88,7 @@ class FakeObserver {
 
 let hash = '#/';
 const pageBox = { innerHTML: '' };
+const rendered = [];
 const ctx = {
   console, setTimeout, clearTimeout, Promise, JSON, Date,
   setInterval: () => 0,
@@ -108,6 +110,7 @@ const ctx = {
   closeModal: () => {},
   T: s => s,
   Terms: { isNonprofit: () => false },
+  PayrollPage: { render: async () => { rendered.push('payroll'); return '<payroll>'; } },
 };
 ctx.window = { addEventListener() {} };
 vm.createContext(ctx);
@@ -154,5 +157,21 @@ const state = () => ({
   observerCallback([]);
   out.late_dialog = { late_fees_hidden: lateFees.hidden, letters_hidden: letters.hidden };
 
+  // Payroll by its address: the administrator's page
+  await App.navigate('#/payroll');
+  out.payroll_readonly = { says: pageBox.innerHTML.includes('Payroll is for administrators'), rendered: rendered.slice() };
+  App.role = 'admin';
+  await App.navigate('#/payroll');
+  out.payroll_admin = { rendered: rendered.slice(), page: pageBox.innerHTML };
+
+  // the first page, Payroll by its address, is still loading when the role
+  // arrives (auth status answers after it): the page loaded is not shown
+  let release;
+  ctx.PayrollPage.render = () => new Promise(done => { release = () => done('<payroll>'); });
+  const loading = App.navigate('#/payroll');
+  App.role = 'readonly';
+  release();
+  await loading;
+  out.payroll_role_arrives_late = pageBox.innerHTML.includes('Payroll is for administrators');
   console.log(JSON.stringify(out));
 })().catch(err => { console.error(err); process.exit(1); });

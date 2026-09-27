@@ -173,3 +173,8 @@ def test_a_read_only_sign_in_on_a_fake_page():
     # opens is cleaned too
     assert got["observed"] == ["page-content", "modal-body"]
     assert got["late_dialog"] == {"late_fees_hidden": True, "letters_hidden": True}
+    # Payroll by its address says whose page it is, and loads nothing
+    assert got["payroll_readonly"] == {"says": True, "rendered": []}
+    assert got["payroll_admin"] == {"rendered": ["payroll"], "page": "<payroll>"}
+    # and when the role arrives while it is still loading, as on a first page
+    assert got["payroll_role_arrives_late"] is True

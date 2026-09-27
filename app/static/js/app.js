@@ -141,13 +141,27 @@ const App = {
             App.setStatus(`${route.label} — nonprofit companies only`);
             return;
         }
+        // Payroll and HR are the administrator's: the server refuses them to
+        // every other role, reads included, and the sidebar leaves them out.
+        // A bookmark or a typed address still opened them half loaded, on
+        // buttons that answered 403; a read-only user's View Checklist even
+        // tried to set up a checklist (2.18.0 gate, W-L17 leftovers). The
+        // role can arrive while the first page loads: asked again after.
+        const adminOnly = () => App.ADMIN_ONLY_PAGES.includes(route.page) && App.role !== 'admin';
+        const showAdminOnly = () => {
+            $('#page-content').innerHTML = App._adminOnlyHtml(route.label);
+            App.setStatus(`${route.label} — administrators only`);
+        };
+        if (adminOnly()) return showAdminOnly();
 
         try {
             const html = await route.render(param);
+            if (adminOnly()) return showAdminOnly();
             $('#page-content').innerHTML = html;
             App.setStatus(`${route.label} — Ready`);
             if (route.mount) App._pageCleanup = route.mount();
         } catch (err) {
+            if (adminOnly()) return showAdminOnly();
             // Server-side detail (err.message and stack) goes to console
             // for devs; the DOM gets a clean user-facing error with a
             // recovery action. Avoid leaking framework internals into
@@ -176,6 +190,17 @@ const App = {
         </div>`;
     },
 
+    _adminOnlyHtml(label) {
+        return `<div class="empty-state">
+            <h3>${escapeHtml(label)} is for administrators</h3>
+            <p>Payroll and staff records open to an administrator's sign-in only.
+               An administrator can change your role under Settings → Users.</p>
+            <p style="margin-top:12px;">
+                <a href="#/" class="btn btn-secondary">Return to Dashboard</a>
+            </p>
+        </div>`;
+    },
+
     // ---- Read-only sign-ins (Server Edition) -------------------------------
     // The server refuses every write from the readonly role with a 403 —
     // that stays the enforcement. But every page offered "+ New", and a
@@ -192,6 +217,11 @@ const App = {
     setRole(role) {
         App.role = role || 'admin';
         document.body.classList.toggle('role-readonly', App.isReadOnly());
+        // the first page can open before the role is known
+        const open = document.querySelector('#sidebar .nav-link.active');
+        if (App.role !== 'admin' && open && App.ADMIN_ONLY_PAGES.includes(open.dataset.page)) {
+            App.navigate(location.hash);
+        }
         const page = document.getElementById('page-content');
         if (!App.isReadOnly() || !page) return;
         // the toolbar's shortcuts to new documents, and batch entry
