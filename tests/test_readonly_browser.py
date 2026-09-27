@@ -415,12 +415,21 @@ def _reads(controls):
     return {c["key"] for c in controls if not c["why"] and not c["beside_view"]}
 
 
+# Reads that are the administrator's alone: a backup is the whole company,
+# password hashes and payroll records included (the server refuses the rest).
+ADMIN_ONLY_READS = ("/api/backups/download/",)
+
+
 def _lost_reads(admin, reader):
     """The reads the admin is offered that the read-only user is not."""
     out = {}
     for where, controls in admin.items():
         shown = {c["key"] for c in reader.get(where, [])}
-        lost = sorted(_reads(controls) - shown)
+        lost = sorted(
+            k
+            for k in _reads(controls) - shown
+            if not any(ref in str(k) for ref in ADMIN_ONLY_READS)
+        )
         if lost:
             out[where] = lost
     return out

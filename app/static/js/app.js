@@ -227,8 +227,12 @@ const App = {
         // the toolbar's shortcuts to new documents, and batch entry
         document.querySelectorAll('#topbar .tb-btn[data-action], #topbar .tb-btn[data-nav="#/quick-entry"]')
             .forEach(b => b.classList.add('hidden'));
-        // the sidebar's pages that only enter things (Batch Payments...)
+        // the sidebar's pages that only enter things (Batch Payments...),
+        // and the Audit Log, which the server refuses this role
         App.hideWriteControls(document.getElementById('sidebar'));
+        document.querySelectorAll('#sidebar a[href="#/audit"]').forEach(l => {
+            (l.closest('li') || l).classList.add('hidden');
+        });
         const roots = [page, document.getElementById('modal-body')].filter(Boolean);
         roots.forEach(App.readOnlyPass);
         if (!App._roObserver) {
@@ -973,6 +977,11 @@ const App = {
             if (e.ctrlKey && e.key === 's') {
                 const modalForm = document.querySelector('#modal-body form');
                 if (modalForm) { modalForm.requestSubmit(); e.preventDefault(); }
+            }
+            // Alt+N / Alt+P / Alt+Q start new entries: a read-only sign-in is
+            // told why nothing opens, rather than handed a blank locked form
+            if (e.altKey && ['n', 'p', 'q'].includes(e.key) && App.isReadOnly()) {
+                toast(App.READ_ONLY_MESSAGE, 'info'); e.preventDefault(); return;
             }
             // Alt+N: new invoice
             if (e.altKey && e.key === 'n') { InvoicesPage.showForm(); e.preventDefault(); }

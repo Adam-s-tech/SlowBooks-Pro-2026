@@ -6,13 +6,14 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from app.schemas.common import StrictModel
 from typing import Optional
 
 from app.database import get_db
+from app.routes._roles import require_admin
 from app.services import backup_service
 from app.services.backup_service import (
     PRE_RESTORE_TAG,
@@ -68,7 +69,12 @@ def _company_backup_path(db: Session, filename: str):
 
 
 @router.get("/download/{filename}")
-def download_backup(filename: str, db: Session = Depends(get_db)):
+def download_backup(filename: str, request: Request, db: Session = Depends(get_db)):
+    # A backup is the whole company: every record, the sign-ins' password
+    # hashes, the encrypted keys, and the payroll and HR records only an
+    # administrator may read. Any role could download it (2.18.0 gate: a
+    # read-only sign-in took the whole database).
+    require_admin(request)
     filepath = _company_backup_path(db, filename)
     return FileResponse(
         str(filepath), filename=filepath.name, media_type="application/octet-stream"

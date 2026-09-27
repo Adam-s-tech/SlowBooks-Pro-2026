@@ -4,6 +4,13 @@
  * for company name and tax rate.
  */
 const SettingsPage = {
+    // A backup is the whole company, password hashes and payroll records
+    // included: only an administrator downloads one (the server refuses
+    // the rest).
+    _isAdmin() {
+        return typeof App === 'undefined' || !App.role || App.role === 'admin';
+    },
+
     // The default tax rate as the field can hold it: up to four decimals. A
     // default saved before 2.18 with more would fail the field's step and
     // hold back Save Settings for the whole page; it shows (and saves)
@@ -975,7 +982,7 @@ const SettingsPage = {
                     <td>${(b.file_size / 1024).toFixed(1)} KB</td>
                     <td>${escapeHtml(SettingsPage._when(b.created_at))}</td>
                     <td class="actions">
-                        <a href="/api/backups/download/${encodeURIComponent(b.filename)}" class="btn btn-sm btn-secondary" download>Download</a>
+                        ${SettingsPage._isAdmin() ? `<a href="/api/backups/download/${encodeURIComponent(b.filename)}" class="btn btn-sm btn-secondary" download>Download</a>` : ''}
                         <button type="button" class="btn btn-sm btn-secondary" data-write data-filename="${escapeHtml(b.filename)}"
                             onclick="SettingsPage.confirmRestore(this.dataset.filename)">Restore…</button>
                     </td>
