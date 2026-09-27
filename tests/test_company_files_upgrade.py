@@ -51,6 +51,20 @@ LOGO = b"\x89PNG\r\n\x1a\nthe-shared-logo"
 OUTSIDE = b"a file outside the uploads folder"
 
 
+def _sign_in_here(Session) -> None:
+    """Opening another company file is signing in to it: a sign-in belongs
+    to the company it was made in (app/services/auth.py). The file takes the
+    id the client's session was signed in with, so the session stays good
+    here, as it would after signing in."""
+    from app.services import auth as auth_service
+    from app.services.settings_service import set_setting
+
+    signed_in_to = auth_service._company_id()
+    with Session() as s:
+        set_setting(s, "company_session_id", signed_in_to)
+        s.commit()
+
+
 def _cfg(url: str) -> Config:
     cfg = Config(str(ROOT / "alembic.ini"))
     cfg.set_main_option("script_location", str(ROOT / "migrations"))
@@ -419,6 +433,7 @@ def upgraded(tmp_path, shared_folder, client, monkeypatch):
         finally:
             session.close()
 
+    _sign_in_here(Session)
     app.dependency_overrides[get_db] = override
     monkeypatch.setattr(db_module, "SessionLocal", Session)
     yield
@@ -480,6 +495,7 @@ def test_the_app_keeps_and_serves_files_on_postgresql(
         finally:
             session.close()
 
+    _sign_in_here(Session)
     app.dependency_overrides[get_db] = override
     monkeypatch.setattr(db_module, "SessionLocal", Session)
     try:
