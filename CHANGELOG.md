@@ -155,6 +155,13 @@ from the rates and puts the rounding difference on line 7.
   is refused.
 - A counter sale needs no customer (Walk-in Customer). Unit prices take four
   decimal places. Saving past a customer's credit limit asks first.
+- **Tax rates take four decimal places** — New York City's 8.875%, or
+  7.0625% — on every document and in Settings, and are kept exactly: the
+  forms took two, and a rate was stored to four places of the fraction, so
+  8.875% became 8.88% ($88.80 on $1,000 instead of $88.75). The forms now
+  work tax out to the cent exactly as the server saves it (a purchase
+  order at 8.25% on $102.00 showed $8.41 and saved $8.42), and a purchase
+  order whose only change is its rate re-totals.
 
 #### Customers, payments and statements
 
@@ -344,6 +351,9 @@ from the rates and puts the rounding difference on line 7.
   `{"history_months": 1-24}`. 538 operations.
 - Income by Customer `total_sales` excludes tax (new `total_tax`);
   `/api/checks/print` takes `bill_payment_id` only.
+- A document `tax_rate` is a fraction kept to six places (8.875% is
+  0.08875) and comes back that way; a NaN or Infinity anywhere in a request
+  is a 422, not a 500.
 - `GET /api/invoices` and `GET /api/bills` take `open_only=true` (what can
   still be paid or credited, filtered on the server; page with `skip`).
 - `GET /api/auth/status` has `desktop`; `GET /api/system` has
@@ -370,6 +380,10 @@ from the rates and puts the rounding difference on line 7.
   partly deposited batch.
 - Total Receivables on the dashboard is the A/R Aging total as of today, so
   an invoice dated in the future isn't in it until its date.
+- A tax rate with more than two decimals sent through the API before 2.18
+  was stored rounded to four places of the fraction on PostgreSQL; those
+  documents keep the rounded rate (SQLite files kept the full rate, and it
+  now reads back as sent).
 
 #### For developers
 
@@ -379,10 +393,10 @@ from the rates and puts the rounding difference on line 7.
 
 #### Schema
 
-Three migrations: sales line prices to four places, deposits remember their
+Four migrations: sales line prices to four places, deposits remember their
 payments, purchase and item prices to four places (which also gives old
-PO-made bills their due dates). An existing company file upgrades when it
-opens.
+PO-made bills their due dates), and document tax rates to four places of a
+percent. An existing company file upgrades when it opens.
 
 ### v2.17.3 — Payments land on the right account
 

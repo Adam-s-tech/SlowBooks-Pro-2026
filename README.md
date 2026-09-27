@@ -64,7 +64,9 @@ invoices can be paid from the screen, and backups are kept and restored per
 company. It also brings @Sciumo's QuickBooks Online import of journal
 entries and posted ledger activity, with a live import log (#192), a switch
 for the company logo on invoices, and **Fetch older history** for SimpleFIN
-bank feeds — up to a year where the provider keeps it (#181).
+bank feeds — up to a year where the provider keeps it (#181). Tax rates take
+four decimal places (8.875%), and the payment screens see every open invoice
+and bill, not just the newest 500 (#191).
 
 **v2.17 — Your ledger, in a spreadsheet.** Trial Balance and General Ledger
 save as a CSV and a printable PDF, and Profit & Loss and Balance Sheet gain
