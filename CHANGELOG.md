@@ -249,7 +249,10 @@ from the rates and puts the rounding difference on line 7.
   it).
 - A read-only sign-in isn't offered what it can't do: Edit, Mark Sent,
   Void, Duplicate, Upload and every other write action are hidden for it
-  on pages and in dialogs, where the server refused them.
+  on pages and in dialogs, where the server refused them; and it can read
+  an invoice's payment link but no longer makes one.
+- A disabled button looks disabled (it drew at full colour and did
+  nothing), and the QuickBooks Online page says why Import is unavailable.
 
 #### Import, export, lists and search
 
