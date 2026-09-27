@@ -5,9 +5,10 @@ sweeps them; nothing swept a dialog. Every dialog the app opens is swept
 here, whole, in the light and the dark theme, opened on books with
 something in them (the same company as the page sweep): the forms (New and
 Edit Invoice, Receive Payment, Enter Bill, Pay Bills, New Customer...), the
-documents' own views, the reports, the settings dialogs; and a nonprofit's
-own pages and dialogs, on the same books switched to nonprofit. Same sweep,
-same thresholds.
+documents' own views, the reports, the settings dialogs; a nonprofit's own
+pages and dialogs, on the same books switched to nonprofit; and the
+closing-date password prompt, the sign-in and first-run setup screens, and
+the desktop app's PDF window. Same sweep, same thresholds.
 
 Skipped, as one module, where playwright or its Chromium is not installed.
 """
@@ -388,3 +389,104 @@ def test_a_nonprofits_pages_and_dialogs_meet_aa_in_both_themes(
     texts = {it["text"] for items in swept.values() for it in items}
     assert {"+ New Donor", "+ In-Kind Gift", "IK-0001"} <= texts
     assert below_threshold({**swept, **dialogs}) == []
+
+
+# /api/auth/status as the sign-in screen reads it, for each screen it draws
+SIGN_IN_SCREENS = {
+    "sign-in, the desktop app": {
+        "authenticated": False,
+        "setup_needed": False,
+        "multi_user": False,
+        "desktop": True,
+        "company_name": "Harbor Light Bakery",
+    },
+    "sign-in, several users": {
+        "authenticated": False,
+        "setup_needed": False,
+        "multi_user": True,
+        "usernames": ["lena", "jonah"],
+        "company_name": "Harbor Light Bakery",
+    },
+    "setup, a new company": {
+        "authenticated": False,
+        "setup_needed": True,
+        "company_name": "",
+    },
+    "setup, a file that has books": {
+        "authenticated": False,
+        "setup_needed": True,
+        "has_data": True,
+        "company_name": "Harbor Light Bakery",
+    },
+}
+CLOSING_PROMPT = "document.querySelector('[aria-labelledby=\"closing-pw-title\"]')"
+
+
+def test_the_sign_in_screens_and_the_closing_date_prompt_meet_aa(browser, client):
+    served = dict(SERVED)
+    page, handled = _open(browser, client, served)
+    swept = {}
+    try:
+        # the closing-date password prompt, after a wrong password
+        page.evaluate(
+            """() => { API.askClosingDatePassword('This invoice is dated Jun 30, 2026, '
+                + 'in a closed period (the books are closed through Jul 31, 2026).', true); }"""
+        )
+        page.wait_for_function(f"() => !!{CLOSING_PROMPT}")
+        for theme in ("light", "dark"):
+            _theme(page, theme)
+            swept[(theme, "closing-date prompt")] = page.evaluate(
+                sweep_of(CLOSING_PROMPT)
+            )
+        page.keyboard.press("Escape")
+        # the sign-in and setup screens, each with an error showing
+        for name, status in SIGN_IN_SCREENS.items():
+            served["/api/auth/status"] = status
+            page.evaluate(
+                """async () => { const o = document.getElementById('auth-overlay');
+                                 if (o) o.remove();
+                                 await SlowbooksAuth.promptAuth(); }"""
+            )
+            page.wait_for_selector("#auth-overlay #auth-error", state="attached")
+            page.evaluate("""() => { document.getElementById('auth-error').textContent =
+                           'That password is not correct. Try again.'; }""")
+            for theme in ("light", "dark"):
+                _theme(page, theme)
+                swept[(theme, name)] = page.evaluate(
+                    sweep_of("document.getElementById('auth-overlay')")
+                )
+    finally:
+        page.close()
+    assert all(swept.values()) and len(swept) == 2 * (1 + len(SIGN_IN_SCREENS))
+    texts = {it["text"] for items in swept.values() for it in items}
+    assert {"Choose a different company →", "Who is signing in?"} <= texts
+    assert below_threshold(swept) == []
+
+
+def test_the_pdf_window_meets_aa_in_both_colour_schemes(browser):
+    """The desktop app's PDF window (desktop_launcher._VIEWER_PAGE) follows
+    the system's light or dark setting, not the app's theme."""
+    import desktop_launcher
+
+    html = desktop_launcher._VIEWER_PAGE.substitute(
+        title="Invoice 1002",
+        name="Invoice_1002.pdf",
+        path="/Users/lena/Documents/SlowBooks Pro/Documents/Invoice_1002.pdf",
+        where="/Users/lena/Documents/SlowBooks Pro/Documents",
+        src="about:blank",
+        open_label="Open in Preview",
+    )
+    page = browser.new_page(viewport={"width": 1100, "height": 700})
+    swept = {}
+    try:
+        page.set_content(html)
+        page.evaluate("""() => { document.getElementById('note').textContent =
+                       'Not available in this window.'; }""")
+        for scheme in ("light", "dark"):
+            page.emulate_media(color_scheme=scheme)
+            swept[(scheme, "PDF window")] = page.evaluate(PAGE_SWEEP)
+    finally:
+        page.close()
+    texts = {it["text"] for items in swept.values() for it in items}
+    assert {"Invoice_1002.pdf", "Show in folder"} <= texts
+    assert below_threshold(swept) == []

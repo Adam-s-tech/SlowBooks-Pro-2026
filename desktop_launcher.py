@@ -885,7 +885,8 @@ _VIEWER_PAGE = Template("""<!DOCTYPE html>
   .bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px;
          background: #f3f4f6; color: #1f2937; border-bottom: 1px solid #c9ced6; }
   .name { font-weight: 600; white-space: nowrap; }
-  .where { flex: 1; min-width: 0; color: #6b7280; white-space: nowrap;
+  /* where the file was saved: #6b7280 was 4.39:1 on the light bar */
+  .where { flex: 1; min-width: 0; color: #686f7d; white-space: nowrap;
            overflow: hidden; text-overflow: ellipsis; }
   .note { color: #b91c1c; }
   button { font: inherit; padding: 4px 10px; border: 1px solid #9aa3af;

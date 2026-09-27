@@ -94,7 +94,7 @@
     function sectionHeader(text) {
         return (
             '<div style="margin:18px 0 4px;padding-bottom:4px;border-bottom:1px solid #eee;' +
-            'font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:#888;font-weight:700;">' +
+            'font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:#767676;font-weight:700;">' +
             text +
             "</div>"
         );
@@ -423,7 +423,7 @@
             '<div id="auth-error" style="' +
             errorBoxStyle() +
             '"></div>' +
-            '<p style="margin:14px 0 0;color:#777;font-size:12px;line-height:1.5;text-align:center;">' +
+            '<p style="margin:14px 0 0;color:#767676;font-size:12px;line-height:1.5;text-align:center;">' +
             "You can add your address, phone, tax ID, payment defaults, " +
             "and integrations in Settings after you sign in." +
             "</p>" +
