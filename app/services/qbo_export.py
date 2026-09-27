@@ -2,15 +2,25 @@
 # QBO Export Service — Push data from Slowbooks to QuickBooks Online
 #
 # Export order follows the same dependency chain as import:
-#   accounts -> customers -> vendors -> items -> invoices -> payments
+#   accounts -> customers -> vendors -> items -> invoices (and sales
+#   receipts) -> payments
 #
-# For each entity: check qbo_mappings for existing QBO record ->
-# if mapped, skip (v1 doesn't update) -> if not mapped, create in QBO ->
-# record mapping with returned QBO ID + SyncToken.
+# Each record goes the first time as a new QBO record; its mapping is marked
+# as the export's own ("sent:" + a fingerprint of what went). Later exports
+# send it again as an update to the same QBO record when it changed here
+# since (its fingerprint differs; QBO's current copy is read first, for its
+# SyncToken and the fields SlowBooks doesn't keep), void it in QBO when it
+# was voided here, and leave it when nothing changed. A record the import
+# brought in from QBO (or matched to one) is QBO's and is never touched, nor
+# is one an earlier release sent, whose mapping can't be told from those.
+# What QBO refuses goes in the result's notes, in words; the rest carries on.
 # ============================================================================
 
-
+from datetime import datetime, timezone
 from decimal import Decimal
+from hashlib import sha256
+import json
+import logging
 
 from sqlalchemy.orm import Session
 
@@ -18,7 +28,7 @@ from app.models.accounts import Account, AccountType
 from app.models.contacts import Customer, Vendor
 from app.models.items import Item
 from app.models.invoices import Invoice, InvoiceLine, InvoiceStatus
-from app.models.payments import Payment, PaymentAllocation
+from app.models.payments import Payment
 from app.services.qbo_common import (
     ACCOUNT_TYPE_TO_QBO,
     ITEM_TYPE_TO_QBO,
@@ -28,60 +38,190 @@ from app.services.qbo_common import (
     get_mapping_by_slowbooks_id,
 )
 from app.services.qbo_service import get_qbo_client
-
-# ============================================================================
 from app.services.safe_errors import safe_message
 
+logger = logging.getLogger(__name__)
+
+# A mapping the export made: "sent:" and the fingerprint of what went, or
+# SENT_VOID once the record is voided in QBO too.
+SENT = "sent:"
+SENT_VOID = "sent:void"
+
+
+class _NotReady(Exception):
+    """A record that can't go yet (its customer isn't in QBO), in words."""
+
+
+def _result() -> dict:
+    return {"exported": 0, "updated": 0, "voided": 0, "errors": [], "notes": []}
+
+
+def _mark(fields: dict) -> str:
+    """The mapping's mark for what goes: "sent:" and a fingerprint of the
+    fields, so a record whose fields are the same is never sent again."""
+    text = json.dumps(fields, sort_keys=True, default=str)
+    return SENT + sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+def _apply(obj, fields: dict):
+    """Set the fields SlowBooks keeps on a QBO record, new or read from QBO;
+    None clears a field (the SDK leaves it out, and a full update clears
+    what it leaves out)."""
+    for key, value in fields.items():
+        setattr(obj, key, value)
+    return obj
+
+
+def _ours(mapping) -> bool:
+    return mapping is not None and (mapping.qbo_sync_token or "").startswith(SENT)
+
+
+def _refusal(exc) -> str:
+    """Why QBO refused a change, in its own words and with its error code;
+    anything else is ours, and says only what may be said."""
+    from quickbooks.exceptions import QuickbooksException
+
+    if isinstance(exc, QuickbooksException):
+        logger.warning("QBO refused an export change: %s", exc)
+        words = " ".join(str(exc.detail or exc.message or "").split())[:300]
+        code = f" (QuickBooks Online error {exc.error_code})" if exc.error_code else ""
+        return (words or "it gave no reason") + code
+    return safe_message(exc, "QBO export")
+
+
+def _note(result, entity, local_id, message) -> None:
+    result["notes"].append({"entity": entity, "id": local_id, "message": message})
+
+
+def _send(db, client, result, kind, local_id, label, qbo_class, fields, notes=()):
+    """Send one record: create it in QBO the first time; update the same QBO
+    record when it changed here since it went; leave it when it didn't, and
+    leave one that isn't the export's own (QBO's, or sent by an earlier
+    release). `notes` are the record's own notes, given when it goes."""
+    mapping = get_mapping_by_slowbooks_id(db, kind, local_id)
+    mark = _mark(fields)
+    if mapping is None:
+        saved = _apply(qbo_class(), fields).save(qb=client)
+        create_mapping(db, kind, local_id, saved.Id, mark)
+        result["exported"] += 1
+        result["notes"].extend(notes)
+        return
+    if not _ours(mapping) or mapping.qbo_sync_token in (mark, SENT_VOID):
+        return
+    try:
+        current = qbo_class.get(mapping.qbo_id, qb=client)
+        _apply(current, fields).save(qb=client)
+    except Exception as exc:
+        _note(
+            result,
+            kind,
+            local_id,
+            f"{label} changed here since it went to QuickBooks Online, but "
+            f"QuickBooks Online refused the update: {_refusal(exc)}. It is as it "
+            "went there, and the next export tries again.",
+        )
+        return
+    mapping.qbo_sync_token = mark
+    mapping.last_synced_at = datetime.now(timezone.utc)
+    result["updated"] += 1
+    result["notes"].extend(notes)
+
+
+def _void(db, client, result, kind, local_id, label, qbo_class) -> None:
+    """A record voided here after it went: void it in QBO too, once. One
+    that never went stays out; one that isn't the export's own is left."""
+    mapping = get_mapping_by_slowbooks_id(db, kind, local_id)
+    if not _ours(mapping) or mapping.qbo_sync_token == SENT_VOID:
+        return
+    try:
+        qbo_class.get(mapping.qbo_id, qb=client).void(qb=client)
+    except Exception as exc:
+        _note(
+            result,
+            kind,
+            local_id,
+            f"{label} is voided here, but QuickBooks Online refused to void it: "
+            f"{_refusal(exc)}. It stands there as it went, and the next export "
+            "tries again.",
+        )
+        return
+    mapping.qbo_sync_token = SENT_VOID
+    mapping.last_synced_at = datetime.now(timezone.utc)
+    result["voided"] += 1
+
+
+def _ref(db, kind, local_id):
+    """{"value": QBO id} of a mapped record, or None."""
+    mapping = get_mapping_by_slowbooks_id(db, kind, local_id) if local_id else None
+    return {"value": mapping.qbo_id} if mapping else None
+
+
+def _address(line1, line2, city, state, postal):
+    if not (line1 or city):
+        return None
+    return {
+        "Line1": line1 or "",
+        "Line2": line2 or "",
+        "City": city or "",
+        "CountrySubDivisionCode": state or "",
+        "PostalCode": postal or "",
+    }
+
+
+def _phone(number):
+    return {"FreeFormNumber": number} if number else None
+
+
+# ============================================================================
 # Export functions
 # ============================================================================
 
 
+def _account_fields(db: Session, acct) -> dict:
+    kind, subtype = ACCOUNT_TYPE_TO_QBO.get(
+        acct.account_type, ("Expense", "Other Miscellaneous Service Cost")
+    )
+    parent = _ref(db, "account", acct.parent_id)
+    return {
+        "Name": acct.name,
+        "AccountType": kind,
+        "AccountSubType": subtype,
+        "AcctNum": acct.account_number or None,
+        "Description": acct.description or None,
+        "ParentRef": parent,
+        "SubAccount": True if parent else None,
+        "Active": acct.is_active is not False,
+    }
+
+
 def export_accounts(db: Session) -> dict:
-    """Export Slowbooks accounts to QBO."""
+    """Export Slowbooks accounts to QBO: new ones, and changes to ones the
+    export sent."""
     from quickbooks.objects.account import Account as QBOAccount
 
     client = get_qbo_client(db)
-    exported = 0
-    errors = []
-
-    accounts = db.query(Account).filter(Account.is_active).all()
+    result = _result()
 
     # Sort by parent (null parent_id first)
-    accounts.sort(key=lambda a: (a.parent_id or 0, a.id))
-
+    accounts = sorted(db.query(Account).all(), key=lambda a: (a.parent_id or 0, a.id))
     for acct in accounts:
         try:
-            if get_mapping_by_slowbooks_id(db, "account", acct.id):
-                continue  # Already exported
-
-            type_info = ACCOUNT_TYPE_TO_QBO.get(
-                acct.account_type, ("Expense", "Other Miscellaneous Service Cost")
+            if not acct.is_active and not get_mapping_by_slowbooks_id(
+                db, "account", acct.id
+            ):
+                continue  # an inactive one that never went stays out
+            _send(
+                db,
+                client,
+                result,
+                "account",
+                acct.id,
+                f"Account {acct.name}",
+                QBOAccount,
+                _account_fields(db, acct),
             )
-
-            qbo_acct = QBOAccount()
-            qbo_acct.Name = acct.name
-            qbo_acct.AccountType = type_info[0]
-            qbo_acct.AccountSubType = type_info[1]
-            if acct.account_number:
-                qbo_acct.AcctNum = acct.account_number
-            if acct.description:
-                qbo_acct.Description = acct.description
-
-            # Set parent if mapped
-            if acct.parent_id:
-                parent_map = get_mapping_by_slowbooks_id(db, "account", acct.parent_id)
-                if parent_map:
-                    qbo_acct.ParentRef = {"value": parent_map.qbo_id}
-                    qbo_acct.SubAccount = True
-
-            saved = qbo_acct.save(qb=client)
-            create_mapping(
-                db, "account", acct.id, saved.Id, getattr(saved, "SyncToken", None)
-            )
-            exported += 1
-
         except Exception as e:
-            errors.append(
+            result["errors"].append(
                 {
                     "entity": "account",
                     "id": acct.id,
@@ -90,68 +230,62 @@ def export_accounts(db: Session) -> dict:
                 }
             )
 
-    return {"exported": exported, "errors": errors}
+    return result
+
+
+def _customer_fields(cust) -> dict:
+    return {
+        "DisplayName": cust.name,
+        "CompanyName": cust.company or None,
+        "BillAddr": _address(
+            cust.bill_address1,
+            cust.bill_address2,
+            cust.bill_city,
+            cust.bill_state,
+            cust.bill_zip,
+        ),
+        "ShipAddr": _address(
+            cust.ship_address1,
+            cust.ship_address2,
+            cust.ship_city,
+            cust.ship_state,
+            cust.ship_zip,
+        ),
+        "PrimaryEmailAddr": {"Address": cust.email} if cust.email else None,
+        "PrimaryPhone": _phone(cust.phone),
+        "Mobile": _phone(cust.mobile),
+        "Fax": _phone(cust.fax),
+        "Notes": cust.notes or None,
+        "Active": cust.is_active is not False,
+    }
 
 
 def export_customers(db: Session) -> dict:
-    """Export Slowbooks customers to QBO."""
+    """Export Slowbooks customers to QBO: new ones, and changes to ones the
+    export sent."""
     from quickbooks.objects.customer import Customer as QBOCustomer
 
     client = get_qbo_client(db)
-    exported = 0
-    errors = []
+    result = _result()
 
-    customers = db.query(Customer).filter(Customer.is_active).all()
-
-    for cust in customers:
+    for cust in db.query(Customer).all():
         try:
-            if get_mapping_by_slowbooks_id(db, "customer", cust.id):
+            if not cust.is_active and not get_mapping_by_slowbooks_id(
+                db, "customer", cust.id
+            ):
                 continue
-
-            qbo_cust = QBOCustomer()
-            qbo_cust.DisplayName = cust.name
-            if cust.company:
-                qbo_cust.CompanyName = cust.company
-
-            # Billing address
-            if cust.bill_address1 or cust.bill_city:
-                qbo_cust.BillAddr = {
-                    "Line1": cust.bill_address1 or "",
-                    "Line2": cust.bill_address2 or "",
-                    "City": cust.bill_city or "",
-                    "CountrySubDivisionCode": cust.bill_state or "",
-                    "PostalCode": cust.bill_zip or "",
-                }
-
-            # Shipping address
-            if cust.ship_address1 or cust.ship_city:
-                qbo_cust.ShipAddr = {
-                    "Line1": cust.ship_address1 or "",
-                    "Line2": cust.ship_address2 or "",
-                    "City": cust.ship_city or "",
-                    "CountrySubDivisionCode": cust.ship_state or "",
-                    "PostalCode": cust.ship_zip or "",
-                }
-
-            if cust.email:
-                qbo_cust.PrimaryEmailAddr = {"Address": cust.email}
-            if cust.phone:
-                qbo_cust.PrimaryPhone = {"FreeFormNumber": cust.phone}
-            if cust.mobile:
-                qbo_cust.Mobile = {"FreeFormNumber": cust.mobile}
-            if cust.fax:
-                qbo_cust.Fax = {"FreeFormNumber": cust.fax}
-            if cust.notes:
-                qbo_cust.Notes = cust.notes
-
-            saved = qbo_cust.save(qb=client)
-            create_mapping(
-                db, "customer", cust.id, saved.Id, getattr(saved, "SyncToken", None)
+            _send(
+                db,
+                client,
+                result,
+                "customer",
+                cust.id,
+                f"Customer {cust.name}",
+                QBOCustomer,
+                _customer_fields(cust),
             )
-            exported += 1
-
         except Exception as e:
-            errors.append(
+            result["errors"].append(
                 {
                     "entity": "customer",
                     "id": cust.id,
@@ -160,57 +294,51 @@ def export_customers(db: Session) -> dict:
                 }
             )
 
-    return {"exported": exported, "errors": errors}
+    return result
+
+
+def _vendor_fields(vend) -> dict:
+    return {
+        "DisplayName": vend.name,
+        "CompanyName": vend.company or None,
+        "BillAddr": _address(
+            vend.address1, vend.address2, vend.city, vend.state, vend.zip
+        ),
+        "PrimaryEmailAddr": {"Address": vend.email} if vend.email else None,
+        "PrimaryPhone": _phone(vend.phone),
+        "Fax": _phone(vend.fax),
+        "Notes": vend.notes or None,
+        "AcctNum": vend.account_number or None,
+        "Active": vend.is_active is not False,
+    }
 
 
 def export_vendors(db: Session) -> dict:
-    """Export Slowbooks vendors to QBO."""
+    """Export Slowbooks vendors to QBO: new ones, and changes to ones the
+    export sent."""
     from quickbooks.objects.vendor import Vendor as QBOVendor
 
     client = get_qbo_client(db)
-    exported = 0
-    errors = []
+    result = _result()
 
-    vendors = db.query(Vendor).filter(Vendor.is_active).all()
-
-    for vend in vendors:
+    for vend in db.query(Vendor).all():
         try:
-            if get_mapping_by_slowbooks_id(db, "vendor", vend.id):
+            if not vend.is_active and not get_mapping_by_slowbooks_id(
+                db, "vendor", vend.id
+            ):
                 continue
-
-            qbo_vend = QBOVendor()
-            qbo_vend.DisplayName = vend.name
-            if vend.company:
-                qbo_vend.CompanyName = vend.company
-
-            if vend.address1 or vend.city:
-                qbo_vend.BillAddr = {
-                    "Line1": vend.address1 or "",
-                    "Line2": vend.address2 or "",
-                    "City": vend.city or "",
-                    "CountrySubDivisionCode": vend.state or "",
-                    "PostalCode": vend.zip or "",
-                }
-
-            if vend.email:
-                qbo_vend.PrimaryEmailAddr = {"Address": vend.email}
-            if vend.phone:
-                qbo_vend.PrimaryPhone = {"FreeFormNumber": vend.phone}
-            if vend.fax:
-                qbo_vend.Fax = {"FreeFormNumber": vend.fax}
-            if vend.notes:
-                qbo_vend.Notes = vend.notes
-            if vend.account_number:
-                qbo_vend.AcctNum = vend.account_number
-
-            saved = qbo_vend.save(qb=client)
-            create_mapping(
-                db, "vendor", vend.id, saved.Id, getattr(saved, "SyncToken", None)
+            _send(
+                db,
+                client,
+                result,
+                "vendor",
+                vend.id,
+                f"Vendor {vend.name}",
+                QBOVendor,
+                _vendor_fields(vend),
             )
-            exported += 1
-
         except Exception as e:
-            errors.append(
+            result["errors"].append(
                 {
                     "entity": "vendor",
                     "id": vend.id,
@@ -219,79 +347,58 @@ def export_vendors(db: Session) -> dict:
                 }
             )
 
-    return {"exported": exported, "errors": errors}
+    return result
+
+
+def _item_fields(db: Session, item) -> dict:
+    income = _ref(db, "account", item.income_account_id)
+    if income is None:
+        # QBO requires IncomeAccountRef for Service/NonInventory items:
+        # a default income account in the QBO mappings
+        default_income = (
+            db.query(Account)
+            .filter(Account.account_type == AccountType.INCOME, Account.is_active)
+            .first()
+        )
+        income = _ref(db, "account", default_income.id if default_income else None)
+    return {
+        "Name": item.name,
+        "Type": ITEM_TYPE_TO_QBO.get(item.item_type, "Service"),
+        "Description": item.description or None,
+        "UnitPrice": float(item.rate) if item.rate else None,
+        "PurchaseCost": float(item.cost) if item.cost else None,
+        "IncomeAccountRef": income,
+        "ExpenseAccountRef": _ref(db, "account", item.expense_account_id),
+        "Active": item.is_active is not False,
+    }
 
 
 def export_items(db: Session) -> dict:
-    """Export Slowbooks items to QBO."""
+    """Export Slowbooks items to QBO: new ones, and changes to ones the
+    export sent."""
     from quickbooks.objects.item import Item as QBOItem
 
     client = get_qbo_client(db)
-    exported = 0
-    errors = []
+    result = _result()
 
-    items = db.query(Item).filter(Item.is_active).all()
-
-    for item in items:
+    for item in db.query(Item).all():
         try:
-            if get_mapping_by_slowbooks_id(db, "item", item.id):
-                continue
-
-            qbo_item = QBOItem()
-            qbo_item.Name = item.name
-            qbo_item.Type = ITEM_TYPE_TO_QBO.get(item.item_type, "Service")
-
-            if item.description:
-                qbo_item.Description = item.description
-            if item.rate:
-                qbo_item.UnitPrice = float(item.rate)
-            if item.cost:
-                qbo_item.PurchaseCost = float(item.cost)
-
-            # Link income account if mapped
-            if item.income_account_id:
-                acct_map = get_mapping_by_slowbooks_id(
-                    db, "account", item.income_account_id
-                )
-                if acct_map:
-                    qbo_item.IncomeAccountRef = {"value": acct_map.qbo_id}
-
-            # Link expense account if mapped
-            if item.expense_account_id:
-                acct_map = get_mapping_by_slowbooks_id(
-                    db, "account", item.expense_account_id
-                )
-                if acct_map:
-                    qbo_item.ExpenseAccountRef = {"value": acct_map.qbo_id}
-
-            # QBO requires IncomeAccountRef for Service/NonInventory items
-            if not item.income_account_id or not get_mapping_by_slowbooks_id(
-                db, "account", item.income_account_id
+            if not item.is_active and not get_mapping_by_slowbooks_id(
+                db, "item", item.id
             ):
-                # Find a default income account in QBO mappings
-                default_income = (
-                    db.query(Account)
-                    .filter(
-                        Account.account_type == AccountType.INCOME,
-                        Account.is_active,
-                    )
-                    .first()
-                )
-                if default_income:
-                    acct_map = get_mapping_by_slowbooks_id(
-                        db, "account", default_income.id
-                    )
-                    if acct_map:
-                        qbo_item.IncomeAccountRef = {"value": acct_map.qbo_id}
-
-            saved = qbo_item.save(qb=client)
-            create_mapping(
-                db, "item", item.id, saved.Id, getattr(saved, "SyncToken", None)
+                continue
+            _send(
+                db,
+                client,
+                result,
+                "item",
+                item.id,
+                f"Item {item.name}",
+                QBOItem,
+                _item_fields(db, item),
             )
-            exported += 1
-
         except Exception as e:
-            errors.append(
+            result["errors"].append(
                 {
                     "entity": "item",
                     "id": item.id,
@@ -300,7 +407,7 @@ def export_items(db: Session) -> dict:
                 }
             )
 
-    return {"exported": exported, "errors": errors}
+    return result
 
 
 def _discount_account(db: Session, item_id, discount) -> tuple[str, str]:
@@ -367,120 +474,163 @@ def _discount_line(db: Session, parts, document, notes) -> dict:
     }
 
 
+def _face(inv, terms) -> str:
+    """ "Invoice 2004", "Sales Receipt 2005": a document as it prints."""
+    from app.services.donor_documents import document_label
+
+    return f"{document_label(inv, terms)} {inv.invoice_number}"
+
+
+def _sales_lines(db: Session, inv, notes, label) -> tuple[list, bool]:
+    """A document's lines as QBO takes them, and whether its tax is worked
+    out after its discount: each sales line with its item and tax code (QBO
+    taxes the lines this document taxes, at its own rate; a document that
+    charges no tax taxes none of its lines), and its lines on Discount items
+    as QBO's one discount (_discount_line)."""
+    lines, discounts, after = [], [], False
+    charges_tax = Decimal(str(inv.tax_amount or 0)) != 0
+    inv_lines = (
+        db.query(InvoiceLine)
+        .filter(InvoiceLine.invoice_id == inv.id)
+        .order_by(InvoiceLine.line_order)
+        .all()
+    )
+    for inv_line in inv_lines:
+        discount = discount_mapping(db, inv_line.item_id)
+        if discount is not None and (inv_line.amount or 0) < 0:
+            if not discounts:
+                lines.append(None)  # where QBO's discount goes
+            discounts.append((inv_line, discount))
+            # the discount comes off the taxable amount, as QBO's does when
+            # it works the tax out after the discount
+            after = after or bool(inv_line.is_taxable)
+            continue
+        taxed = charges_tax and inv_line.is_taxable is not False
+        detail = {
+            "Qty": float(inv_line.quantity or 1),
+            "UnitPrice": float(inv_line.rate or 0),
+            "TaxCodeRef": {"value": "TAX" if taxed else "NON"},
+        }
+        item = _ref(db, "item", inv_line.item_id)
+        if item:
+            detail["ItemRef"] = item
+        lines.append(
+            {
+                "DetailType": "SalesItemLineDetail",
+                "Amount": float(inv_line.amount or 0),
+                "Description": inv_line.description or "",
+                "SalesItemLineDetail": detail,
+            }
+        )
+    if discounts:
+        lines[lines.index(None)] = _discount_line(db, discounts, label, notes)
+    return lines, after
+
+
+def _customer_ref(db: Session, doc) -> dict:
+    ref = _ref(db, "customer", doc.customer_id)
+    if ref is None:
+        raise _NotReady(f"Customer {doc.customer_id} not mapped to QBO")
+    return ref
+
+
+def _invoice_fields(db: Session, inv, notes, label) -> dict:
+    lines, after = _sales_lines(db, inv, notes, label)
+    return {
+        "CustomerRef": _customer_ref(db, inv),
+        "DocNumber": inv.invoice_number or None,
+        "TxnDate": inv.date.isoformat() if inv.date else None,
+        "DueDate": inv.due_date.isoformat() if inv.due_date else None,
+        "Line": lines,
+        "ApplyTaxAfterDiscount": after,
+        # no tax detail: QBO works its tax out itself from the tax codes (on
+        # an update, the one it read back would hold the old tax as its own)
+        "TxnTaxDetail": None,
+        "CustomerMemo": {"value": inv.notes} if inv.notes else None,
+    }
+
+
+def _receipt_payment(receipt):
+    """The payment half of a sales receipt written here."""
+    for alloc in receipt.payment_allocations:
+        if alloc.payment is not None and not alloc.payment.is_voided:
+            return alloc.payment
+    return None
+
+
+def _sales_receipt_fields(db: Session, receipt, notes, label) -> dict:
+    """A sales receipt written here, as QBO's own SalesReceipt: its lines,
+    tax codes and discount, and the account its money went to."""
+    lines, after = _sales_lines(db, receipt, notes, label)
+    payment = _receipt_payment(receipt)
+    return {
+        "CustomerRef": _customer_ref(db, receipt),
+        "DocNumber": receipt.invoice_number or None,
+        "TxnDate": receipt.date.isoformat() if receipt.date else None,
+        "Line": lines,
+        "ApplyTaxAfterDiscount": after,
+        "TxnTaxDetail": None,
+        "CustomerMemo": {"value": receipt.notes} if receipt.notes else None,
+        "DepositToAccountRef": (
+            _ref(db, "account", payment.deposit_to_account_id) if payment else None
+        ),
+        "PaymentRefNum": (
+            (payment.reference or payment.check_number or None) if payment else None
+        ),
+    }
+
+
+def _sent_as_invoice(db: Session, receipt) -> bool:
+    """A sales receipt an earlier release sent as an invoice and a payment:
+    it stays as it went, and is not sent again as a sales receipt."""
+    return get_mapping_by_slowbooks_id(db, "invoice", receipt.id) is not None
+
+
 def export_invoices(db: Session) -> dict:
-    """Export Slowbooks invoices to QBO."""
+    """Export Slowbooks invoices and sales receipts to QBO: new ones, changes
+    to ones the export sent, and voids of them. A sales receipt goes as a
+    QBO SalesReceipt ("sales_receipts" counts them). A document the import
+    brought in from QBO is QBO's, and stays as it is there."""
     from quickbooks.objects.invoice import Invoice as QBOInvoice
+    from quickbooks.objects.salesreceipt import SalesReceipt as QBOSalesReceipt
+
+    from app.services.terminology import terms_from_db
 
     client = get_qbo_client(db)
-    exported = 0
-    errors = []
-    notes = []
+    result = _result()
+    receipts = _result()
+    terms = terms_from_db(db)
 
-    invoices = db.query(Invoice).all()
-
-    for inv in invoices:
+    for inv in db.query(Invoice).all():
         try:
-            # In QBO already: it went before, or it came from there (a sales
-            # receipt the import brought in is mapped as one, not as an
-            # invoice, and went back as a new invoice).
-            if get_mapping_by_slowbooks_id(
-                db, "invoice", inv.id
-            ) or get_mapping_by_slowbooks_id(db, "sales_receipt", inv.id):
-                continue
-            # A document voided before it went is not sent: QBO would take
-            # it as a live one.
+            receipt = bool(inv.is_sales_receipt) and not _sent_as_invoice(db, inv)
+            kind = "sales_receipt" if receipt else "invoice"
+            qbo_class = QBOSalesReceipt if receipt else QBOInvoice
+            counts = receipts if receipt else result
+            label = _face(inv, terms)
+            mapping = get_mapping_by_slowbooks_id(db, kind, inv.id)
+            if mapping is not None and not _ours(mapping):
+                continue  # QBO's own, or sent before 2.18: as it is there
             if inv.status == InvoiceStatus.VOID:
+                # voided before it went: stays out; after: voided there
+                _void(db, client, counts, kind, inv.id, label, qbo_class)
                 continue
-
-            # Customer must be mapped
-            cust_map = get_mapping_by_slowbooks_id(db, "customer", inv.customer_id)
-            if not cust_map:
-                errors.append(
-                    {
-                        "entity": "invoice",
-                        "id": inv.id,
-                        "message": f"Customer {inv.customer_id} not mapped to QBO",
-                    }
+            notes = []
+            try:
+                fields = (
+                    _sales_receipt_fields(db, inv, notes, label)
+                    if receipt
+                    else _invoice_fields(db, inv, notes, label)
                 )
+            except _NotReady as exc:
+                if mapping is None:
+                    result["errors"].append(
+                        {"entity": kind, "id": inv.id, "message": str(exc)}
+                    )
                 continue
-
-            qbo_inv = QBOInvoice()
-            qbo_inv.CustomerRef = {"value": cust_map.qbo_id}
-
-            if inv.invoice_number:
-                qbo_inv.DocNumber = inv.invoice_number
-            if inv.date:
-                qbo_inv.TxnDate = inv.date.isoformat()
-            if inv.due_date:
-                qbo_inv.DueDate = inv.due_date.isoformat()
-
-            # Build line items
-            lines = []
-            inv_lines = (
-                db.query(InvoiceLine)
-                .filter(InvoiceLine.invoice_id == inv.id)
-                .order_by(InvoiceLine.line_order)
-                .all()
-            )
-
-            discounts = []  # its lines on Discount items: one QBO discount
-            # QBO taxes the lines this document taxes (its own rate, not
-            # ours): a taxable line on a document that charges tax is TAX.
-            charges_tax = Decimal(str(inv.tax_amount or 0)) != 0
-            for inv_line in inv_lines:
-                discount = discount_mapping(db, inv_line.item_id)
-                if discount is not None and (inv_line.amount or 0) < 0:
-                    if not discounts:
-                        lines.append(None)  # where QBO's discount goes
-                    discounts.append((inv_line, discount))
-                    # the discount comes off the taxable amount, as QBO's does
-                    # when it works the tax out after the discount
-                    if inv_line.is_taxable:
-                        qbo_inv.ApplyTaxAfterDiscount = True
-                    continue
-                taxed = charges_tax and inv_line.is_taxable is not False
-                detail = {
-                    "Qty": float(inv_line.quantity or 1),
-                    "UnitPrice": float(inv_line.rate or 0),
-                    "TaxCodeRef": {"value": "TAX" if taxed else "NON"},
-                }
-
-                # Link item if mapped
-                if inv_line.item_id:
-                    item_map = get_mapping_by_slowbooks_id(db, "item", inv_line.item_id)
-                    if item_map:
-                        detail["ItemRef"] = {"value": item_map.qbo_id}
-
-                line = {
-                    "DetailType": "SalesItemLineDetail",
-                    "Amount": float(inv_line.amount or 0),
-                    "Description": inv_line.description or "",
-                    "SalesItemLineDetail": detail,
-                }
-                lines.append(line)
-
-            if discounts:
-                from app.services.donor_documents import document_label
-                from app.services.terminology import terms_from_db
-
-                face = document_label(inv, terms_from_db(db))
-                line = _discount_line(
-                    db, discounts, f"{face} {inv.invoice_number}", notes
-                )
-                lines[lines.index(None)] = line
-            qbo_inv.Line = lines
-
-            if inv.notes:
-                qbo_inv.CustomerMemo = {"value": inv.notes}
-
-            saved = qbo_inv.save(qb=client)
-            create_mapping(
-                db, "invoice", inv.id, saved.Id, getattr(saved, "SyncToken", None)
-            )
-            exported += 1
-
+            _send(db, client, counts, kind, inv.id, label, qbo_class, fields, notes)
         except Exception as e:
-            errors.append(
+            result["errors"].append(
                 {
                     "entity": "invoice",
                     "id": inv.id,
@@ -488,93 +638,84 @@ def export_invoices(db: Session) -> dict:
                 }
             )
 
-    return {"exported": exported, "errors": errors, "notes": notes}
+    result["exported"] += receipts["exported"]
+    result["sales_receipts"] = receipts["exported"]
+    for key in ("updated", "voided"):
+        result[key] += receipts[key]
+    result["notes"].extend(receipts["notes"])
+    return result
+
+
+def _payment_fields(db: Session, pmt) -> dict:
+    lines = []
+    for alloc in pmt.allocations:
+        invoice = _ref(db, "invoice", alloc.invoice_id)
+        if invoice:
+            lines.append(
+                {
+                    "Amount": float(alloc.amount),
+                    "LinkedTxn": [{"TxnId": invoice["value"], "TxnType": "Invoice"}],
+                }
+            )
+    return {
+        "CustomerRef": _customer_ref(db, pmt),
+        "TotalAmt": float(pmt.amount),
+        "TxnDate": pmt.date.isoformat() if pmt.date else None,
+        "PaymentRefNum": pmt.reference or None,
+        "DepositToAccountRef": _ref(db, "account", pmt.deposit_to_account_id),
+        "Line": lines,
+    }
+
+
+def _in_a_receipt(db: Session, pmt) -> bool:
+    """The payment half of a sales receipt, which is in QBO with its receipt:
+    one the import brought in from QBO, or one that goes as a QBO
+    SalesReceipt. (The half of a receipt an earlier release sent as an
+    invoice and a payment goes as a payment, as it did.)"""
+    for alloc in pmt.allocations:
+        invoice = alloc.invoice
+        if invoice is None:
+            continue
+        if get_mapping_by_slowbooks_id(db, "sales_receipt", invoice.id):
+            return True
+        if invoice.is_sales_receipt and not _sent_as_invoice(db, invoice):
+            return True
+    return False
 
 
 def export_payments(db: Session) -> dict:
-    """Export Slowbooks payments to QBO."""
+    """Export Slowbooks payments to QBO: new ones, changes to ones the export
+    sent, and voids of them."""
     from quickbooks.objects.payment import Payment as QBOPayment
 
     client = get_qbo_client(db)
-    exported = 0
-    errors = []
+    result = _result()
 
-    payments = db.query(Payment).all()
-
-    for pmt in payments:
+    for pmt in db.query(Payment).all():
         try:
-            if get_mapping_by_slowbooks_id(db, "payment", pmt.id) or pmt.is_voided:
+            if _in_a_receipt(db, pmt):
                 continue
-            # The payment half of a sales receipt the import brought in from
-            # QBO is in QBO with its receipt (the import maps the receipt).
-            if any(
-                get_mapping_by_slowbooks_id(db, "sales_receipt", alloc.invoice_id)
-                for alloc in pmt.allocations
-            ):
-                continue
-
-            # Customer must be mapped
-            cust_map = get_mapping_by_slowbooks_id(db, "customer", pmt.customer_id)
-            if not cust_map:
-                errors.append(
-                    {
-                        "entity": "payment",
-                        "id": pmt.id,
-                        "message": f"Customer {pmt.customer_id} not mapped to QBO",
-                    }
-                )
-                continue
-
-            qbo_pmt = QBOPayment()
-            qbo_pmt.CustomerRef = {"value": cust_map.qbo_id}
-            qbo_pmt.TotalAmt = float(pmt.amount)
-            if pmt.date:
-                qbo_pmt.TxnDate = pmt.date.isoformat()
-            if pmt.reference:
-                qbo_pmt.PaymentRefNum = pmt.reference
-
-            # Link deposit account
-            if pmt.deposit_to_account_id:
-                acct_map = get_mapping_by_slowbooks_id(
-                    db, "account", pmt.deposit_to_account_id
-                )
-                if acct_map:
-                    qbo_pmt.DepositToAccountRef = {"value": acct_map.qbo_id}
-
-            # Build payment lines from allocations
-            allocations = (
-                db.query(PaymentAllocation)
-                .filter(PaymentAllocation.payment_id == pmt.id)
-                .all()
+            mapping = get_mapping_by_slowbooks_id(db, "payment", pmt.id)
+            if mapping is not None and not _ours(mapping):
+                continue  # QBO's own, or sent before 2.18: as it is there
+            payer = pmt.customer.name if pmt.customer else "A customer"
+            label = (
+                f"{payer}'s payment of {Decimal(str(pmt.amount)):,.2f} on {pmt.date}"
             )
-
-            lines = []
-            for alloc in allocations:
-                inv_map = get_mapping_by_slowbooks_id(db, "invoice", alloc.invoice_id)
-                if inv_map:
-                    lines.append(
-                        {
-                            "Amount": float(alloc.amount),
-                            "LinkedTxn": [
-                                {
-                                    "TxnId": inv_map.qbo_id,
-                                    "TxnType": "Invoice",
-                                }
-                            ],
-                        }
+            if pmt.is_voided:
+                _void(db, client, result, "payment", pmt.id, label, QBOPayment)
+                continue
+            try:
+                fields = _payment_fields(db, pmt)
+            except _NotReady as exc:
+                if mapping is None:
+                    result["errors"].append(
+                        {"entity": "payment", "id": pmt.id, "message": str(exc)}
                     )
-
-            if lines:
-                qbo_pmt.Line = lines
-
-            saved = qbo_pmt.save(qb=client)
-            create_mapping(
-                db, "payment", pmt.id, saved.Id, getattr(saved, "SyncToken", None)
-            )
-            exported += 1
-
+                continue
+            _send(db, client, result, "payment", pmt.id, label, QBOPayment, fields)
         except Exception as e:
-            errors.append(
+            result["errors"].append(
                 {
                     "entity": "payment",
                     "id": pmt.id,
@@ -582,7 +723,7 @@ def export_payments(db: Session) -> dict:
                 }
             )
 
-    return {"exported": exported, "errors": errors}
+    return result
 
 
 # ============================================================================
@@ -593,7 +734,8 @@ def export_payments(db: Session) -> dict:
 def export_all(db: Session) -> dict:
     """Export all entity types to QBO in dependency order.
 
-    Returns counts of exported records and any errors.
+    Returns counts of records sent for the first time, of ones updated or
+    voided in QBO, and any errors and notes.
     """
     result = {
         "accounts": 0,
@@ -601,35 +743,30 @@ def export_all(db: Session) -> dict:
         "vendors": 0,
         "items": 0,
         "invoices": 0,
+        "sales_receipts": 0,
         "payments": 0,
+        "updated": 0,
+        "voided": 0,
         "errors": [],
         "notes": [],
     }
-
-    r = export_accounts(db)
-    result["accounts"] = r["exported"]
-    result["errors"].extend(r["errors"])
-
-    r = export_customers(db)
-    result["customers"] = r["exported"]
-    result["errors"].extend(r["errors"])
-
-    r = export_vendors(db)
-    result["vendors"] = r["exported"]
-    result["errors"].extend(r["errors"])
-
-    r = export_items(db)
-    result["items"] = r["exported"]
-    result["errors"].extend(r["errors"])
-
-    r = export_invoices(db)
-    result["invoices"] = r["exported"]
-    result["errors"].extend(r["errors"])
-    result["notes"].extend(r.get("notes", []))
-
-    r = export_payments(db)
-    result["payments"] = r["exported"]
-    result["errors"].extend(r["errors"])
+    for entity, export in (
+        ("accounts", export_accounts),
+        ("customers", export_customers),
+        ("vendors", export_vendors),
+        ("items", export_items),
+        ("invoices", export_invoices),
+        ("payments", export_payments),
+    ):
+        r = export(db)
+        result[entity] = r["exported"]
+        if entity == "invoices":
+            result["sales_receipts"] = r.get("sales_receipts", 0)
+            result["invoices"] -= result["sales_receipts"]
+        for key in ("updated", "voided"):
+            result[key] += r.get(key, 0)
+        result["errors"].extend(r["errors"])
+        result["notes"].extend(r.get("notes", []))
 
     db.commit()
     return result

@@ -19,6 +19,7 @@ import json
 
 import pytest
 from quickbooks.objects.invoice import Invoice as QBOInvoice
+from quickbooks.objects.salesreceipt import SalesReceipt as QBOSalesReceipt
 
 from app.models.accounts import Account, AccountType
 from app.models.contacts import Customer
@@ -39,6 +40,7 @@ def sent(monkeypatch):
         return self
 
     monkeypatch.setattr(QBOInvoice, "save", save)
+    monkeypatch.setattr(QBOSalesReceipt, "save", save)
     monkeypatch.setattr(qbo_export, "get_qbo_client", lambda db: object())
     return saved
 
@@ -124,11 +126,8 @@ def test_a_discount_item_line_exports_as_qbos_discount(db_session, items, sent):
             ("Coupon", "Coupon", -5, False),
         ],
     )
-    assert qbo_export.export_invoices(db_session) == {
-        "exported": 1,
-        "errors": [],
-        "notes": [],
-    }
+    result = qbo_export.export_invoices(db_session)
+    assert (result["exported"], result["errors"], result["notes"]) == (1, [], [])
     [invoice] = sent
     catering, discount, coupon = invoice.Line
     assert catering["SalesItemLineDetail"]["ItemRef"] == {"value": "21"}
