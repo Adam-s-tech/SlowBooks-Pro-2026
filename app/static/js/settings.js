@@ -1114,6 +1114,10 @@ const SettingsPage = {
                 el.innerHTML = '<div style="font-size:11px; color:var(--text-muted);">No templates. Click "Seed Default Templates" to create them.</div>';
                 return;
             }
+            // Edit is type="button": the list is inside the Settings form, where
+            // a button with no type submits it, so opening a template also saved
+            // every setting on the page (and told a bookkeeper "Your role
+            // doesn't allow this action").
             el.innerHTML = `<div class="table-container"><table>
                 <thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Subject</th><th scope="col">Actions</th></tr></thead>
                 <tbody>${templates.map(t => `<tr>
@@ -1121,7 +1125,7 @@ const SettingsPage = {
                     <td>${escapeHtml(t.template_type)}</td>
                     <td style="font-size:11px;">${escapeHtml(t.subject_template)}</td>
                     <td class="actions">
-                        <button class="btn btn-sm btn-secondary" data-readonly-ok onclick="SettingsPage.editTemplate(${t.id})">Edit</button>
+                        <button type="button" class="btn btn-sm btn-secondary" data-readonly-ok onclick="SettingsPage.editTemplate(${t.id})">Edit</button>
                     </td>
                 </tr>`).join('')}</tbody>
             </table></div>`;
