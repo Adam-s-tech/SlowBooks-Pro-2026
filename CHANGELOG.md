@@ -137,10 +137,11 @@ in the file's free space).
   time the company opens on 2.18. Nothing there recorded whose a file was,
   so a copied logo or attachment says it came from the folder earlier
   versions shared (upload it again if it isn't yours), and a file that
-  wasn't there is named, without a download. The shared folder is left
-  where it was until every company on the install has been opened on 2.18;
-  then an administrator can remove it from Settings → Files from earlier
-  versions, and a document deleted in the app leaves no old copy behind.
+  wasn't there is named, without a download or a size. The shared folder
+  is left where it was until every company on the install has been opened
+  on 2.18; then an administrator can remove it from Settings → Files from
+  earlier versions, and a document deleted in the app leaves no old copy
+  behind.
 - **Security.** The shared folder was published at `/static/uploads/`,
   which needs no sign-in: on a Server Edition, `--serve-lan` or Docker
   install, anyone who could reach the server could fetch a company's logo,
@@ -285,6 +286,11 @@ in the file's free space).
   as it is now, and restoring an older backup renames the company list's
   entry at once.
 - An opt-in setting asks for the password each time SlowBooks Pro starts.
+- A sign-in belongs to the company it was made in. A session signed in to
+  one company opened another signed in, that company's own password never
+  asked, when the app was pointed at it from outside or a Switch company…
+  failed to sign out; it now asks for that company's password, and Switch
+  company… stops if signing out fails.
 - A refused form says what to fix in a sentence, not validator text, and a
   message stays long enough to read (three seconds for a few words, more
   for more, at least six for an error; hovering holds it, a click closes
@@ -294,7 +300,8 @@ in the file's free space).
   and in dialogs, where the server refused them after the form was filled
   in; Settings, Quick Entry and Batch Payments show locked, with a sentence
   saying why; Payroll and HR opened by their address say they are the
-  administrator's; Alt+N, Alt+P and Alt+Q say it is read-only. It can read
+  administrator's, and the Audit Log that it isn't open to a read-only
+  sign-in; Alt+N, Alt+P and Alt+Q say it is read-only. It can read
   an invoice's payment link but no longer makes one, and leaves Settings
   without being asked to save.
 - The company logo is the administrator's to change, like every other
@@ -353,7 +360,8 @@ in the file's free space).
   the Estimate form's line table fits the dialog at 1280 wide.
 - Desktop app: the PDF window has **Open in** your PDF app and **Show in
   folder**; the IIF export and file attachments save instead of failing or
-  opening as text; upload and import refusals read as sentences.
+  opening as text, and an attachment you open is saved with the documents,
+  not the reports; upload and import refusals read as sentences.
 
 #### QuickBooks Online (#192, @Sciumo)
 
@@ -474,6 +482,9 @@ in the file's free space).
   removing the logo, `PUT /api/analytics/ai-config` and its `/test`, and
   `POST /api/qbo/disconnect`. `GET /api/payments/payment-link/{id}` from a
   read-only sign-in is a 403 for an invoice with no payment link yet.
+- A session signed in to another company is a 401 (`/api/auth/status`
+  answers `authenticated: false`); sign in to this one. An attachment or
+  employee document the upgrade found missing has `file_size: null`.
 - New: `GET /api/settings/unreadable-secrets` names the saved secrets no
   key on the install decrypts. `GET /api/uploads/legacy` (administrators)
   says what the folder earlier versions shared still holds and which
