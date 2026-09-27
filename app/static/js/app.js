@@ -149,8 +149,18 @@ const App = {
         // Migrate Data, whose dry run and import are refused to every other
         // role. The role can arrive while the first page loads: asked again
         // after.
-        const adminOnly = () => App.ADMIN_ONLY_PAGES.includes(route.page) && App.role !== 'admin';
+        // The audit log is closed to a read-only sign-in (it keeps every
+        // earlier value of every record); typed in, it said only "Couldn't
+        // load this page" (skytech, 2.18.0 round 6).
+        const notForReadOnly = () => App.NOT_FOR_READONLY_PAGES.includes(route.page) && App.isReadOnly();
+        const adminOnly = () => (App.ADMIN_ONLY_PAGES.includes(route.page) && App.role !== 'admin')
+            || notForReadOnly();
         const showAdminOnly = () => {
+            if (notForReadOnly()) {
+                $('#page-content').innerHTML = App._notForReadOnlyHtml(route.label);
+                App.setStatus(`${route.label} — not open to a read-only sign-in`);
+                return;
+            }
             $('#page-content').innerHTML = App._adminOnlyHtml(route.label, route.page);
             App.setStatus(`${route.label} — administrators only`);
         };
@@ -195,6 +205,17 @@ const App = {
     // Why a page is the administrator's; payroll and HR unless named here.
     _ADMIN_ONLY_WHY: {
         migrate: "Bringing books in from another program is open to an administrator's sign-in only.",
+    },
+
+    _notForReadOnlyHtml(label) {
+        return `<div class="empty-state">
+            <h3>${escapeHtml(label)} isn't open to a read-only sign-in</h3>
+            <p>It keeps every earlier value of every record, so it is for administrators and bookkeepers.
+               An administrator can change your role under Settings → Users.</p>
+            <p style="margin-top:12px;">
+                <a href="#/" class="btn btn-secondary">Return to Dashboard</a>
+            </p>
+        </div>`;
     },
 
     _adminOnlyHtml(label, page) {
@@ -1000,6 +1021,8 @@ const App = {
     // Migrate Data too: its dry run and its import are refused to every
     // other role, so a bookkeeper had a page on which nothing worked.
     ADMIN_ONLY_PAGES: ['employees', 'payroll', 'hr-onboarding', 'hr-benefits', 'hr-deductions', 'hr-tax-forms', 'users', 'migrate'],
+    // Pages the server refuses a read-only sign-in, reads included.
+    NOT_FOR_READONLY_PAGES: ['audit'],
 
     applyTerminology() {
         for (const r of Object.values(App.routes)) r.label = T(r.label);

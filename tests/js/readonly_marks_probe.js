@@ -111,6 +111,7 @@ const ctx = {
   T: s => s,
   Terms: { isNonprofit: () => false },
   PayrollPage: { render: async () => { rendered.push('payroll'); return '<payroll>'; } },
+  AuditPage: { render: async () => { rendered.push('audit'); return '<audit>'; } },
 };
 ctx.window = { addEventListener() {} };
 vm.createContext(ctx);
@@ -173,5 +174,17 @@ const state = () => ({
   release();
   await loading;
   out.payroll_role_arrives_late = pageBox.innerHTML.includes('Payroll is for administrators');
+
+  // the Audit Log by its address: closed to a read-only sign-in, reads too
+  rendered.length = 0;
+  App.role = 'readonly';
+  await App.navigate('#/audit');
+  out.audit_readonly = {
+    says: pageBox.innerHTML.includes("Audit Log isn't open to a read-only sign-in"),
+    rendered: rendered.slice(),
+  };
+  App.role = 'bookkeeper';
+  await App.navigate('#/audit');
+  out.audit_bookkeeper = { rendered: rendered.slice(), page: pageBox.innerHTML };
   console.log(JSON.stringify(out));
 })().catch(err => { console.error(err); process.exit(1); });
