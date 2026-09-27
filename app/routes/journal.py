@@ -182,6 +182,7 @@ def void_journal_entry(entry_id: int, db: Session = Depends(get_db)):
         # would (its posting is reversed with it), so the two stay together.
         found = qbo_documents.document_of_posting(db, txn)
         if found is not None:
+            from app.models.invoices import InvoiceStatus
             from app.routes.invoices.lifecycle import void_invoice
             from app.routes.payments import void_payment
 
@@ -190,10 +191,13 @@ def void_journal_entry(entry_id: int, db: Session = Depends(get_db)):
                 void_payment(document.id, db)
             else:
                 if kind == "sales_receipt":
+                    # Its payment's void voids the receipt too.
                     for alloc in list(document.payment_allocations):
                         if alloc.payment is not None and not alloc.payment.is_voided:
                             void_payment(alloc.payment_id, db)
-                void_invoice(document.id, db)
+                    db.refresh(document)
+                if document.status != InvoiceStatus.VOID:
+                    void_invoice(document.id, db)
             reversal = (
                 db.query(Transaction)
                 .filter(

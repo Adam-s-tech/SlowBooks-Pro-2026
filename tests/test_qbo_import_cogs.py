@@ -181,12 +181,12 @@ def test_an_edit_makes_the_sale_ours_and_costs_it_here_once(
     assert db_session.get(Item, widget.id).quantity_on_hand == Decimal("7")
 
 
-def test_a_receipt_edited_after_its_payment_was_voided_is_costed_here(
+def test_a_receipt_voided_with_its_payment_gives_its_stock_back_at_no_cost(
     db_session, seed_accounts, monkeypatch, client
 ):
-    """Voiding a QBO sales receipt's payment reverses the receipt's import
-    posting, QBO's cost of goods with it; an edit then makes the receipt
-    ours, and its stock must be costed here, not left costing nothing."""
+    """Voiding a QBO sales receipt's payment voids the receipt too (2.18.0):
+    its import posting, QBO's cost of goods with it, is reversed, and the
+    stock comes back without a cost entry of ours, so none is left."""
     from quickbooks.objects.salesreceipt import SalesReceipt as QBOSalesReceipt
 
     from app.models.invoices import Invoice
@@ -263,20 +263,8 @@ def test_a_receipt_edited_after_its_payment_was_voided_is_costed_here(
     document = db_session.query(Invoice).one()
     payment = document.payment_allocations[0].payment
     assert client.post(f"/api/payments/{payment.id}/void").status_code == 200
-    r = client.put(
-        f"/api/invoices/{document.id}",
-        json={
-            "lines": [
-                {
-                    "item_id": widget.id,
-                    "description": "Widget",
-                    "quantity": 2,
-                    "rate": 25,
-                }
-            ]
-        },
-    )
-    assert r.status_code == 200, r.text
     db_session.expire_all()
+    assert db_session.get(Invoice, document.id).status == "void"
+    assert db_session.get(Item, widget.id).quantity_on_hand == Decimal("10")
     cogs_id = seed_accounts["5000"].id
-    assert gl_balances(db_session, [cogs_id])[cogs_id] == Decimal("8.00")
+    assert gl_balances(db_session, [cogs_id])[cogs_id] == Decimal("0.00")
