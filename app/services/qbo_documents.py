@@ -25,7 +25,7 @@ from app.models.items import InventoryMovement, Item, MovementType
 from app.models.payments import Payment
 from app.models.qbo_mapping import QBOMapping
 from app.models.transactions import Transaction
-from app.services.qbo_common import CHANGED_HERE, ledger_posting
+from app.services.qbo_common import CHANGED_HERE, HERE, ledger_posting
 
 # The QBO transaction type the ledger import posts each document kind under.
 LEDGER_TYPE = {
@@ -118,9 +118,11 @@ def import_posting(db: Session, mapping: QBOMapping | None):
 
 
 def mark_changed_here(db: Session, *mappings) -> None:
-    """A later import leaves these alone (qbo_common.CHANGED_HERE)."""
+    """A later import leaves these alone (qbo_common.CHANGED_HERE). One an
+    import has kept already stays KEPT_HERE: its line in the log was given
+    the first time, and later runs count it with the others."""
     for mapping in mappings:
-        if mapping is not None:
+        if mapping is not None and mapping.qbo_sync_token not in HERE:
             mapping.qbo_sync_token = CHANGED_HERE
 
 

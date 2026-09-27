@@ -28,8 +28,8 @@ from app.models.payments import Payment, PaymentAllocation
 from app.models.qbo_mapping import QBOMapping
 from app.models.transactions import Transaction
 from app.services.qbo_common import (
-    CHANGED_HERE,
     DELETED_IN_QBO,
+    HERE,
     NOT_OWNED,
     QBO_TO_ACCOUNT_TYPE,
     VOIDED_IN_QBO,
@@ -39,6 +39,7 @@ from app.services.qbo_common import (
     get_mapping_by_qbo_id,
     is_journal_entry_type,
     journal_posting_matches,
+    kept_here,
     ledger_posting,
     legacy_rollup_repair,
     rebase_account_balances,
@@ -1933,9 +1934,9 @@ def import_journal_entries(db: Session) -> dict:
                 ) from exc
             mapping = get_mapping_by_qbo_id(db, "journal_entry", qbo_id)
             legacy = ledger_mappings.get(qbo_id, [])
-            if any(m.qbo_sync_token == CHANGED_HERE for m in [mapping, *legacy] if m):
+            if any(m.qbo_sync_token in HERE for m in [mapping, *legacy] if m):
                 # Voided here: a later import leaves it as it is.
-                qbo_progress.skipped("Changed in SlowBooks; kept as it is here")
+                kept_here(("journal", qbo_id), [mapping, *legacy])
                 continue
             owned = [m for m in [mapping, *legacy] if m]
             if not owned and _non_posting_journal(qbo_entry, client, txn_date):

@@ -34,11 +34,19 @@ def journals(db_session, monkeypatch):
     client = QBOClient([_entry()])
     monkeypatch.setattr(qbo_import, "get_qbo_client", lambda db: client)
     kept = []
-    original = qbo_progress.skipped
+    original, keep = qbo_progress.skipped, qbo_progress.kept
     monkeypatch.setattr(
         qbo_progress,
         "skipped",
         lambda message="": (kept.append(message), original(message)),
+    )
+    monkeypatch.setattr(
+        qbo_progress,
+        "kept",
+        lambda key, message=None: (
+            kept.append(message) if message else None,
+            keep(key, message),
+        )[1],
     )
     assert qbo_import.import_journal_entries(db_session)["imported"] == 1
     db_session.commit()

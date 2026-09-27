@@ -120,12 +120,21 @@ class Books:
             lambda cls, client: self.sources.get(cls, []),
         )
         monkeypatch.setattr(qbo_ledger_import, "get_qbo_client", lambda db: self._gl())
+        # what the import log says of each item it skips or keeps
         self.kept = []
-        original = qbo_progress.skipped
+        original, keep = qbo_progress.skipped, qbo_progress.kept
         monkeypatch.setattr(
             qbo_progress,
             "skipped",
             lambda message="": (self.kept.append(message), original(message)),
+        )
+        monkeypatch.setattr(
+            qbo_progress,
+            "kept",
+            lambda key, message=None: (
+                self.kept.append(message) if message else None,
+                keep(key, message),
+            )[1],
         )
 
     def _gl(self):

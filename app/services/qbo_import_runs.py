@@ -252,6 +252,7 @@ class Reporter:
         self.pending = {}
         self.checkpoints = {}
         self.reported_errors = set()
+        self.kept = set()
 
     def emit(self, action, message, item_id=None, **fields):
         self.state["counters"]["fetched"] += fields.pop("fetched", 0)
@@ -358,6 +359,18 @@ class Reporter:
         self.state["counters"]["skipped"] += 1
         self.emit("skip", message, code="IMPORT_SKIPPED")
 
+    def keep(self, key, message=None):
+        """A transaction changed in SlowBooks and kept as it is here:
+        counted once in finish()'s line for the run, however many steps
+        keep it; `message` is its own line, which only the first run to
+        keep it gives (qbo_common.kept_here)."""
+        self.kept.add(key)
+        if message:
+            self.skip(message)
+        elif not self.resolved:
+            self.resolved = True
+            self.state["counters"]["skipped"] += 1
+
     def error(self, error):
         item_id = str(error.get("qbo_id", self.item_id) or "")
         label = error.get("document_number") or self.item_labels.get(item_id, "")
@@ -430,6 +443,19 @@ class Reporter:
 
     def finish(self, status):
         self.finish_item()
+        self.state["entity"] = ""
+        if self.kept:
+            count = len(self.kept)
+            self.emit(
+                "summary",
+                (
+                    "1 transaction changed in SlowBooks was kept as it is here"
+                    if count == 1
+                    else f"{count} transactions changed in SlowBooks were kept "
+                    "as they are here"
+                ),
+                item_id="",
+            )
         self.state.update(status=status, finished_at=_now(), entity="")
         self.emit("finish", status.replace("_", " ").capitalize(), item_id="")
 
