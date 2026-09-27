@@ -190,6 +190,31 @@ def test_a_bill_and_a_purchase_order_keep_the_vendors_rate(
     assert _money(converted["total"]) == Decimal("1088.75")
 
 
+def test_a_new_rate_alone_retotals_a_purchase_order(
+    client, db_session, seed_accounts, monkeypatch
+):
+    """A rate sent without the lines changed the order's rate and kept its
+    old tax and total, and the bill the order became carried that tax."""
+    vid = _vendor(db_session, seed_accounts)
+    po = _ok(
+        client.post(
+            "/api/purchase-orders",
+            json={"vendor_id": vid, "date": DAY, "tax_rate": NYC, "lines": [THOUSAND]},
+        )
+    )
+    path = f"/api/purchase-orders/{po['id']}"
+    seven = _ok(client.put(path, json={"tax_rate": SEVEN}))
+    assert seven["tax_rate"] == "0.070625"
+    assert _money(seven["tax_amount"]) == Decimal("70.63")
+    assert _money(seven["total"]) == Decimal("1070.63")
+    assert "Tax (7.0625%)" in _printed(client, monkeypatch, path)
+
+    converted = _bill_from(client, path)
+    assert converted["tax_rate"] == "0.070625"
+    assert _money(converted["tax_amount"]) == Decimal("70.63")
+    assert _money(converted["total"]) == Decimal("1070.63")
+
+
 def test_a_recurring_template_bills_at_its_rate(client, seed_accounts, seed_customer):
     rec = _ok(
         client.post(
