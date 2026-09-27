@@ -501,3 +501,32 @@ def test_the_migration_keeps_every_rate_and_takes_six_places(tmp_path):
     assert {t: kind for t, (kind, _) in rates().items()} == dict.fromkeys(
         documents, "NUMERIC(5, 4)"
     )
+
+
+def test_an_old_default_with_more_places_does_not_hold_back_settings():
+    # A default saved before 2.18 with five decimals would fail the field's
+    # step (0.0001) and block Save Settings for the whole page.
+    import json as _json
+    import shutil as _shutil
+    import subprocess as _subprocess
+
+    if _shutil.which("node") is None:
+        pytest.skip("node is not installed")
+    probe = (
+        "const fs=require('fs'),vm=require('vm');"
+        "const ctx={console,window:{},document:{addEventListener:()=>{}}};"
+        "vm.createContext(ctx);"
+        "vm.runInContext(fs.readFileSync('app/static/js/settings.js','utf8')"
+        "+'\\nthis.S=SettingsPage;',ctx);"
+        "console.log(JSON.stringify(['8.87512','8.875','7','','abc',null]"
+        ".map(v=>ctx.S._ratePercent(v))));"
+    )
+    out = _subprocess.run(
+        ["node", "-e", probe],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert out.returncode == 0, out.stderr
+    assert _json.loads(out.stdout) == ["8.8751", "8.875", "7", "0", "0.0", "0"]

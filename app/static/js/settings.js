@@ -4,6 +4,15 @@
  * for company name and tax rate.
  */
 const SettingsPage = {
+    // The default tax rate as the field can hold it: up to four decimals. A
+    // default saved before 2.18 with more would fail the field's step and
+    // hold back Save Settings for the whole page; it shows (and saves)
+    // rounded to four, which is all a document keeps.
+    _ratePercent(value) {
+        const n = Number(value);
+        return Number.isFinite(n) ? String(+n.toFixed(4)) : '0.0';
+    },
+
     async render() {
         const s = await API.get('/settings');
         // what the books hold; the closing date's state line describes this
@@ -93,7 +102,7 @@ const SettingsPage = {
                         <div class="form-group"><label>Default Tax Rate (%)</label>
                             <input name="default_tax_rate" type="number" min="0" max="100" step="0.0001"
                                 title="A percent from 0 to 100, up to four decimal places: 8.875 means 8.875%"
-                                value="${escapeHtml(s.default_tax_rate || '0.0')}"></div>
+                                value="${escapeHtml(SettingsPage._ratePercent(s.default_tax_rate))}"></div>
                         <div class="form-group"><label>${`${T('Invoice')} Prefix`}</label>
                             <input name="invoice_prefix" value="${escapeHtml(s.invoice_prefix || '')}" placeholder="e.g. INV-"></div>
                         <div class="form-group"><label>${`Next ${T('Invoice')} #`}</label>
