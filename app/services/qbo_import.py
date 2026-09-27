@@ -430,17 +430,57 @@ def _discount_on_taxed(amount, after, taxed, sold, base) -> Decimal:
     return _q(amount * taxed / sold)
 
 
+def _bundle_lines(db, qbo_line) -> list[dict]:
+    """A QBO bundle (GroupLineDetail) as the lines of its items: each sales
+    line in it as the import stores one (item, quantity, price, amount and
+    taxable flag), so the stock and income of its items are where QBO has
+    them. When the bundle's own amount differs from its items' (a price set
+    on the bundle), the difference is a line named for the bundle, taxable
+    when every item in it is. A bundle line reading 0.00 leaves its total
+    to its items: the SDK reads an amount QBO leaves out as 0."""
+    from app.services.accounting import _q
+
+    group = _safe(qbo_line, "GroupLineDetail")
+    lines = []
+    for inner in (_safe(group, "Line") or []) if group else []:
+        detail = _safe(inner, "SalesItemLineDetail")
+        if _safe(inner, "DetailType", "") == "SalesItemLineDetail" and detail:
+            lines.append(_sales_line(db, inner, detail))
+    total = _safe_decimal(qbo_line, "Amount")
+    difference = (
+        _q(total - sum((ln["amount"] for ln in lines), Decimal("0")))
+        if total
+        else Decimal("0")
+    )
+    if difference:
+        ref = _safe(group, "GroupItemRef") if group else None
+        lines.append(
+            {
+                "item_id": None,
+                "description": _safe(qbo_line, "Description")
+                or (_safe(ref, "name", "") if ref else "")
+                or "Bundle",
+                "quantity": Decimal("1"),
+                "rate": difference,
+                "amount": difference,
+                "is_taxable": bool(lines) and all(ln["is_taxable"] for ln in lines),
+            }
+        )
+    return lines
+
+
 def _document_lines(db, source) -> list[dict]:
     """The lines the import makes of a QBO invoice or sales receipt, in
-    QBO's order: one for each sales line (SalesItemLineDetail), and its
-    discount (DiscountLineDetail) as a negative line on the discount item
-    for QBO's discount account (_discount_item). The lines add up to QBO's
-    subtotal, an edit here re-totals to QBO's total, and a document of ours
-    books the discount where QBO did. With the tax worked out after the
-    discount (ApplyTaxAfterDiscount), the part of the discount QBO took off
-    the taxable amount is a taxable line, the rest (the untaxed lines'
-    share) an untaxed one, so the taxable amount is QBO's. Subtotal lines
-    are QBO's arithmetic; bundles (GroupLineDetail) are not brought across."""
+    QBO's order: one for each sales line (SalesItemLineDetail), the lines of
+    each bundle's items (GroupLineDetail, _bundle_lines), and its discount
+    (DiscountLineDetail) as a negative line on the discount item for QBO's
+    discount account (_discount_item). The lines add up to QBO's subtotal,
+    an edit here re-totals to QBO's total, and a document of ours books the
+    discount where QBO did. With the tax worked out after the discount
+    (ApplyTaxAfterDiscount), the part of the discount QBO took off the
+    taxable amount is a taxable line, the rest (the untaxed lines' share)
+    an untaxed one, so the taxable amount is QBO's. Subtotal lines are
+    QBO's arithmetic."""
     from app.services.accounting import _q
 
     ordered = []
@@ -450,6 +490,8 @@ def _document_lines(db, source) -> list[dict]:
             detail = _safe(qbo_line, "SalesItemLineDetail")
             if detail:
                 ordered.append(_sales_line(db, qbo_line, detail))
+        elif kind == "GroupLineDetail":
+            ordered.extend(_bundle_lines(db, qbo_line))
         elif kind == "DiscountLineDetail":
             ordered.append(qbo_line)
     sales = [line for line in ordered if isinstance(line, dict)]
@@ -510,17 +552,17 @@ def _lines_short(lines, subtotal) -> Decimal:
 
 def _note_lines_short(lines, subtotal) -> None:
     """Say so in the import log when a document's lines don't add up to its
-    total before tax: a line of a kind the import doesn't bring across (a
-    bundle) makes the difference, which an edit here posts to income."""
+    total before tax: a line of a kind the import doesn't bring across
+    makes the difference, which an edit here posts to income."""
     short = _lines_short(lines, subtotal)
     if short:
         qbo_progress.emit(
             "note",
             f"Its lines here come to {subtotal - short:.2f} and its total before "
             f"tax in QuickBooks Online to {subtotal:.2f}: a line of a kind the "
-            "import doesn't bring across (a bundle, for one) makes up the "
-            f"{abs(short):.2f}. If it is edited here, that part of its total "
-            "posts to your income account.",
+            f"import doesn't bring across makes up the {abs(short):.2f}. If it "
+            "is edited here, that part of its total posts to your income "
+            "account.",
             level="warning",
             code="IMPORT_LINES_SHORT",
         )
@@ -603,13 +645,17 @@ def _not_applied(errors, entity, source, noun, why) -> None:
     )
 
 
-def _bring_discount_across(db, mapping, invoice, source, kind) -> bool:
-    """A document imported before discounts came across (2.18.0), and not
-    changed in QBO since: its lines fall short of its subtotal by the
-    discount QBO's discount line now brings. Its lines are brought up to
-    date; its amounts are QBO's already and stay as they are. False, and
-    nothing changed, when there is nothing to bring, when it is no longer
-    the import's (voided or edited here), or when its period is closed."""
+_BROUGHT = {"DiscountLineDetail": "its discount", "GroupLineDetail": "its bundles"}
+
+
+def _bring_lines_across(db, mapping, invoice, source, kind) -> bool:
+    """A document imported before discounts and bundles came across
+    (2.18.0), and not changed in QBO since: its lines fall short of its
+    subtotal by what QBO's discount or bundle lines now bring. Its lines are
+    brought up to date; its amounts are QBO's already and stay as they are.
+    False, and nothing changed, when there is nothing to bring, when it is
+    no longer the import's (voided or edited here), or when its period is
+    closed."""
     from app.models.invoices import InvoiceStatus
     from app.services.inventory_hooks import (
         reconcile_invoice_inventory_delta,
@@ -617,15 +663,20 @@ def _bring_discount_across(db, mapping, invoice, source, kind) -> bool:
     )
     from app.services.qbo_documents import closed_on, local_cost_live
 
+    brought = [
+        words
+        for kind_name, words in _BROUGHT.items()
+        if any(
+            _safe(line, "DetailType", "") == kind_name
+            for line in _safe(source, "Line") or []
+        )
+    ]
     if (
         invoice is None
         or mapping.qbo_sync_token in NOT_OWNED
         or invoice.transaction_id is not None
         or invoice.status == InvoiceStatus.VOID
-        or not any(
-            _safe(line, "DetailType", "") == "DiscountLineDetail"
-            for line in _safe(source, "Line") or []
-        )
+        or not brought
     ):
         return False
     ours = [{"quantity": ln.quantity, "rate": ln.rate} for ln in invoice.lines]
@@ -657,10 +708,10 @@ def _bring_discount_across(db, mapping, invoice, source, kind) -> bool:
     noun = "sales receipt" if kind == "sales_receipt" else "invoice"
     qbo_progress.emit(
         "update",
-        f"{_source_context(_LABEL[kind], source)}: its discount came across; "
-        f"{noun} {invoice.invoice_number} has its discount line now, and its "
+        f"{_source_context(_LABEL[kind], source)}: {' and '.join(brought)} came "
+        f"across; {noun} {invoice.invoice_number} has those lines now, and its "
         f"total ({invoice.total:,.2f}) is as it was",
-        code="IMPORT_QBO_DISCOUNT_ADDED",
+        code="IMPORT_QBO_LINES_ADDED",
     )
     return True
 
@@ -683,7 +734,7 @@ def _refresh_invoice(db, mapping, source, kind, errors) -> None:
 
     invoice = db.get(Invoice, mapping.slowbooks_id)
     token = _changed_in_qbo(mapping, source)
-    if token is None and _bring_discount_across(db, mapping, invoice, source, kind):
+    if token is None and _bring_lines_across(db, mapping, invoice, source, kind):
         return
     if (
         token is None
