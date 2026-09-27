@@ -175,7 +175,8 @@ def test_the_settings_inputs_carry_the_same_limits():
         ]
 
     tax = tag("default_tax_rate")
-    assert 'min="0"' in tax and 'max="100"' in tax and 'step="0.01"' in tax
+    # a percent to four places, as a document keeps it (8.875%)
+    assert 'min="0"' in tax and 'max="100"' in tax and 'step="0.0001"' in tax
     for key in ("invoice_next_number", "estimate_next_number"):
         t = tag(key)
         assert 'pattern="[0-9]*[1-9][0-9]*"' in t and "required" in t

@@ -22,7 +22,7 @@ import csv
 import io
 import logging
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from sqlalchemy.orm import Session
 
@@ -31,6 +31,7 @@ from app.models.contacts import Customer
 from app.models.invoices import Invoice, InvoiceLine, InvoiceStatus
 from app.models.items import Item
 from app.models.payments import Payment, PaymentAllocation
+from app.schemas.common import TAX_RATE_PLACES
 from app.services.accounting import (
     _q,
     create_journal_entry,
@@ -86,14 +87,20 @@ def _parse_date(s):
 
 
 def _parse_tax_rate(price: str) -> Decimal:
-    """'6.4%' -> Decimal('0.064'); anything else -> 0."""
+    """'6.4%' -> 0.064, '8.875%' -> 0.08875; anything else -> 0. A document
+    keeps its rate to six places (a percent to four), so a finer one is
+    rounded half up here, not left to the database: PostgreSQL rounds it as
+    it stores it, SQLite stores it as given and rounds it as it reads it."""
     price = (price or "").strip()
     if not price.endswith("%"):
         return Decimal("0")
     try:
-        return Decimal(price[:-1]) / Decimal("100")
+        rate = Decimal(price[:-1]) / Decimal("100")
     except InvalidOperation:
         return Decimal("0")
+    if not rate.is_finite():
+        return Decimal("0")
+    return rate.quantize(TAX_RATE_PLACES, rounding=ROUND_HALF_UP)
 
 
 def _find_header_for(rows: list[list[str]], required: tuple):

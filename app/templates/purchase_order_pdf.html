@@ -104,7 +104,7 @@
         <table>
             <tr><td class="label">Subtotal</td><td class="r">{{ po.subtotal | currency }}</td></tr>
             {% if po.tax_amount and po.tax_amount != 0 %}
-            <tr><td class="label">Tax ({{ "%.2f" | format(po.tax_rate * 100) }}%)</td><td class="r">{{ po.tax_amount | currency }}</td></tr>
+            <tr><td class="label">Tax ({{ po.tax_rate | tax_percent }}%)</td><td class="r">{{ po.tax_amount | currency }}</td></tr>
             {% endif %}
             <tr><td class="label grand">Total</td><td class="r grand">{{ po.total | currency }}</td></tr>
         </table>

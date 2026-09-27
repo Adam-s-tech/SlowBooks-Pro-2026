@@ -289,7 +289,7 @@ def test_the_estimate_preview_taxes_only_the_ticked_lines():
     shared = (js / "invoices.js").read_text(encoding="utf-8")
     totals = shared[shared.index("    totals(tbody, taxPct") :]
     totals = totals[: totals.index("\n    },")]
-    assert "SalesLines.cents(taxable) *" in totals
+    assert "SalesLines.tax(SalesLines.cents(taxable), taxPct)" in totals
     assert "cents(subtotal) *" not in totals and "subtotal *" not in totals
     for page, prefix in (
         ("estimates.js", "est"),

@@ -171,7 +171,7 @@ const SalesReceiptsPage = {
                     ${classGroup}${jobGroup}
                     ${currencyFormGroupsHtml(null, null)}
                     <div class="form-group"><label>Tax Rate (%)</label>
-                        <input name="tax_rate" type="number" step="0.01" value="${+((sr.tax_rate || 0) * 100).toFixed(4)}"
+                        <input name="tax_rate" type="number" step="0.0001" value="${+((sr.tax_rate || 0) * 100).toFixed(4)}"
                             oninput="SalesReceiptsPage.recalc()"></div>
                     ${Terms.isNonprofit() ? `
                     <div class="form-group full-width" style="border-top:1px solid var(--gray-200); padding-top:8px; margin-top:4px;">
@@ -256,9 +256,9 @@ const SalesReceiptsPage = {
             const taxInput = form.querySelector('[name="tax_rate"]');
             const r = ScanHelper.taxPercent(value, sub, meta && meta.text);
             if (r.error) { SalesReceiptsPage.recalc(); return { error: r.error }; }
-            if (taxInput) taxInput.value = r.pct.toFixed(2);
+            if (taxInput) taxInput.value = r.pct;
             SalesReceiptsPage.recalc();
-            return { note: `— tax rate set to ${r.pct.toFixed(2)}%.` };
+            return { note: `— tax rate set to ${r.pct}%.` };
         }
         SalesReceiptsPage.recalc();
     },
@@ -298,7 +298,7 @@ const SalesReceiptsPage = {
                         rateInput.value = parseFloat(result.subtotal).toFixed(2);
                         const taxRate = (parseFloat(result.tax) / parseFloat(result.subtotal)) * 100;
                         const taxInput = form.querySelector('[name="tax_rate"]');
-                        if (taxInput) taxInput.value = taxRate.toFixed(2);
+                        if (taxInput) taxInput.value = +taxRate.toFixed(4);
                     } else {
                         rateInput.value = total.toFixed(2);
                     }

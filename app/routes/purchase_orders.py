@@ -176,6 +176,14 @@ def update_po(po_id: int, data: POUpdate, db: Session = Depends(get_db)):
         po.subtotal = subtotal
         po.tax_amount = tax_amount
         po.total = total
+    elif data.tax_rate is not None:
+        # A new rate without the lines re-totals the stored lines. It changed
+        # the rate and kept the old tax and total, and the bill the order
+        # became carried that tax.
+        subtotal, tax_amount, total = compute_line_totals(po.lines, data.tax_rate)
+        po.subtotal = subtotal
+        po.tax_amount = tax_amount
+        po.total = total
 
     db.commit()
     db.refresh(po)

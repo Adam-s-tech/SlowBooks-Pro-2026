@@ -519,7 +519,7 @@ const ReportsPage = {
                     <td>${escapeHtml(i.customer_name)}</td>
                     <td class="amount">${formatCurrency(i.subtotal)}</td>
                     <td class="amount">${formatCurrency(i.taxable)}</td>
-                    <td class="amount">${i.tax_rate == null ? '—' : (i.tax_rate * 100).toFixed(2) + '%'}</td>
+                    <td class="amount">${i.tax_rate == null ? '—' : SalesLines.taxPercent(i.tax_rate) + '%'}</td>
                     <td class="amount">${formatCurrency(i.tax_amount)}</td>
                 </tr>`
             ).join("");

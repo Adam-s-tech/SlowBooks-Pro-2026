@@ -71,10 +71,11 @@ def get_settings(db: Session = Depends(get_db)):
 
     Units to know before copying a value onto a document:
     `default_tax_rate` is a PERCENT string as the user types it ("8.9" =
-    8.9%); a document's `tax_rate` (invoices, bills, estimates, credit
-    memos, sales receipts, purchase orders, recurring templates) is a
-    FRACTION (0.089). Divide by 100 before posting; the API rejects a
-    document `tax_rate` above 1.
+    8.9%, up to four decimal places: "8.875"); a document's `tax_rate`
+    (invoices, bills, estimates, credit memos, sales receipts, purchase
+    orders, recurring templates) is a FRACTION (0.089), kept to six places.
+    Divide by 100 before posting; the API rejects a document `tax_rate`
+    above 1.
     """
     return _redact_secrets(get_all_settings(db))
 

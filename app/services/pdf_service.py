@@ -182,6 +182,23 @@ def _format_rate(value, code=None):
     return _money(body, d < 0, code)
 
 
+def _format_tax_percent(value):
+    """A document's tax rate (a fraction) as the percent it prints: at least
+    two places, up to the four a rate keeps ("8.875", "8.25", "7.00"). The
+    documents printed "%.2f", so New York City's 8.875% read 8.88%. The Sales
+    Tax report prints it the same way (SalesLines.taxPercent)."""
+    from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+
+    try:
+        pct = Decimal(str(value or 0)) * 100
+        pct = pct.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+    except (InvalidOperation, ValueError):
+        pct = Decimal("0")
+    if pct == pct.quantize(Decimal("0.01")):
+        return f"{pct:.2f}"
+    return format(pct.normalize(), "f")
+
+
 def document_currency_code(doc, company_settings: dict) -> str:
     """The ISO code to print on a document's amounts: its own currency when
     that is not the home currency, else "" (plain dollars)."""
@@ -200,6 +217,7 @@ def _format_date(value):
 
 _jinja_env.filters["currency"] = _format_currency
 _jinja_env.filters["rate"] = _format_rate
+_jinja_env.filters["tax_percent"] = _format_tax_percent
 _jinja_env.filters["fdate"] = _format_date
 _jinja_env.globals["document_currency_code"] = document_currency_code
 

@@ -90,7 +90,7 @@ const VendorCreditsPage = {
                     <div class="form-group"><label>Their credit note #</label>
                         <input name="ref_number" placeholder="optional"></div>
                     <div class="form-group"><label>Tax Rate (%)</label>
-                        <input name="tax_rate" type="number" step="0.01" min="0" value="0" oninput="VendorCreditsPage.recalc()"></div>
+                        <input name="tax_rate" type="number" step="0.0001" min="0" value="0" oninput="VendorCreditsPage.recalc()"></div>
                     ${classGroup}
                 </div>
                 <h3 style="margin:12px 0 8px;font-size:14px;">Credit Lines</h3>
@@ -149,8 +149,8 @@ const VendorCreditsPage = {
             const cell = row.querySelector('.line-amount');
             if (cell) cell.textContent = formatCurrency(amount);
         });
-        const pct = parseFloat($('#vc-form [name="tax_rate"]')?.value) || 0;
-        const tax = PurchaseLines.cents(subtotal * pct / 100);
+        // to the cent, half up, as the server works it out
+        const tax = SalesLines.tax(subtotal, $('#vc-form [name="tax_rate"]')?.value);
         if ($('#vc-subtotal')) $('#vc-subtotal').textContent = formatCurrency(subtotal);
         if ($('#vc-tax')) $('#vc-tax').textContent = formatCurrency(tax);
         if ($('#vc-total')) $('#vc-total').textContent = formatCurrency(subtotal + tax);

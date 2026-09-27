@@ -103,7 +103,7 @@ const PurchaseOrdersPage = {
                     <div class="form-group"><label>Expected Date</label>
                         <input name="expected_date" type="date" value="${po.expected_date || ''}"></div>
                     <div class="form-group"><label>Tax Rate (%)</label>
-                        <input name="tax_rate" type="number" step="0.01" min="0" value="${+((po.tax_rate || 0) * 100).toFixed(4)}"
+                        <input name="tax_rate" type="number" step="0.0001" min="0" value="${+((po.tax_rate || 0) * 100).toFixed(4)}"
                             oninput="PurchaseOrdersPage.recalc()"
                             title="Sales tax the vendor charges, if any. It becomes part of what the goods cost."></div>
                     ${jobGroup}
@@ -171,8 +171,8 @@ const PurchaseOrdersPage = {
             const cell = row.querySelector('.line-amount');
             if (cell) cell.textContent = formatCurrency(amount);
         });
-        const pct = parseFloat($('#po-form [name="tax_rate"]')?.value) || 0;
-        const tax = PurchaseLines.cents(subtotal * pct / 100);
+        // to the cent, half up, as the server works it out
+        const tax = SalesLines.tax(subtotal, $('#po-form [name="tax_rate"]')?.value);
         if ($('#po-subtotal')) $('#po-subtotal').textContent = formatCurrency(subtotal);
         if ($('#po-tax')) $('#po-tax').textContent = formatCurrency(tax);
         if ($('#po-total')) $('#po-total').textContent = formatCurrency(subtotal + tax);

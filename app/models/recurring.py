@@ -32,7 +32,7 @@ class RecurringInvoice(Base):
     is_active = Column(Boolean, default=True)
 
     terms = Column(String(50), default="Net 30")
-    tax_rate = Column(Numeric(5, 4), default=0)
+    tax_rate = Column(Numeric(7, 6), default=0)  # a fraction: 8.875% is 0.08875
     notes = Column(Text, nullable=True)
     invoices_created = Column(Integer, default=0)
 

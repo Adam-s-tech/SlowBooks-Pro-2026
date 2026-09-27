@@ -140,6 +140,9 @@ _PERCENT_SETTINGS = {
     "default_tax_rate": "Default tax rate",
     "late_fee_rate": "Late fee rate",
 }
+# A document keeps its tax rate to four places of a percent (New York
+# City's 8.875%, 7.0625%), so the default that fills it in can have no more.
+_FOUR_PLACE_PERCENTS = {"default_tax_rate"}
 # key -> (label, smallest allowed, largest allowed or None)
 _WHOLE_NUMBER_SETTINGS = {
     "invoice_next_number": ("Next invoice number", 1, None),
@@ -178,6 +181,10 @@ def clean_setting_value(key: str, value) -> str:
             raise SettingValueError(
                 f"{label} must be a number from 0 to 100. It is a percent: "
                 "8.25 means 8.25%."
+            )
+        if key in _FOUR_PLACE_PERCENTS and number != number.quantize(Decimal("0.0001")):
+            raise SettingValueError(
+                f"{label} can have up to four decimal places: 8.875 means 8.875%."
             )
         return "0" if number == 0 else format(number, "f")
     if key in _WHOLE_NUMBER_SETTINGS:

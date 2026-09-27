@@ -58,8 +58,36 @@ const SalesLines = {
             if (cell) cell.textContent = SalesLines.money(amount, currency);
         });
         subtotal = SalesLines.cents(subtotal);
-        const tax = SalesLines.cents(SalesLines.cents(taxable) * (parseFloat(taxPct) || 0) / 100);
+        const tax = SalesLines.tax(SalesLines.cents(taxable), taxPct);
         return { subtotal, tax, total: SalesLines.cents(subtotal + tax) };
+    },
+
+    // Tax on an amount at a percent typed on a form, to the cent, half up:
+    // the figure the server stores. It is worked in whole cents and
+    // ten-thousandths of a percent (a rate keeps four places), because a
+    // binary fraction can put a half cent on the wrong side: $175,800.00
+    // at 1.0875% is $1,911.825, so $1,911.83, and floating point showed
+    // $1,911.82; a purchase order showed $8.41 for 8.25% of $102.00.
+    tax(amount, taxPct) {
+        const cents = Math.round((Number(amount) || 0) * 100);
+        const units = SalesLines.percentUnits(taxPct);
+        const product = Math.abs(cents * units) + 500000;
+        if (!Number.isSafeInteger(product)) {
+            return SalesLines.cents(SalesLines.cents(amount) * (parseFloat(taxPct) || 0) / 100);
+        }
+        const whole = (product - product % 1000000) / 1000000;
+        return ((cents < 0) !== (units < 0) && whole ? -whole : whole) / 100;
+    },
+
+    // A typed percent in ten-thousandths ("8.875" is 88750), read from its
+    // digits rather than through a binary fraction. A fifth place rounds
+    // half up, as the server rounds the rate it is sent.
+    percentUnits(taxPct) {
+        const text = String(taxPct ?? '').trim();
+        const m = /^(\d*)(?:\.(\d*))?$/.exec(text);
+        if (!m || !(m[1] || m[2])) return Math.round((parseFloat(text) || 0) * 10000);
+        const places = ((m[2] || '') + '00000').slice(0, 5);
+        return Number(m[1] || 0) * 10000 + Number(places.slice(0, 4)) + (places[4] >= '5' ? 1 : 0);
     },
 
     // Write totals into the form's Subtotal / Tax / Total cells (by id).
@@ -85,6 +113,13 @@ const SalesLines = {
 
     // A unit price: two places, or up to four when it has them ($0.045).
     rate(value, currency) { return SalesLines.money(value, currency, 4); },
+
+    // A document's tax rate (a fraction) as the percent it prints: at least
+    // two places, up to the four a rate keeps ("8.875", "8.25", "7.00"), as
+    // the PDFs print it (pdf_service's tax_percent filter).
+    taxPercent(fraction) {
+        return ((parseFloat(fraction) || 0) * 100).toFixed(4).replace(/0{1,2}$/, '');
+    },
 
     // Send a sales document. One that adds up to $0.00 comes back refused
     // (409, code "zero_total") unless the person says it is meant to be:
@@ -603,7 +638,7 @@ const InvoicesPage = {
                     ${classGroup}${jobGroup}${pledgeGroup}
                     ${currencyFormGroupsHtml(inv.currency, inv.exchange_rate)}
                     <div class="form-group"><label>Tax Rate (%)</label>
-                        <input name="tax_rate" type="number" step="0.01" value="${+((inv.tax_rate || 0) * 100).toFixed(4)}"
+                        <input name="tax_rate" type="number" step="0.0001" value="${+((inv.tax_rate || 0) * 100).toFixed(4)}"
                             oninput="InvoicesPage.recalc()">
                         ${InvoicesPage._keptTax != null ? `<div class="hint" id="inv-kept-tax">Tax stays at ${formatCurrency(InvoicesPage._keptTax)}, the amount it came in with. Enter a rate to work it out instead, or untick Tax on the lines for none.</div>` : ''}</div>
                 </div>

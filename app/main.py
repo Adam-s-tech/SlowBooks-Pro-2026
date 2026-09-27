@@ -417,9 +417,9 @@ app = FastAPI(
         "expenses, journal entries, in-kind gifts, job costs). `DELETE` on one "
         "answers 405 and names the void route. A pledge that will not be paid "
         "is written off (`POST /api/invoices/{id}/write-off`), not voided.\n"
-        "- **`tax_rate` on a document is a fraction** (0.089 = 8.9%); "
-        '`default_tax_rate` in settings is a percent string ("8.9"). '
-        "Divide by 100.\n"
+        "- **`tax_rate` on a document is a fraction** (0.089 = 8.9%), kept "
+        "to six places (0.08875 = 8.875%); `default_tax_rate` in settings is "
+        'a percent string ("8.9"). Divide by 100.\n'
         "- Enumerated fields are enums in this spec; read the allowed values "
         "here rather than guessing."
     ),
