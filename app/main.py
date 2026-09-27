@@ -31,7 +31,6 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError
 
-from app.services import storage
 from app.services.control_accounts import MissingControlAccount
 from app.services.rate_limit import limiter
 
@@ -1061,18 +1060,26 @@ app.include_router(ocr_routes.router)
 # Register audit log hooks
 register_audit_hooks(SessionLocal)
 
-# Static files. Uploads live outside the bundle on desktop installs
-# (SLOWBOOKS_DATA_DIR) but keep their /static/uploads URLs — the more
-# specific mount must be registered first so it wins over /static.
+# Static files.
 static_dir = Path(__file__).parent / "static"
-uploads_dir = storage.uploads_root()
-uploads_dir.mkdir(parents=True, exist_ok=True)
-if uploads_dir != static_dir / "uploads":
-    app.mount(
-        "/static/uploads",
-        StaticFiles(directory=str(uploads_dir)),
-        name="static-uploads",
-    )
+
+
+# The uploads folder is not served. Before 2.18.0 every company's logo,
+# attachments and employee documents were files there, one folder for every
+# company, published at /static/uploads/ like the app's own scripts — and
+# /static/ needs no sign-in, so a W-4 was one guessable URL away from anyone
+# who could reach the server. Each company now keeps its files in its own
+# database and serves them through signed-in routes; the folder is left on
+# disk (the upgrade copies from it, and other companies may still need it)
+# but nothing reads it over HTTP. Registered before the /static mount, which
+# on a server install covers app/static/uploads too.
+@app.api_route(
+    "/static/uploads/{rest:path}", methods=["GET", "HEAD"], include_in_schema=False
+)
+async def _uploads_folder_is_not_served(rest: str):
+    return JSONResponse(status_code=404, content={"detail": "Not Found"})
+
+
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 # SPA entry point

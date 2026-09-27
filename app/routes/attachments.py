@@ -1,31 +1,30 @@
 # ============================================================================
 # Attachments — file upload/download for invoices, bills, etc.
 # Phase 10: Quick Wins + Medium Effort Features
+#
+# The bytes are kept in the company's own database (stored_files, see
+# app/services/file_store.py). They used to be written to
+# uploads/attachments/<type>/<record id>/<name> in a folder every company on
+# a desktop install shared, so company B's invoice 1 "receipt.pdf" replaced
+# company A's, and deleting B's made A's answer 404 (2.18.0 gate, skytech).
 # ============================================================================
 
 import re
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.attachments import Attachment
 from app.schemas.attachments import AttachmentResponse
-from app.services import storage
+from app.services import file_store
 
 router = APIRouter(prefix="/api/attachments", tags=["attachments"])
 
-# Attachment file_path values in the DB are stored relative to this root
-# ("uploads/attachments/...") — app/static on server installs, the per-user
-# data dir on desktop installs (see app/services/storage.py).
-STATIC_BASE = storage.files_root().resolve()
-UPLOAD_BASE = (STATIC_BASE / "uploads" / "attachments").resolve()
-
-# Map validated entity type -> directory name. Routing the user-provided
-# entity_type through this dict (instead of using the raw string) gives
-# CodeQL an unambiguous sanitization point for the path-injection taint flow.
+# The record types a file can be attached to. The user-provided entity_type
+# is routed through this dict, so only these words are ever stored. (It was
+# also the folder name when attachments were files on disk.)
 _ENTITY_TYPE_DIRS = {
     "invoice": "invoice",
     "bill": "bill",
@@ -39,9 +38,9 @@ _ENTITY_TYPE_DIRS = {
     "customer": "customer",
 }
 
-# Whitelist of MIME types we accept for attachments. Attachments are served
-# back from /static/ so we reject anything that a browser would render and
-# potentially execute (HTML, SVG with scripts, executables).
+# Whitelist of MIME types we accept for attachments. An attachment is served
+# back under its stored type, so we reject anything that a browser would
+# render and potentially execute (HTML, SVG with scripts, executables).
 ALLOWED_MIME_TYPES = {
     "application/pdf",
     "image/png",
@@ -73,8 +72,8 @@ ALLOWED_EXTENSIONS = {
 }
 
 # Only plain word chars, spaces, hyphens, dots, and parens in filenames.
-# Everything else gets rewritten out before the path is used. This is belt-
-# and-braces on top of Path(...).name stripping any directory components.
+# Everything else gets rewritten out: the name is shown in lists and sent in
+# the download's Content-Disposition. Path(...).name strips any directory.
 _SAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9 ._()\-]")
 
 
@@ -91,27 +90,31 @@ def _sanitize_filename(raw: str) -> str:
     return cleaned
 
 
-def _split_stored_path(stored: str) -> list[str]:
-    """Split a stored relative path on either separator.
+def _entity_type(entity_type: str) -> str:
+    """The whitelisted record type, or 400. Employee documents are not one:
+    they are HR's, reached only through /api/employees (admin only)."""
+    type_dir = _ENTITY_TYPE_DIRS.get(entity_type)
+    if type_dir is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid entity type. Allowed: {', '.join(sorted(_ENTITY_TYPE_DIRS))}",
+        )
+    return type_dir
 
-    Rows written by a pre-fix Windows install carry backslashes; they must
-    keep resolving on every platform.
-    """
-    return [part for part in stored.replace("\\", "/").split("/") if part]
 
-
-def _resolve_within(base: Path, *parts: str) -> Path:
-    """Join parts onto base, resolve, and assert the result is inside base.
-
-    Raises HTTPException(400) on any attempt to escape via .., symlinks, or
-    absolute-path segments.
-    """
-    candidate = base.joinpath(*parts).resolve()
-    try:
-        candidate.relative_to(base)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid path")
-    return candidate
+def _record_attachment(db: Session, attachment_id: int) -> Attachment | None:
+    """An attachment on a record — never an employee document. Those share
+    the table, and this route has none of their admin-only rule: a read-only
+    sign-in could download a W-4 by its id here, or a bookkeeper delete one."""
+    return (
+        db.query(Attachment)
+        .filter(
+            Attachment.id == attachment_id,
+            Attachment.employee_id.is_(None),
+            Attachment.entity_type.in_(list(_ENTITY_TYPE_DIRS)),
+        )
+        .first()
+    )
 
 
 @router.post(
@@ -123,17 +126,8 @@ async def upload_attachment(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
-    # Route entity_type through the whitelist map. `type_dir` is known-safe
-    # static data from here on — user input no longer reaches the filesystem.
-    type_dir = _ENTITY_TYPE_DIRS.get(entity_type)
-    if type_dir is None:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid entity type. Allowed: {', '.join(sorted(_ENTITY_TYPE_DIRS))}",
-        )
+    _entity_type(entity_type)
 
-    # entity_id is already an int from FastAPI path-parameter validation, so
-    # str(entity_id) is only digits — safe to use as a path segment.
     safe_filename = _sanitize_filename(file.filename or "")
     extension = Path(safe_filename).suffix.lower()
     if extension not in ALLOWED_EXTENSIONS:
@@ -151,25 +145,16 @@ async def upload_attachment(
     if len(content) > 50 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File too large (max 50MB)")
 
-    # Build and verify paths against the upload base BEFORE any filesystem op.
-    upload_dir = _resolve_within(UPLOAD_BASE, type_dir, str(entity_id))
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    file_path = _resolve_within(upload_dir, safe_filename)
-    file_path.write_bytes(content)
-
-    attachment = Attachment(
+    # A row of its own every time: a second "receipt.pdf" on the same record
+    # is a second file, and the first is kept.
+    attachment = file_store.add_attachment(
+        db,
         entity_type=entity_type,
         entity_id=entity_id,
         filename=safe_filename,
-        # POSIX form, always. str() on a WindowsPath yields backslashes, and
-        # a company file written on Windows would then be unable to find its
-        # own attachments when opened on macOS or Linux — joinpath() there
-        # treats "uploads\\attachments\\x.pdf" as one filename.
-        file_path=file_path.relative_to(STATIC_BASE).as_posix(),
-        mime_type=file.content_type,
-        file_size=len(content),
+        content_type=file.content_type,
+        data=content,
     )
-    db.add(attachment)
     db.commit()
     db.refresh(attachment)
     return attachment
@@ -184,45 +169,33 @@ async def upload_attachment(
 # 2.10.3 gate). The literal-prefix route must stay ABOVE the catch-all.
 @router.get("/download/{attachment_id}")
 def download_attachment(attachment_id: int, db: Session = Depends(get_db)):
-    attachment = db.query(Attachment).filter(Attachment.id == attachment_id).first()
+    attachment = _record_attachment(db, attachment_id)
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
-
-    file_path = _resolve_within(STATIC_BASE, *_split_stored_path(attachment.file_path))
-    if not file_path.is_file():
-        raise HTTPException(status_code=404, detail="File not found on disk")
-
-    return FileResponse(
-        str(file_path),
-        filename=attachment.filename,
-        media_type=attachment.mime_type or "application/octet-stream",
-    )
+    return file_store.attachment_response(db, attachment)
 
 
 @router.get("/{entity_type}/{entity_id}", response_model=list[AttachmentResponse])
 def list_attachments(entity_type: str, entity_id: int, db: Session = Depends(get_db)):
+    _entity_type(entity_type)
     return (
         db.query(Attachment)
         .filter(
-            Attachment.entity_type == entity_type, Attachment.entity_id == entity_id
+            Attachment.entity_type == entity_type,
+            Attachment.entity_id == entity_id,
+            Attachment.employee_id.is_(None),
         )
-        .order_by(Attachment.uploaded_at.desc())
+        .order_by(Attachment.uploaded_at.desc(), Attachment.id.desc())
         .all()
     )
 
 
 @router.delete("/{attachment_id}")
 def delete_attachment(attachment_id: int, db: Session = Depends(get_db)):
-    attachment = db.query(Attachment).filter(Attachment.id == attachment_id).first()
+    attachment = _record_attachment(db, attachment_id)
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
-
-    file_path = _resolve_within(STATIC_BASE, *_split_stored_path(attachment.file_path))
-    try:
-        file_path.unlink()
-    except FileNotFoundError:
-        pass  # DB row present but file already gone — delete the row anyway
-
-    db.delete(attachment)
+    # The bytes go with the row: nothing is left behind anywhere.
+    file_store.delete_attachment(db, attachment)
     db.commit()
     return {"status": "deleted"}

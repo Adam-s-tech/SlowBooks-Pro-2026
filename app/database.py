@@ -36,6 +36,12 @@ def enable_sqlite_tuning(target_engine) -> None:
     second person opens a report mid-save. busy_timeout makes brief lock
     contention wait instead of erroring; NORMAL sync is the recommended
     pairing with WAL. Harmless no-ops on :memory: databases.
+
+    secure_delete: a company keeps its files in its own database (W-4s and
+    I-9s among them), and SQLite otherwise leaves a deleted row's bytes in
+    the file's free pages, where a later copy or backup of the file still
+    carries them. With it on, a deleted document is overwritten, not just
+    unlinked from the table.
     """
     from sqlalchemy import event
 
@@ -45,6 +51,7 @@ def enable_sqlite_tuning(target_engine) -> None:
         cur.execute("PRAGMA journal_mode=WAL")
         cur.execute("PRAGMA busy_timeout=5000")
         cur.execute("PRAGMA synchronous=NORMAL")
+        cur.execute("PRAGMA secure_delete=ON")
         cur.close()
 
 

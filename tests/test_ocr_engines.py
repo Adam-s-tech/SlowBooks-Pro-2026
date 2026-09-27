@@ -103,7 +103,6 @@ needs_tesseract = pytest.mark.skipif(
 @needs_tesseract
 def test_unreadable_image_is_400_not_500(client, monkeypatch, tmp_path):
     """#71 review fix: junk bytes with a valid image MIME must 400."""
-    monkeypatch.setattr(ocr_service, "INTAKE_DIR", tmp_path)
     r = client.post(
         "/api/ocr/receipt",
         files={"file": ("junk.png", b"this is not a png", "image/png")},
@@ -118,7 +117,6 @@ def test_real_scan_returns_words_and_engine(client, monkeypatch, tmp_path):
     fixture = FIXTURES[0]
     if fixture.suffix.lower() == ".pdf" and shutil.which("pdftoppm") is None:
         pytest.skip("pdf fixture but poppler not installed")
-    monkeypatch.setattr(ocr_service, "INTAKE_DIR", tmp_path)
     r = client.post(
         "/api/ocr/receipt",
         files={

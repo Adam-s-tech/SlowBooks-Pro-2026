@@ -18,7 +18,6 @@ from fastapi import (
     File,
     Form,
 )
-from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -32,9 +31,6 @@ from app.models.payroll import Employee
 from app.routes._roles import is_admin
 from app.routes.attachments import (
     _sanitize_filename,
-    _resolve_within,
-    STATIC_BASE,
-    UPLOAD_BASE,
     ALLOWED_EXTENSIONS,
     ALLOWED_MIME_TYPES,
 )
@@ -48,6 +44,7 @@ from app.schemas.payroll import (
     BankAccountResponse,
     YTDResponse,
 )
+from app.services import file_store
 from app.services.encryption import encrypt
 from app.services.nacha_export import validate_routing_number
 from app.services.onboarding import seed_onboarding_tasks
@@ -462,6 +459,25 @@ def remove_bank_account(emp_id: int, ba_id: int, db: Session = Depends(get_db)):
 
 
 # --- HR document vault -----------------------------------------------------
+# Each document's bytes are kept in the company's own database. They used to
+# be written to uploads/attachments/employee/<employee id>/<name> in a folder
+# every company on a desktop install shared: company B's employee #1 W-4.pdf
+# replaced company A's employee #1 W-4.pdf, an updated W-4.pdf replaced the
+# original within one company, and deleting a document left the file (with
+# its SSN) on disk (2.18.0 gate, skytech).
+
+
+def _employee_document(db: Session, emp_id: int, doc_id: int) -> Attachment:
+    doc = (
+        db.query(Attachment)
+        .filter(Attachment.id == doc_id, Attachment.employee_id == emp_id)
+        .first()
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return doc
+
+
 @router.get("/{emp_id}/documents", response_model=list[EmployeeDocumentResponse])
 def list_employee_documents(emp_id: int, db: Session = Depends(get_db)):
     emp = db.query(Employee).filter(Employee.id == emp_id).first()
@@ -470,7 +486,7 @@ def list_employee_documents(emp_id: int, db: Session = Depends(get_db)):
     return (
         db.query(Attachment)
         .filter(Attachment.employee_id == emp_id)
-        .order_by(Attachment.uploaded_at.desc())
+        .order_by(Attachment.uploaded_at.desc(), Attachment.id.desc())
         .all()
     )
 
@@ -499,27 +515,22 @@ async def upload_employee_document(
             status_code=400, detail=f"MIME type '{file.content_type}' not allowed"
         )
 
-    content = await read_limited(file, label="Import file")
+    content = await read_limited(file, label="The document")
     if len(content) > 50 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File too large (max 50MB)")
 
-    # "employee" is a static literal and emp_id is an int — safe path segments.
-    upload_dir = _resolve_within(UPLOAD_BASE, "employee", str(emp_id))
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    file_path = _resolve_within(upload_dir, safe_filename)
-    file_path.write_bytes(content)
-
-    doc = Attachment(
+    # Its own row, always: an updated W-4.pdf is a second document, and the
+    # first is kept (payroll records keep every W-4 an employee filed).
+    doc = file_store.add_attachment(
+        db,
         entity_type="employee",
         entity_id=emp_id,
         employee_id=emp_id,
         doc_category=(doc_category or "general")[:50],
         filename=safe_filename,
-        file_path=str(file_path.relative_to(STATIC_BASE)),
-        mime_type=file.content_type,
-        file_size=len(content),
+        content_type=file.content_type,
+        data=content,
     )
-    db.add(doc)
     db.commit()
     db.refresh(doc)
     return doc
@@ -527,32 +538,14 @@ async def upload_employee_document(
 
 @router.get("/{emp_id}/documents/{doc_id}")
 def download_employee_document(emp_id: int, doc_id: int, db: Session = Depends(get_db)):
-    doc = (
-        db.query(Attachment)
-        .filter(Attachment.id == doc_id, Attachment.employee_id == emp_id)
-        .first()
-    )
-    if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
-    full_path = _resolve_within(STATIC_BASE, doc.file_path)
-    if not full_path.exists():
-        raise HTTPException(status_code=404, detail="File missing from storage")
-    return FileResponse(
-        str(full_path),
-        filename=doc.filename,
-        media_type=doc.mime_type or "application/octet-stream",
-    )
+    doc = _employee_document(db, emp_id, doc_id)
+    return file_store.attachment_response(db, doc, file_store.MISSING_DOCUMENT)
 
 
 @router.delete("/{emp_id}/documents/{doc_id}")
 def delete_employee_document(emp_id: int, doc_id: int, db: Session = Depends(get_db)):
-    doc = (
-        db.query(Attachment)
-        .filter(Attachment.id == doc_id, Attachment.employee_id == emp_id)
-        .first()
-    )
-    if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
-    db.delete(doc)
+    doc = _employee_document(db, emp_id, doc_id)
+    # The document's bytes go with it: a deleted W-4 is gone, not kept.
+    file_store.delete_attachment(db, doc)
     db.commit()
     return {"status": "deleted", "id": doc_id}

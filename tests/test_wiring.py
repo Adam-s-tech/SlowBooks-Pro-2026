@@ -278,6 +278,10 @@ _INTENTIONAL_BACKEND_ONLY: set[tuple[str, str]] = {
     # its one-import-per-company guard, and are listed in docs/setup-qbo.md.
     ("POST", "/api/qbo/import"),
     ("POST", "/api/qbo/import/{entity}"),
+    # The logo image. Its address IS the company_logo_path setting, which
+    # the Settings page and the invoice view put in an <img src> as a value,
+    # not a literal the JS scan can see.
+    ("GET", "/api/uploads/logo/{file_id}"),
     ("POST", "/api/payroll/gross-up"),
     ("POST", "/api/payroll/{run_id}/nacha"),
     ("POST", "/api/time-entries/classify"),

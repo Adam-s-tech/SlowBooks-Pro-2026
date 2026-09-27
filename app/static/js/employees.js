@@ -582,13 +582,16 @@ const EmployeesPage = {
                     <thead><tr><th scope="col">Filename</th><th scope="col">Category</th><th scope="col">Size</th><th scope="col">Uploaded</th><th scope="col">Actions</th></tr></thead>
                     <tbody>`;
                 for (const doc of docs) {
+                    // file_size is what the API sends; `size` never came, so
+                    // every document read "—"
+                    const bytes = doc.file_size ?? doc.size;
                     html += `<tr>
-                        <td>${escapeHtml(doc.filename || doc.file_name || '')}</td>
+                        <td>${escapeHtml(doc.filename || doc.file_name || '')}${storedFileNote(doc, 'upload')}</td>
                         <td>${escapeHtml(doc.category || doc.doc_category || '')}</td>
-                        <td>${doc.size ? formatFileSize(doc.size) : '—'}</td>
+                        <td>${bytes ? formatFileSize(bytes) : '—'}</td>
                         <td>${formatDate(doc.uploaded_at || doc.uploaded || doc.created_at)}</td>
                         <td class="actions">
-                            <a class="btn btn-sm btn-secondary" href="/api/employees/${id}/documents/${doc.id}" target="_blank">Download</a>
+                            ${doc.missing ? '' : `<a class="btn btn-sm btn-secondary" href="/api/employees/${id}/documents/${doc.id}" target="_blank">Download</a>`}
                             <button class="btn btn-sm btn-danger" onclick="EmployeesPage._deleteDocument(${id}, ${doc.id})">Delete</button>
                         </td>
                     </tr>`;

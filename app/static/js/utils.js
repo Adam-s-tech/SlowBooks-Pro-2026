@@ -20,6 +20,22 @@ function formatFileSize(bytes) {
     return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// The note beside an attachment or document the upgrade to 2.18.0 copied in
+// from the folder every company shared before (nothing there said whose a
+// file was, so it may be another company's), or found missing from it.
+// `verb` is what the person does to put it right: 'attach' or 'upload'.
+function storedFileNote(file, verb = 'attach') {
+    if (!file) return '';
+    let text = '';
+    if (file.missing) {
+        text = `Missing: this file was not in the shared folder when these books were upgraded. Delete this entry and ${verb} the file again.`;
+    } else if (file.from_shared_folder) {
+        text = `Copied from the folder earlier versions shared between companies. If it isn't the right file, delete it and ${verb} the right one.`;
+    }
+    // flex-basis: a line of its own under the file's name in a flex row
+    return text ? `<div class="stored-file-note" style="flex-basis:100%; font-size:10px; color:var(--text-muted);">${escapeHtml(text)}</div>` : '';
+}
+
 function formatDate(dateStr) {
     if (!dateStr) return '';
     const d = dateStr.includes('T')

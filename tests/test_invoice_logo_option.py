@@ -8,19 +8,18 @@ from starlette.requests import Request
 from app.models.invoices import Invoice, InvoiceLine
 from app.routes import settings as settings_routes
 from app.routes.invoices import documents
-from app.services import email_service, pdf_service
-from app.services.settings_service import get_all_settings, set_setting
+from app.services import email_service, file_store, pdf_service
+from app.services.settings_service import get_all_settings
 
 
 @pytest.fixture
-def branded_invoice(db_session, seed_customer, tmp_path, monkeypatch):
-    monkeypatch.setenv("SLOWBOOKS_DATA_DIR", str(tmp_path))
-    uploads = tmp_path / "uploads"
-    uploads.mkdir()
-    (uploads / "company_logo.svg").write_text(
-        '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="60"><rect width="200" height="60" fill="navy"/></svg>'
+def branded_invoice(db_session, seed_customer, monkeypatch):
+    # the logo is kept in the company's own database (2.18.0)
+    file_store.replace_logo(
+        db_session,
+        b'<svg xmlns="http://www.w3.org/2000/svg" width="200" height="60"><rect width="200" height="60" fill="navy"/></svg>',
+        "image/svg+xml",
     )
-    set_setting(db_session, "company_logo_path", "/static/uploads/company_logo.svg")
     invoice = Invoice(
         invoice_number="LOGO-1",
         customer_id=seed_customer.id,
@@ -157,14 +156,14 @@ def test_unavailable_logo_does_not_break_invoice(
     if fault == "not_configured":
         company["company_logo_path"] = ""
     elif fault == "missing_file":
-        company["company_logo_path"] = "/static/uploads/missing.svg"
+        company["company_logo_path"] = "/api/uploads/logo/999999"
     else:
-        from pathlib import Path
+        import app.database as db_module
 
-        def unavailable(path):
+        def unavailable(*args, **kwargs):
             raise OSError("Cannot read logo")
 
-        monkeypatch.setattr(Path, "read_bytes", unavailable)
+        monkeypatch.setattr(db_module, "SessionLocal", unavailable)
     html = pdf_service.render_invoice_html(branded_invoice, company)
     assert '<img class="company-logo"' not in html
     assert "LOGO-1" in html

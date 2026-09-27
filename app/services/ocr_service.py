@@ -12,7 +12,6 @@
 # runs exactly as before.
 # ============================================================================
 
-import json
 import logging
 import os
 import re
@@ -20,13 +19,14 @@ import shutil
 import subprocess
 import time
 from calendar import monthrange
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Optional
 from uuid import uuid4
 
-from app.services import storage
+from app.models.stored_files import KIND_RECEIPT_SCAN, StoredFile
+from app.services import file_store
 
 logger = logging.getLogger(__name__)
 
@@ -34,15 +34,13 @@ logger = logging.getLogger(__name__)
 # `tesseract --list-langs` reports; never user input, so no injection surface.
 ALLOWED_LANGS = {"eng", "spa", "fra", "deu", "por", "ita", "nld"}
 
-# Intake bucket policy (spec §5.3): files expire after 24h; hard caps protect
-# against a forgotten client filling the disk.
+# Intake bucket policy (spec §5.3): scans expire after 24h; hard caps protect
+# against a forgotten client filling the company's database.
 INTAKE_TTL_HOURS = 24
 INTAKE_MAX_FILES = 500
 INTAKE_MAX_BYTES = 1024**3  # 1 GB
 
-INTAKE_DIR = storage.files_root() / "uploads" / "intake"
 _INTAKE_ID_RE = re.compile(r"\A[0-9a-f]{32}\Z")
-_INTAKE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".pdf"}
 
 OCR_TIMEOUT_SECONDS = 20
 # Rasterization resolution for PDF pages. 200 was too coarse for some
@@ -792,173 +790,130 @@ def extract_receipt(text: str) -> dict:
 
 # ---------------------------------------------------------------------------
 # Intake bucket — pending scans awaiting attachment to a saved document.
-# Files live under uploads/intake (never served), expire after 24h, and are
-# evicted oldest-first past 500 files / 1 GB.
+# Each is a row of the company's own stored files (kind receipt_scan),
+# addressed by a random 32-hex id until it is attached. They expire after
+# 24h and are evicted oldest-first past 500 scans / 1 GB. They used to be
+# files in an intake folder every company on a desktop install shared: every
+# company's dashboard listed every company's pending receipts, and a backup
+# carried none of them.
 # ---------------------------------------------------------------------------
 
 
-def _intake_dir() -> Path:
-    INTAKE_DIR.mkdir(parents=True, exist_ok=True)
-    return INTAKE_DIR
+def _aware(dt: datetime | None) -> datetime:
+    """SQLite hands a stored UTC time back without its zone."""
+    if dt is None:
+        return datetime.now(timezone.utc)
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
-def save_intake(data: bytes, original_filename: str, mime_type: str) -> str:
-    """Store a scan; returns the intake id. Sweeps expired entries first."""
-    sweep_intake()
+def _pending(db):
+    return db.query(StoredFile).filter(StoredFile.kind == KIND_RECEIPT_SCAN)
+
+
+def _age_hours(row: StoredFile, now: datetime) -> float:
+    return (now - _aware(row.created_at)).total_seconds() / 3600
+
+
+def save_intake(db, data: bytes, original_filename: str, mime_type: str) -> str:
+    """Store a scan; returns the intake id. Sweeps expired entries first.
+    Commits."""
+    sweep_intake(db)
     intake_id = uuid4().hex
-    base = _intake_dir()
-    ext = Path(original_filename or "").suffix.lower()
-    if ext not in _INTAKE_EXTS:
-        ext = ".png"  # validated by the route; never a traversal vector
-    stored_name = f"{intake_id}{ext}"
-    stored_path = (base / stored_name).resolve()
-    if not stored_path.is_relative_to(INTAKE_DIR.resolve()):
-        raise ValueError("path escapes intake directory")
-    stored_path.write_bytes(data)
-    meta = {
-        "intake_id": intake_id,
-        "original_filename": Path(original_filename or "receipt").name,
-        "stored_name": stored_name,
-        "mime_type": mime_type,
-        "size": len(data),
-        "created_at": datetime.now().isoformat(timespec="seconds"),
-    }
-    meta_path = (base / f"{intake_id}.json").resolve()
-    if not meta_path.is_relative_to(INTAKE_DIR.resolve()):
-        raise ValueError("path escapes intake directory")
-    meta_path.write_text(json.dumps(meta), encoding="utf-8")
+    file_store.store(
+        db,
+        KIND_RECEIPT_SCAN,
+        data,
+        Path(original_filename or "receipt").name,
+        mime_type,
+        token=intake_id,
+    )
+    db.commit()
     return intake_id
 
 
-def get_intake(intake_id: str) -> Optional[dict]:
-    """Load an unexpired intake with its file bytes, or None."""
+def intake_file(db, intake_id: str) -> Optional[StoredFile]:
+    """The unexpired pending scan with this id (bytes not loaded), or None.
+    An expired one is deleted on the way (and committed)."""
     if not _INTAKE_ID_RE.fullmatch(intake_id or ""):
         return None
-    base = INTAKE_DIR
-    meta_path = (base / f"{intake_id}.json").resolve()
-    if not meta_path.is_relative_to(INTAKE_DIR.resolve()):
+    row = _pending(db).filter(StoredFile.token == intake_id).first()
+    if row is None:
         return None
-    if not meta_path.exists():
+    if _age_hours(row, datetime.now(timezone.utc)) > INTAKE_TTL_HOURS:
+        db.delete(row)
+        db.commit()
         return None
-    try:
-        meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    try:
-        created = datetime.fromisoformat(meta["created_at"])
-    except (KeyError, ValueError):
-        delete_intake(intake_id)
-        return None
-    if created < datetime.now() - timedelta(hours=INTAKE_TTL_HOURS):
-        delete_intake(intake_id)
-        return None
-    stored = Path(meta.get("stored_name") or f"{intake_id}.png").name
-    file_path = (base / stored).resolve()
-    if not file_path.is_relative_to(INTAKE_DIR.resolve()):
-        return None
-    if not file_path.is_file():
-        return None
-    try:
-        data = file_path.read_bytes()
-    except OSError:
-        return None
-    return {**meta, "data": data}
+    return row
 
 
-def delete_intake(intake_id: str) -> None:
-    """Remove the stored file and sidecar (best-effort)."""
+def get_intake(db, intake_id: str) -> Optional[dict]:
+    """Load an unexpired intake with its file bytes, or None."""
+    row = intake_file(db, intake_id)
+    if row is None:
+        return None
+    data = file_store.read_data(db, row.id)
+    if data is None:
+        return None
+    return {
+        "intake_id": intake_id,
+        "original_filename": row.original_name,
+        "mime_type": row.content_type,
+        "size": row.size,
+        "created_at": _aware(row.created_at).isoformat(timespec="seconds"),
+        "data": data,
+    }
+
+
+def delete_intake(db, intake_id: str) -> None:
+    """Discard a pending scan, bytes and all. Idempotent. Commits."""
     if not _INTAKE_ID_RE.fullmatch(intake_id or ""):
         return
-    for p in INTAKE_DIR.glob(f"{intake_id}.*"):
-        if not p.resolve().is_relative_to(INTAKE_DIR.resolve()):
-            continue
-        try:
-            p.unlink()
-        except OSError:
-            pass
+    for row in _pending(db).filter(StoredFile.token == intake_id).all():
+        db.delete(row)
+    db.commit()
 
 
-def list_intake() -> list[dict]:
+def list_intake(db) -> list[dict]:
     """Unexpired intake entries (newest first): {intake_id, original_filename,
     created_at, age_hours}. The dashboard's "Receipts to Review" card."""
-    base = _intake_dir()
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     out = []
-    for meta_path in sorted(
-        base.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True
-    ):
-        try:
-            meta = json.loads(meta_path.read_text(encoding="utf-8"))
-            created = datetime.fromisoformat(meta["created_at"])
-        except (OSError, ValueError, KeyError, json.JSONDecodeError):
-            continue
-        age_h = (now - created).total_seconds() / 3600
+    rows = _pending(db).order_by(StoredFile.created_at.desc(), StoredFile.id.desc())
+    for row in rows.all():
+        age_h = _age_hours(row, now)
         if age_h > INTAKE_TTL_HOURS:
             continue
         out.append(
             {
-                "intake_id": meta.get("intake_id"),
-                "original_filename": meta.get("original_filename", ""),
-                "created_at": meta["created_at"],
+                "intake_id": row.token,
+                "original_filename": row.original_name or "",
+                "created_at": _aware(row.created_at).isoformat(timespec="seconds"),
                 "age_hours": age_h,
             }
         )
     return out
 
 
-def sweep_intake() -> int:
-    """Expire >24h-old intakes, then enforce the file-count / byte caps.
-    Returns how many were removed. Opportunistic: called on each save."""
-    if not INTAKE_DIR.exists():
-        return 0
-    now = datetime.now()
+def sweep_intake(db) -> int:
+    """Expire >24h-old intakes, then enforce the count / byte caps. Returns
+    how many were removed. Opportunistic: called on each save. The caller
+    commits (save_intake does)."""
+    now = datetime.now(timezone.utc)
     removed = 0
-
-    entries: list[tuple[datetime, dict]] = []
-    for meta_path in INTAKE_DIR.glob("*.json"):
-        try:
-            meta = json.loads(meta_path.read_text(encoding="utf-8"))
-            created = datetime.fromisoformat(meta["created_at"])
-        except (OSError, KeyError, ValueError, json.JSONDecodeError):
-            try:
-                meta_path.unlink()
-            except OSError:
-                pass
+    kept = []
+    for row in _pending(db).order_by(StoredFile.created_at, StoredFile.id).all():
+        if _age_hours(row, now) > INTAKE_TTL_HOURS:
+            db.delete(row)
             removed += 1
-            continue
-        entries.append((created, meta))
-
-    # TTL
-    for created, meta in list(entries):
-        if created < now - timedelta(hours=INTAKE_TTL_HOURS):
-            delete_intake(meta["intake_id"])
-            removed += 1
-            entries.remove((created, meta))
-
+        else:
+            kept.append(row)
     # Caps (evict oldest first)
-    entries.sort(key=lambda e: e[0])
-    while entries and len(entries) > INTAKE_MAX_FILES:
-        _, meta = entries.pop(0)
-        delete_intake(meta["intake_id"])
+    total = sum(row.size or 0 for row in kept)
+    while kept and (len(kept) > INTAKE_MAX_FILES or total > INTAKE_MAX_BYTES):
+        row = kept.pop(0)
+        total -= row.size or 0
+        db.delete(row)
         removed += 1
-    if entries:
-        total = sum(
-            (INTAKE_DIR / Path(m.get("stored_name") or "x.png").name).stat().st_size
-            for _, m in entries
-            if (INTAKE_DIR / Path(m.get("stored_name") or "x.png").name).is_file()
-        )
-        while entries and total > INTAKE_MAX_BYTES:
-            _, meta = entries.pop(0)
-            size = _intake_size(meta)
-            delete_intake(meta["intake_id"])
-            total -= size
-            removed += 1
+    if removed:
+        db.flush()
     return removed
-
-
-def _intake_size(meta: dict) -> int:
-    name = Path(meta.get("stored_name") or "x.png").name
-    try:
-        return (INTAKE_DIR / name).stat().st_size
-    except OSError:
-        return 0

@@ -34,18 +34,13 @@ def test_the_data_dir_is_a_temporary_folder_not_the_machines_own(monkeypatch):
     assert not _inside(here, real) and not _inside(real, here)
 
 
-def test_the_run_has_one_folder_and_every_upload_root_is_in_it(suite_data_dir):
-    from app.routes import attachments, ocr, uploads
-    from app.services import backup_service, ocr_service
+def test_the_run_has_one_folder_and_every_file_root_is_in_it(suite_data_dir):
+    from app.services import backup_service
 
     assert company_service.data_dir() == suite_data_dir
-    for root in (
-        attachments.UPLOAD_BASE,
-        ocr.UPLOAD_BASE,
-        uploads.UPLOAD_DIR,
-        ocr_service.INTAKE_DIR,
-        backup_service.BACKUP_DIR,
-    ):
+    # Uploads are kept in each company's database since 2.18.0; the old
+    # shared uploads folder is only read, by the upgrade.
+    for root in (storage.uploads_root(), backup_service.BACKUP_DIR):
         assert _inside(root, suite_data_dir), root
 
 
@@ -84,7 +79,9 @@ def test_a_company_on_the_machine_cannot_collide_with_a_tests_company(
     assert r.status_code == 200, r.text
 
 
-def test_an_uploaded_attachment_lands_in_the_runs_folder(client, seed_accounts):
+def test_an_uploaded_attachment_lands_in_the_database_not_on_disk(
+    client, seed_accounts
+):
     r = client.post(
         "/api/attachments/invoice/4711",
         files={
@@ -96,11 +93,9 @@ def test_an_uploaded_attachment_lands_in_the_runs_folder(client, seed_accounts):
         },
     )
     assert r.status_code == 201, r.text
-    relative = r.json()["file_path"]  # "uploads/attachments/invoice/4711/..."
-    saved = storage.files_root() / relative
-    assert saved.is_file()
-    assert _inside(saved, tempfile.gettempdir()), saved
-    assert not (ROOT / "app" / "static" / relative).exists()
+    assert r.json()["file_path"].startswith("stored_files/")
+    for root in (storage.files_root(), ROOT / "app" / "static"):
+        assert not list(root.rglob("isolation-probe.pdf")), root
 
 
 def test_settings_encryption_writes_no_key_file(tmp_path, monkeypatch):

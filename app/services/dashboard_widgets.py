@@ -460,12 +460,12 @@ def open_pos(db: Session) -> dict:
 
 
 def receipts_review(db: Session) -> dict:
-    """Scanned receipts sitting in the intake bucket, not yet attached to a
-    document (they expire after INTAKE_TTL_HOURS)."""
+    """This company's scanned receipts not yet attached to a document (they
+    expire after INTAKE_TTL_HOURS)."""
     from app.services import ocr_service
 
     try:
-        entries = ocr_service.list_intake()
+        entries = ocr_service.list_intake(db)
     except Exception:
         entries = []
     return {
