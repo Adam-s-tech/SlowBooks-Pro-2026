@@ -161,3 +161,12 @@ def test_the_employee_page_says_why_a_link_cannot_be_shown():
     js = (ROOT / "app/static/js/employees.js").read_text(encoding="utf-8")
     assert "if (!url) {" in js
     assert "escapeHtml(token.note ||" in js
+
+
+def test_migrations_read_the_env_file_the_app_reads():
+    # A migration that encrypts must use the payroll secret the server uses:
+    # env.py read the checkout's own .env even when the launcher (or a
+    # restore, the suite, the QA harness) had named another in
+    # SLOWBOOKS_ENV_FILE, which app/config.py reads.
+    env_py = (ROOT / "migrations" / "env.py").read_text(encoding="utf-8")
+    assert 'load_dotenv(os.environ["SLOWBOOKS_ENV_FILE"], override=False)' in env_py

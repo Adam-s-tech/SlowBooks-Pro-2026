@@ -8,10 +8,18 @@ from logging.config import fileConfig
 # `FATAL: password authentication failed for user "user"` — a user they
 # never created, with no hint that the .env they just edited was unread.
 # override=False so a real exported DATABASE_URL (Docker) still wins.
+# The desktop launcher (and a restore, the test suite, the QA harness) names
+# the .env the app reads in SLOWBOOKS_ENV_FILE: read that one, as
+# app/config.py does, so a migration sees the secrets the server sees. The
+# checkout's own .env named a different PAYROLL_ENCRYPTION_SECRET, and a
+# migration that encrypts (e2b7c4d9a1f3) used a key the app never does.
 try:
     from dotenv import load_dotenv
 
-    load_dotenv(override=False)
+    if os.getenv("SLOWBOOKS_ENV_FILE"):
+        load_dotenv(os.environ["SLOWBOOKS_ENV_FILE"], override=False)
+    else:
+        load_dotenv(override=False)
 except ImportError:  # pragma: no cover - dotenv is in requirements.txt
     pass
 
