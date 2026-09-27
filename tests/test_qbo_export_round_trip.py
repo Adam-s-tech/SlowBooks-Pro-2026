@@ -77,3 +77,36 @@ def test_a_payment_recorded_here_on_a_qbo_invoice_still_goes(client, books, sent
     assert qbo_export.export_payments(books.db)["exported"] == 1
     assert [(kind, amount) for kind, _, amount in sent] == [("Payment", 15.0)]
     assert Decimal(str(sent[0][2])) == Decimal("15")
+
+
+def test_a_document_voided_before_it_went_is_not_sent(client, books, sent):
+    """An invoice and a payment written here and voided before an export
+    stay out of QBO, which would take them as live ones."""
+    books.documents()
+    invoice = books.invoice("1038")
+    r = client.post(
+        "/api/invoices",
+        json={
+            "customer_id": invoice.customer_id,
+            "date": "2026-08-03",
+            "lines": [{"description": "Catering", "quantity": 1, "rate": 25}],
+        },
+    )
+    assert r.status_code == 201, r.text
+    written = r.json()
+    r = client.post(
+        "/api/payments",
+        json={
+            "customer_id": invoice.customer_id,
+            "date": "2026-08-03",
+            "amount": 25,
+            "deposit_to_account_id": books.accounts["1200"].id,
+            "allocations": [{"invoice_id": written["id"], "amount": 25}],
+        },
+    )
+    assert r.status_code == 201, r.text
+    assert client.post(f"/api/payments/{r.json()['id']}/void").status_code == 200
+    assert client.post(f"/api/invoices/{written['id']}/void").status_code == 200
+    qbo_export.export_invoices(books.db)
+    qbo_export.export_payments(books.db)
+    assert sent == []

@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.models.accounts import Account, AccountType
 from app.models.contacts import Customer, Vendor
 from app.models.items import Item
-from app.models.invoices import Invoice, InvoiceLine
+from app.models.invoices import Invoice, InvoiceLine, InvoiceStatus
 from app.models.payments import Payment, PaymentAllocation
 from app.services.qbo_common import (
     ACCOUNT_TYPE_TO_QBO,
@@ -386,6 +386,10 @@ def export_invoices(db: Session) -> dict:
                 db, "invoice", inv.id
             ) or get_mapping_by_slowbooks_id(db, "sales_receipt", inv.id):
                 continue
+            # A document voided before it went is not sent: QBO would take
+            # it as a live one.
+            if inv.status == InvoiceStatus.VOID:
+                continue
 
             # Customer must be mapped
             cust_map = get_mapping_by_slowbooks_id(db, "customer", inv.customer_id)
@@ -492,7 +496,7 @@ def export_payments(db: Session) -> dict:
 
     for pmt in payments:
         try:
-            if get_mapping_by_slowbooks_id(db, "payment", pmt.id):
+            if get_mapping_by_slowbooks_id(db, "payment", pmt.id) or pmt.is_voided:
                 continue
             # The payment half of a sales receipt the import brought in from
             # QBO is in QBO with its receipt (the import maps the receipt).
