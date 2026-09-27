@@ -642,3 +642,116 @@ def test_the_old_uploads_folder_is_not_served(client, unauthed_client):
         assert unauthed_client.get("/static/js/app.js").status_code == 200
     finally:
         (legacy / "old-W-4.pdf").unlink()
+
+
+# ---------------------------------------------------------------------------
+# What the pages say
+# ---------------------------------------------------------------------------
+
+JS = Path(__file__).resolve().parents[1] / "app" / "static" / "js"
+
+
+def _node(script: str) -> str:
+    import shutil as _shutil
+    import subprocess
+
+    node = _shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    return subprocess.run(
+        [node, "-e", script], capture_output=True, text=True, check=True
+    ).stdout
+
+
+def _js_function(source: str, pattern: str) -> str:
+    import re
+
+    match = re.search(pattern, source, re.S)
+    assert match, pattern
+    return match.group(0)
+
+
+def _text(markup: str) -> str:
+    """What a person reads: tags stripped (until none are left), entities
+    decoded."""
+    import html
+    import re
+
+    previous = None
+    while previous != markup:
+        previous, markup = markup, re.sub(r"<[^>]*>", "", markup)
+    return html.unescape(markup).strip()
+
+
+def test_an_attachment_from_the_shared_folder_says_so():
+    import json
+
+    utils = (JS / "utils.js").read_text(encoding="utf-8")
+    escape = _js_function(utils, r"function escapeHtml\(str\) \{.*?\n\}")
+    note = _js_function(utils, r"function storedFileNote\(.*?\n\}")
+    cases = [
+        {"from_shared_folder": True, "missing": False},
+        {"from_shared_folder": True, "missing": True},
+        {"from_shared_folder": False, "missing": False},
+    ]
+    out = _node(
+        f"{escape}\n{note}\n"
+        f"const cases = {json.dumps(cases)};\n"
+        "console.log(JSON.stringify(["
+        "...cases.map(c => storedFileNote(c)), storedFileNote(cases[0], 'upload')]));"
+    )
+    shared, missing, plain, document_note = json.loads(out)
+    assert _text(shared) == (
+        "Copied from the folder earlier versions shared between companies. "
+        "If it isn't the right file, delete it and attach the right one."
+    )
+    assert _text(missing).startswith(
+        "Missing: this file was not in the shared folder when these books were "
+        "upgraded."
+    )
+    assert plain == ""
+    assert "upload the right one" in _text(document_note)
+
+
+@pytest.mark.parametrize("page", ["invoices.js", "bills.js", "expenses.js"])
+def test_each_attachment_list_shows_the_note_and_links_only_real_files(page):
+    source = (JS / page).read_text(encoding="utf-8")
+    loader = _js_function(source, r"async loadAttachments\(.*?\n    \},")
+    assert "storedFileNote(a)" in loader
+    # a missing file is named, not linked to a download that would 404
+    assert "a.missing ?" in loader
+
+
+def test_the_employee_document_list_shows_the_note_and_its_size():
+    source = (JS / "employees.js").read_text(encoding="utf-8")
+    loader = _js_function(source, r"async _loadDocuments\(id\) \{.*?\n    \},")
+    assert "storedFileNote(doc, 'upload')" in loader
+    assert "doc.file_size" in loader
+    assert "doc.missing ?" in loader
+
+
+def test_settings_says_where_the_logo_came_from():
+    import json
+
+    settings = (JS / "settings.js").read_text(encoding="utf-8")
+    utils = (JS / "utils.js").read_text(encoding="utf-8")
+    escape = _js_function(utils, r"function escapeHtml\(str\) \{.*?\n\}")
+    method = _js_function(settings, r"_logoNote\(logo\) \{.*?\n    \},")
+    out = _node(
+        f"{escape}\nconst page = {{ {method} }};\n"
+        "console.log(JSON.stringify([page._logoNote({from_shared_folder: true}), "
+        "page._logoNote({from_shared_folder: true, missing: true}), "
+        "page._logoNote({from_shared_folder: false}), page._logoNote(null)]));"
+    )
+    shared, missing, own, none = json.loads(out)
+    assert _text(shared) == (
+        "This logo was copied from the folder earlier versions shared between "
+        "companies. If this isn't your logo, upload it again."
+    )
+    assert _text(missing) == (
+        "Your logo file was not in the shared folder when these books were "
+        "upgraded. Upload it again."
+    )
+    assert own == "" and none == ""
+    render = _js_function(settings, r"async render\(\) \{.*?return `")
+    assert "API.get('/uploads/logo')" in render

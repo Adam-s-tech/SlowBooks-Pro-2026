@@ -13,8 +13,22 @@ const SettingsPage = {
         return Number.isFinite(n) ? String(+n.toFixed(4)) : '0.0';
     },
 
+    // Said under the logo when the upgrade to 2.18.0 copied it in from the
+    // folder every company shared before: that held ONE logo file for all of
+    // them, so it may be another company's.
+    _logoNote(logo) {
+        let text = '';
+        if (logo && logo.missing) {
+            text = 'Your logo file was not in the shared folder when these books were upgraded. Upload it again.';
+        } else if (logo && logo.from_shared_folder) {
+            text = "This logo was copied from the folder earlier versions shared between companies. If this isn't your logo, upload it again.";
+        }
+        return text ? `<div id="company-logo-note" style="font-size:10px; color:var(--text-muted); margin-bottom:6px;">${escapeHtml(text)}</div>` : '';
+    },
+
     async render() {
         const s = await API.get('/settings');
+        const logo = s.company_logo_path ? await API.get('/uploads/logo').catch(() => null) : null;
         // what the books hold; the closing date's state line describes this
         SettingsPage._savedClosingDate = s.closing_date || '';
         setTimeout(() => {
@@ -77,7 +91,8 @@ const SettingsPage = {
                     <h3>Company Logo</h3>
                     <div class="form-grid">
                         <div class="form-group">
-                            ${s.company_logo_path ? `<img id="company-logo-preview" src="${escapeHtml(s.company_logo_path)}" style="max-width:200px; max-height:80px; margin-bottom:8px; display:block;">` : ''}
+                            ${s.company_logo_path && !(logo && logo.missing) ? `<img id="company-logo-preview" src="${escapeHtml(s.company_logo_path)}" style="max-width:200px; max-height:80px; margin-bottom:8px; display:block;">` : ''}
+                            ${SettingsPage._logoNote(logo)}
                             <input type="file" id="logo-upload" accept="image/*" onchange="SettingsPage.uploadLogo(this)">
                             <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">PNG, JPG, GIF, WebP, or SVG &middot; max 5 MB &middot; 200&times;80 px recommended.</div>
                             ${s.company_logo_path ? `<div style="margin-top:8px;">
@@ -842,6 +857,7 @@ const SettingsPage = {
             if (!SettingsPage.isDirty()) { App.navigate('#/settings'); return; }
             // Unsaved edits elsewhere on the page: show the new logo in place
             // rather than re-render the page over them.
+            document.getElementById('company-logo-note')?.remove();
             let img = document.getElementById('company-logo-preview');
             if (!img) {
                 img = document.createElement('img');

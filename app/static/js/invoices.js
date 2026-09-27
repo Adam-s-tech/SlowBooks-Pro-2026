@@ -901,10 +901,11 @@ const InvoicesPage = {
                 el.innerHTML = '<span style="color:var(--text-muted);">No attachments</span>';
             } else {
                 el.innerHTML = attachments.map(a =>
-                    `<div style="display:flex; align-items:center; gap:8px; padding:2px 0;">
-                        <a href="/api/attachments/download/${a.id}" target="_blank">${escapeHtml(a.filename)}</a>
+                    `<div style="display:flex; flex-wrap:wrap; align-items:center; gap:0 8px; padding:2px 0;">
+                        ${a.missing ? `<span>${escapeHtml(a.filename)}</span>` : `<a href="/api/attachments/download/${a.id}" target="_blank">${escapeHtml(a.filename)}</a>`}
                         <span style="color:var(--gray-400);">(${formatFileSize(a.file_size)})</span>
                         <button aria-label="Delete attachment" class="btn btn-sm btn-danger" onclick="InvoicesPage.deleteAttachment(${a.id},'${entityType}',${entityId})" style="padding:0 4px; font-size:10px;">X</button>
+                        ${storedFileNote(a)}
                     </div>`
                 ).join('');
             }
