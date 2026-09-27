@@ -592,7 +592,7 @@ const InvoicesPage = {
                     ${classGroup}${jobGroup}${pledgeGroup}
                     ${currencyFormGroupsHtml(inv.currency, inv.exchange_rate)}
                     <div class="form-group"><label>Tax Rate (%)</label>
-                        <input name="tax_rate" type="number" step="0.01" value="${(inv.tax_rate * 100) || 0}"
+                        <input name="tax_rate" type="number" step="0.01" value="${+((inv.tax_rate || 0) * 100).toFixed(4)}"
                             oninput="InvoicesPage.recalc()">
                         ${InvoicesPage._keptTax != null ? `<div class="hint" id="inv-kept-tax">Tax stays at ${formatCurrency(InvoicesPage._keptTax)}, the amount it came in with. Enter a rate to work it out instead, or untick Tax on the lines for none.</div>` : ''}</div>
                 </div>

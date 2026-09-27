@@ -171,7 +171,7 @@ const SalesReceiptsPage = {
                     ${classGroup}${jobGroup}
                     ${currencyFormGroupsHtml(null, null)}
                     <div class="form-group"><label>Tax Rate (%)</label>
-                        <input name="tax_rate" type="number" step="0.01" value="${(sr.tax_rate * 100) || 0}"
+                        <input name="tax_rate" type="number" step="0.01" value="${+((sr.tax_rate || 0) * 100).toFixed(4)}"
                             oninput="SalesReceiptsPage.recalc()"></div>
                     ${Terms.isNonprofit() ? `
                     <div class="form-group full-width" style="border-top:1px solid var(--gray-200); padding-top:8px; margin-top:4px;">

@@ -1,5 +1,5 @@
 import re
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Annotated, Optional
 
 from pydantic import (
@@ -134,6 +134,14 @@ def _check_tax_rate(value):
             "to 100%; if it came from the company default, correct Default "
             "Tax Rate in Settings."
         )
+    # A rate typed as a percent reaches us divided by 100 in floating point:
+    # 7.25% arrives as 0.07249999999999999, which put a half-cent tax a
+    # cent low. Eight places keep every real rate (8.875% is 0.08875) and
+    # drop the noise.
+    if isinstance(value, Decimal):
+        return value.quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)
+    if value is not None:
+        return round(value, 8)
     return value
 
 
