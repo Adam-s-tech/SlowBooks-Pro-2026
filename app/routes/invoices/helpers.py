@@ -148,6 +148,21 @@ def resolve_line_taxable(db: Session, lines_data, customer=None) -> None:
         ln.is_taxable = default
 
 
+def kept_tax(invoice, tax_rate, lines):
+    """The tax amount an edit keeps as it is: one an import brought with no
+    rate that gives it (QuickBooks Online's, when its tax lines don't make a
+    single rate; see qbo_import._qbo_rate). Worked out from the rate, it
+    would come to 0.00. None when a rate is entered, when the invoice has a
+    rate or no tax, or when no line is taxable now."""
+    if tax_rate and Decimal(str(tax_rate)) != 0:
+        return None
+    if Decimal(str(invoice.tax_rate or 0)) != 0 or not invoice.tax_amount:
+        return None
+    if not any(getattr(line, "is_taxable", None) is not False for line in lines):
+        return None
+    return Decimal(str(invoice.tax_amount))
+
+
 def _compute_totals(lines_data, tax_rate):
     """Tax applies to the lines flagged taxable (QuickBooks-style per-line
     tax); the rate itself stays on the document."""

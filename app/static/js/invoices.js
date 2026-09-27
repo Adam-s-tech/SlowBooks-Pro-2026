@@ -540,6 +540,11 @@ const InvoicesPage = {
             lines: [],
         };
         if (id) inv = await API.get(`/invoices/${id}`);
+        // A tax amount with no rate behind it (QuickBooks Online's, when its
+        // tax lines don't make one rate) stays as it is when the invoice is
+        // saved, as the server keeps it, until a rate is entered.
+        InvoicesPage._keptTax = id && !(parseFloat(inv.tax_rate) > 0) && parseFloat(inv.tax_amount) > 0
+            ? parseFloat(inv.tax_amount) : null;
         // what the invoice owed before this edit, for the credit-limit check
         InvoicesPage._editing = id ? { total: parseFloat(inv.total) || 0, paid: parseFloat(inv.amount_paid) || 0 } : null;
         const classGroup = await classFormGroupHtml(inv.class_id);
@@ -588,7 +593,8 @@ const InvoicesPage = {
                     ${currencyFormGroupsHtml(inv.currency, inv.exchange_rate)}
                     <div class="form-group"><label>Tax Rate (%)</label>
                         <input name="tax_rate" type="number" step="0.01" value="${(inv.tax_rate * 100) || 0}"
-                            oninput="InvoicesPage.recalc()"></div>
+                            oninput="InvoicesPage.recalc()">
+                        ${InvoicesPage._keptTax != null ? `<div class="hint" id="inv-kept-tax">Tax stays at ${formatCurrency(InvoicesPage._keptTax)}, the amount it came in with. Enter a rate to work it out instead, or untick Tax on the lines for none.</div>` : ''}</div>
                 </div>
                 <h3 style="margin:16px 0 8px; font-size:14px; color:var(--gray-600);">Line Items</h3>
                 <table class="line-items-table">
@@ -703,7 +709,17 @@ const InvoicesPage = {
     recalc() {
         TaxExempt.enforce(InvoicesPage._customers, $('#inv-customer-select')?.value, $('#inv-lines'));
         const cur = $('#invoice-form [name="currency"]')?.value;
-        const t = SalesLines.totals($('#inv-lines'), $('#invoice-form [name="tax_rate"]')?.value, cur);
+        const rate = $('#invoice-form [name="tax_rate"]')?.value;
+        const t = SalesLines.totals($('#inv-lines'), rate, cur);
+        const kept = InvoicesPage._keptTax;
+        const taxable = $$('#inv-lines tr').some(row => row.querySelector('.line-taxable')?.checked !== false);
+        const keeping = kept != null && !(parseFloat(rate) > 0) && taxable;
+        if (keeping) {
+            t.tax = kept;
+            t.total = SalesLines.cents(t.subtotal + kept);
+        }
+        const hint = document.getElementById('inv-kept-tax');
+        if (hint) hint.style.display = keeping ? '' : 'none';
         SalesLines.show(t, ['inv-subtotal', 'inv-tax', 'inv-total'], cur);
         return t;
     },
