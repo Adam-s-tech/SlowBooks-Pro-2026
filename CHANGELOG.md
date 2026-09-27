@@ -449,7 +449,9 @@ in the file's free space).
   /api/qbo/import-runs/latest`, `POST /api/qbo/connect-manual`
   (administrators); `POST /api/simplefin/sync` takes an optional
   `{"history_months": 1-24}`; `GET` and `DELETE /api/uploads/logo`, `GET
-  /api/uploads/logo/{id}`, `GET /portal/logo`. 542 operations.
+  /api/uploads/logo/{id}`, `GET /portal/logo`, `GET
+  /api/settings/unreadable-secrets`, `GET`/`DELETE /api/uploads/legacy`.
+  545 operations.
 - A company's files are served from its database: an attachment's
   `file_path` is `stored_files/<id>`, attachments and employee documents
   carry `from_shared_folder` and `missing`, and `POST /api/uploads/logo`
