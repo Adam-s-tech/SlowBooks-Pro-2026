@@ -62,4 +62,6 @@ def test_a_sales_receipt_goes_with_its_tax_codes(db_session, items, sent):  # no
         is_sales_receipt=True,
     )
     qbo_export.export_invoices(db_session)
-    assert _codes(sent[0]) == ["TAX", "NON"]
+    [receipt] = sent
+    assert type(receipt).__name__ == "SalesReceipt"
+    assert _codes(receipt) == ["TAX", "NON"]

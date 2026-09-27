@@ -48,3 +48,25 @@ test('an export with nothing to note shows no note box', async () => {
     await f.qbo.exportSelected();
     assert.equal(warnings(f.element('#qbo-export-result').innerHTML), undefined);
 });
+
+// The export brings records it sent before up to date (2.18.0): the page
+// counts what it updated and voided in QuickBooks Online, and the sales
+// receipts the invoices step sent, apart from the invoices.
+const rows = html => [...html.matchAll(/<span>([^<]*)<\/span>\s*<span class="result-count">([^<]*)<\/span>/g)].map(m => [m[1], m[2].trim()]);
+
+test('Export Selected counts updates, voids and sales receipts', async () => {
+    const f = page({ exported: 3, sales_receipts: 1, updated: 2, voided: 1, errors: [], notes: [] });
+    await f.qbo.exportSelected();
+    assert.deepEqual(rows(f.element('#qbo-export-result').innerHTML), [
+        ['Invoices', '2 exported'],
+        ['Sales Receipts', '1 exported'],
+        ['Updated in QuickBooks Online', '2'],
+        ['Voided in QuickBooks Online', '1'],
+    ]);
+});
+
+test('Export All shows what it brought up to date', async () => {
+    const f = page({ invoices: 0, updated: 1, voided: 0, errors: [], notes: [] });
+    await f.qbo.exportAll();
+    assert.deepEqual(rows(f.element('#qbo-export-result').innerHTML), [['Updated in QuickBooks Online', '1']]);
+});

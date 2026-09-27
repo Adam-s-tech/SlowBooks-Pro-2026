@@ -610,8 +610,10 @@ const QBOPage = {
             QBOPage._showResult('qbo-export-result', result, 'exported');
             const total = (result.accounts || 0) + (result.customers || 0) +
                           (result.vendors || 0) + (result.items || 0) +
-                          (result.invoices || 0) + (result.payments || 0);
-            toast(`Exported ${total} records to QBO`);
+                          (result.invoices || 0) + (result.sales_receipts || 0) +
+                          (result.payments || 0);
+            const changed = (result.updated || 0) + (result.voided || 0);
+            toast(`Exported ${total} records to QBO` + (changed ? `; ${changed} brought up to date there` : ''));
             App.setStatus('QuickBooks Online — Export complete');
         } catch (err) {
             toast(err.message, 'error');
@@ -623,7 +625,7 @@ const QBOPage = {
         const checked = QBOPage._getChecked('qbo-export-checkboxes');
         if (checked.length === 0) { toast('Select at least one entity type', 'error'); return; }
 
-        const result = { accounts: 0, customers: 0, vendors: 0, items: 0, invoices: 0, payments: 0, errors: [], notes: [] };
+        const result = { accounts: 0, customers: 0, vendors: 0, items: 0, invoices: 0, sales_receipts: 0, payments: 0, updated: 0, voided: 0, errors: [], notes: [] };
         App.setStatus('Exporting to QuickBooks Online...');
 
         for (const entity of checked) {
@@ -631,7 +633,11 @@ const QBOPage = {
                 const r = await fetch(`/api/qbo/export/${entity}`, { method: 'POST' });
                 if (!r.ok) throw new Error(await API.responseError(r, `Export ${entity} failed`));
                 const data = await r.json();
-                result[entity] = data.exported || 0;
+                // the invoices step sends sales receipts too, and counts them
+                result.sales_receipts += data.sales_receipts || 0;
+                result[entity] = (data.exported || 0) - (data.sales_receipts || 0);
+                result.updated += data.updated || 0;
+                result.voided += data.voided || 0;
                 if (data.errors) result.errors.push(...data.errors);
                 if (data.notes) result.notes.push(...data.notes);
             } catch (err) {
@@ -675,7 +681,18 @@ const QBOPage = {
             }
         }
 
-        const total = sections.reduce((sum, [, c]) => sum + (c || 0), 0);
+        // Records that went before, changed here since, or voided here after
+        // they went: brought up to date in QuickBooks Online.
+        for (const [name, count] of [['Updated in QuickBooks Online', result.updated], ['Voided in QuickBooks Online', result.voided]]) {
+            if (count > 0) {
+                html += `<div class="result-row">
+                    <span>${name}</span>
+                    <span class="result-count">${count}</span>
+                </div>`;
+            }
+        }
+
+        const total = sections.reduce((sum, [, c]) => sum + (c || 0), 0) + (result.updated || 0) + (result.voided || 0);
         if (total === 0 && (!result.errors || result.errors.length === 0)) {
             html += '<div class="result-row"><span>No new records to sync</span></div>';
         }
