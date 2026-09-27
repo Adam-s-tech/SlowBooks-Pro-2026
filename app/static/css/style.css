@@ -44,6 +44,11 @@
        Measured: 12.6:1 here, 7.2:1 in dark. (macbase1, 2.10.3 gate) */
     --text-link:      #003366;
     --text-success:   #166534;   /* 7.13:1 on white */
+    /* Red and amber for words, as --text-success is green for them: the
+       pages wrote #a4242b, #c0392b, #a8761f and #b45309 in by hand, which
+       the dark theme could not change (2.22:1 and 4.09 there) */
+    --text-danger:    #a4242b;   /* 7.33:1 on white, 6.41 on a pale red note */
+    --text-warning:   #92400e;   /* 7.09:1 on white */
     /* Only the sidebar's section headings use it, on the navy: #669999 was
        3.95:1 there, this is 4.57 (macOS gate's contrast sweep, 2.18.0) */
     --qb-teal:        #76a4a4;
@@ -76,7 +81,7 @@
     /* #7a7a9a was 4.14:1 on white, 3.65 on the page and 3.25 on a page
        header's gradient. 4.59 at that gradient's darkest, 5.85 on white */
     --text-muted:     #626282;
-    --text-light:     #9a9ab0;
+    --text-light:     #6a6a88;   /* was #9a9ab0, 2.75:1 on white; 5.21 */
     --text-on-dark:   #e8ecf0;
     --text-on-navy:   #c8d8e8;
 
@@ -91,8 +96,11 @@
     --gray-100: #f3f4f6;
     --gray-200: #e5e7eb;
     --gray-300: #d1d5db;
-    --gray-400: #6b7280; /* was #9ca3af — 2.5:1 on white, failed AA for text */
-    --gray-500: #6b7280;
+    /* Text only. #6b7280 was 4.27:1 on the page, 3.79 on a page header and
+       3.59 on a toolbar; 4.62 at the toolbar, 6.22 on white. (#9ca3af before
+       it was 2.5:1 on white.) */
+    --gray-400: #5b616d;
+    --gray-500: #5b616d;
     --gray-600: #4b5563;
 
     --sidebar-width: 200px;
@@ -581,7 +589,8 @@ thead th.sort-active {
 thead th .sort-arrow {
     font-size: 9px;
     margin-left: 2px;
-    color: var(--qb-blue);
+    /* --qb-blue was 3.38:1 on the sorted column's header, 3.23 in dark */
+    color: var(--qb-navy);
 }
 
 tbody td {
@@ -2283,6 +2292,17 @@ tr.clickable { cursor: pointer; }
 }
 
 .hint--locked em { color: #92400e; font-style: normal; font-weight: 600; }
+
+/* Notes drawn as a tinted box: all clear, needs attention, a caution, a
+   plain step. They were inline backgrounds, which stayed pale in the dark
+   theme under its light text (1.14:1); dark.css gives each a dark tint. */
+.card.note--ok,
+.note--ok      { background: #eaf5ec; border-left: 4px solid #1f7a36; }
+.card.note--alert,
+.note--alert   { background: #fdecea; border-left: 4px solid #a4242b; }
+.card.note--caution,
+.note--caution { background: #fffbe6; border-left: 4px solid #f5a623; }
+.note--plain   { background: #f4f6f9; }
 
 .form-group input[disabled],
 .form-group select[disabled] {

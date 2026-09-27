@@ -25,7 +25,7 @@ const JobCostsPage = {
             <td>${escapeHtml({ manual: 'Entry', time_entry: 'Time', allocation: 'Allocation' }[jc.source] || jc.source)}</td>
             <td>${escapeHtml(jc.memo || '')}</td>
             <td class="amount">${formatCurrency(jc.total)}</td>
-            <td>${jc.status === 'void' ? '<span style="color:#a4242b">void</span>' : 'posted'}</td>
+            <td>${jc.status === 'void' ? '<span style="color:var(--text-danger)">void</span>' : 'posted'}</td>
         </tr>`).join('');
         return `
             <div class="page-header">
@@ -255,11 +255,11 @@ const JobCostsPage = {
             <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
                 <div style="font-size:13px">
                     <div><strong>${escapeHtml(jc.date)}</strong> · ${escapeHtml(jc.job_name || 'allocation across jobs')} · ${escapeHtml({ manual: 'Entry', time_entry: 'From time entry', allocation: 'Allocation' }[jc.source] || jc.source)}</div>
-                    ${jc.memo ? `<div style="color:#666">${escapeHtml(jc.memo)}</div>` : ''}
+                    ${jc.memo ? `<div style="color:var(--text-muted)">${escapeHtml(jc.memo)}</div>` : ''}
                 </div>
                 <div style="text-align:right">
                     <div style="font-size:20px;font-weight:700">${formatCurrency(jc.total)}</div>
-                    <div>${jc.status === 'void' ? '<span style="color:#a4242b;font-weight:600">VOID</span>' : `<button class="btn btn-sm btn-secondary" onclick="JobCostsPage.voidEntry(${jc.id})">Void</button>`}</div>
+                    <div>${jc.status === 'void' ? '<span style="color:var(--text-danger);font-weight:600">VOID</span>' : `<button class="btn btn-sm btn-secondary" onclick="JobCostsPage.voidEntry(${jc.id})">Void</button>`}</div>
                 </div>
             </div>
             <div class="table-container"><table class="data-table" style="font-size:12px">

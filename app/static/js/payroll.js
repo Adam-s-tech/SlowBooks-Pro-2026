@@ -55,7 +55,7 @@ const PayrollPage = {
                 <td>${e.pay_type}</td>
                 <td class="amount">${formatCurrency(e.pay_rate)}${e.pay_type==='hourly'?'/hr':'/yr'}</td>
                 <td><input type="number" step="0.5" class="pr-hours" data-emp="${e.id}" value="${e.pay_type==='hourly'?'80':'0'}" style="width:60px;"></td>
-                <td class="pr-te-summary" data-emp="${e.id}" style="font-size:12px;color:#666;">—</td>
+                <td class="pr-te-summary" data-emp="${e.id}" style="font-size:12px;color:var(--text-muted);">—</td>
             </tr>`).join('');
 
         openModal('New Pay Run', `
@@ -103,11 +103,11 @@ const PayrollPage = {
                         ? ` · ${row.pending_count} not approved (${row.pending_hours.toFixed(1)} hrs, not paid)`
                         : '';
                     cell.textContent = `${row.total.toFixed(1)} hrs (${row.entry_count} entries)${waiting}`;
-                    cell.style.color = row.pending_count ? 'var(--danger)' : '#003366';
+                    cell.style.color = row.pending_count ? 'var(--text-danger)' : 'var(--qb-navy)';
                     cell.style.fontWeight = '600';
                 } else {
                     cell.textContent = '—';
-                    cell.style.color = '#999';
+                    cell.style.color = 'var(--text-muted)';
                     cell.style.fontWeight = 'normal';
                 }
             });
@@ -118,7 +118,7 @@ const PayrollPage = {
         const useTE = $('#pr-use-time-entries').checked;
         $$('.pr-hours').forEach(inp => {
             inp.disabled = useTE;
-            inp.style.background = useTE ? '#f0f0f0' : '';
+            inp.style.background = useTE ? 'var(--gray-100)' : '';
         });
         if (useTE) PayrollPage._refreshTimeEntryPreview();
     },

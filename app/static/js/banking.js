@@ -54,7 +54,7 @@ const BankingPage = {
                     <div class="card-value">${formatCurrency(a.balance)}${owed ? ' <span style="font-size:11px; color:var(--gray-500);">owed</span>' : ''}</div>
                     <div style="font-size:12px; color:var(--gray-400); margin-top:4px;">
                         ${a.feed ? `${escapeHtml(a.feed.bank_name || a.feed.name)} ${a.feed.last_four ? '****' + a.feed.last_four : ''}` : 'No bank feed'}
-                        ${a.to_review ? `<span style="color:var(--qb-gold); font-weight:700;"> · ${a.to_review} to review</span>` : ''}
+                        ${a.to_review ? `<span style="color:var(--text-warning); font-weight:700;"> · ${a.to_review} to review</span>` : ''}
                         ${a.last_reconciled ? ` · reconciled ${formatDate(a.last_reconciled)}` : ''}
                     </div>
                 </div>`;
@@ -444,7 +444,7 @@ const BankingPage = {
             <tr>
                 <td>${formatDate(t.date)}</td>
                 <td>${escapeHtml(t.payee || '')}<div style="font-size:10px; color:var(--gray-400);">${escapeHtml(t.description || '')}</div></td>
-                <td class="amount" style="${t.amount >= 0 ? 'color:var(--success)' : 'color:var(--danger)'}">${formatCurrency(t.amount)}</td>
+                <td class="amount" style="${t.amount >= 0 ? 'color:var(--text-success)' : 'color:var(--text-danger)'}">${formatCurrency(t.amount)}</td>
                 <td><select id="cat-${t.id}" class="review-cat" data-current="${t.category_account_id || ''}" aria-label="Category" onchange="BankingPage.setCategory(${t.id}, this)"><option value="">${t.category_name ? escapeHtml(t.category_name) : 'Pick a category…'}</option></select></td>
                 <td style="white-space:nowrap;">
                     <button class="btn btn-sm btn-primary" onclick="BankingPage.addLine(${t.id}, ${accountId})">Add</button>
@@ -762,12 +762,12 @@ const BankingPage = {
         const data = await API.get(`/banking/reconciliations/${reconId}/transactions`);
         const rows = data.transactions.map(t => {
             const cls = t.reconciled ? 'style="background:var(--primary-light);"' : '';
-            const amtCls = t.amount >= 0 ? 'color:var(--success)' : 'color:var(--danger)';
+            const amtCls = t.amount >= 0 ? 'color:var(--text-success)' : 'color:var(--text-danger)';
             return `<tr ${cls}>
                 <td><input type="checkbox" ${t.reconciled ? 'checked' : ''}
                     onchange="BankingPage.toggleCleared(${reconId}, ${t.id}, this)"></td>
                 <td>${formatDate(t.date)}</td>
-                <td>${escapeHtml(t.payee || t.description || '')}${t.matched ? ' <span title="matched to a statement line" style="color:var(--success);">●</span>' : ''}</td>
+                <td>${escapeHtml(t.payee || t.description || '')}${t.matched ? ' <span title="matched to a statement line" style="color:var(--text-success);">●</span>' : ''}</td>
                 <td>${escapeHtml(t.check_number || '')}</td>
                 <td class="amount" style="${amtCls}">${formatCurrency(t.amount)}</td>
             </tr>`;
@@ -969,7 +969,7 @@ const BankingPage = {
             const rows = data.transactions.map(t => `<tr>
                 <td>${escapeHtml(t.date || '')}</td>
                 <td>${escapeHtml(t.payee || '')}</td>
-                <td class="amount" style="${t.amount >= 0 ? 'color:var(--success)' : 'color:var(--danger)'}">${formatCurrency(t.amount)}</td>
+                <td class="amount" style="${t.amount >= 0 ? 'color:var(--text-success)' : 'color:var(--text-danger)'}">${formatCurrency(t.amount)}</td>
                 <td>${escapeHtml(isCsv ? (t.description || '') : (t.fitid || ''))}</td>
             </tr>`).join('');
             $('#ofx-preview').innerHTML = `

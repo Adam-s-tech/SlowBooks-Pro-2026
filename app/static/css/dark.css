@@ -14,6 +14,8 @@
     --qb-blue-accent: #6bb3e8;
     --text-link:      #6bb3e8;   /* 7.15:1 on the dark panel */
     --text-success:   #4ade80;   /* 9.32:1 — the light theme's #166534 is 2.28 here */
+    --text-danger:    #e46969;   /* = --qb-red: 5.05:1 on the panel */
+    --text-warning:   #e0a840;   /* 7.62:1 on the panel */
     --qb-teal:        #7abfbf;
     --qb-green:       #4caf7a;
     --qb-green-dark:  #3d9065;
@@ -41,7 +43,7 @@
     /* #7a8498 was 4.32:1 on the panel and 3.93 on a page header; 5.06 and
        4.60 now (macOS gate's contrast sweep, 2.18.0) */
     --text-muted:     #8790a2;
-    --text-light:     #606878;
+    --text-light:     #7f8899;   /* was #606878, 2.90:1 on a card; 4.55 */
     --text-on-dark:   #c8d0dc;
     --text-on-navy:   #e0e4ec;
 
@@ -451,10 +453,13 @@
 [data-theme="dark"] .toast-error   { background: #cc3333; }
 [data-theme="dark"] .toast-info    { background: #336699; }
 
-/* Notes drawn as a pale box without a text colour of their own (tax forms,
-   reseller permits): here they kept the pale box and took this theme's
-   light text, 1.14:1. They get the dark ink they were drawn with. */
-[data-theme="dark"] div[style*="background:#eaf5ec"],
-[data-theme="dark"] div[style*="background:#fdecea"],
-[data-theme="dark"] div[style*="background:#fffbe6"],
-[data-theme="dark"] div[style*="background:#f4f6f9"] { color: #1a1a2e; }
+/* The tinted notes (style.css .note--*): a dark tint of each, under this
+   theme's text. As inline pale boxes they took the light text on a pale
+   ground, 1.14:1. */
+[data-theme="dark"] .card.note--ok,
+[data-theme="dark"] .note--ok      { background: #1a3a2a; border-left-color: #4caf7a; }
+[data-theme="dark"] .card.note--alert,
+[data-theme="dark"] .note--alert   { background: #3a1a1a; border-left-color: #e46969; }
+[data-theme="dark"] .card.note--caution,
+[data-theme="dark"] .note--caution { background: #2a2518; border-left-color: #e0a840; }
+[data-theme="dark"] .note--plain   { background: #242830; }

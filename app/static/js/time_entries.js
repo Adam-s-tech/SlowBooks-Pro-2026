@@ -62,7 +62,7 @@ const TimeEntriesPage = {
                 html += `<tr>
                     <td>${formatDate(en.date)}</td>
                     <td>${empName}</td>
-                    <td>${escapeHtml(en.job_name || '')}${en.cost_code_label ? ` <span style="font-size:10px;color:#888">${escapeHtml(en.cost_code_label)}</span>` : ''}${en.job_cost_id ? ' <span class="badge" style="font-size:9px">posted</span>' : ''}</td>
+                    <td>${escapeHtml(en.job_name || '')}${en.cost_code_label ? ` <span style="font-size:10px;color:var(--text-muted)">${escapeHtml(en.cost_code_label)}</span>` : ''}${en.job_cost_id ? ' <span class="badge" style="font-size:9px">posted</span>' : ''}</td>
                     <td class="amount">${hrs(en.hours_regular)}</td>
                     <td class="amount">${hrs(en.hours_overtime)}</td>
                     <td class="amount">${hrs(en.hours_doubletime)}</td>

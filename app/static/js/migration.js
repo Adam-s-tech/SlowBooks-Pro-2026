@@ -62,7 +62,7 @@ const MigrationPage = {
 
     _renderResult(data, imported) {
         const errs = data.errors.map(e => `<li style="color:var(--danger);">${escapeHtml(e)}</li>`).join('');
-        const warns = data.warnings.map(w => `<li style="color:var(--warning, #a8761f);">${escapeHtml(w)}</li>`).join('');
+        const warns = data.warnings.map(w => `<li style="color:var(--text-warning);">${escapeHtml(w)}</li>`).join('');
         const head = imported
             ? (data.ok ? `<strong>Imported ${data.imported_accounts} accounts and ${data.imported_journals} journals.</strong>`
                        : '<strong style="color:var(--danger);">Import refused — fix the dry-run errors below.</strong>')

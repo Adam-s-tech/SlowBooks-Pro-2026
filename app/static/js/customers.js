@@ -85,12 +85,12 @@ const CustomersPage = {
 
         // -- Permits sub-section: status badge + state + verify link --
         const permitsBody = permits.length === 0
-            ? '<p style="color:#888;font-size:13px;margin:0">None on file. <a href="#/reseller-permits" onclick="closeModal()">Add one</a>.</p>'
+            ? '<p style="color:var(--text-muted);font-size:13px;margin:0">None on file. <a href="#/reseller-permits" onclick="closeModal()">Add one</a>.</p>'
             : '<ul style="margin:0;padding-left:18px;font-size:13px">' + permits.map(p => {
-                let badge = '<span style="color:#1f7a36">Active</span>';
-                if (p.is_expired) badge = '<span style="color:#a4242b;font-weight:600">EXPIRED</span>';
-                else if (p.days_to_expire !== null && p.days_to_expire <= 30) badge = `<span style="color:#a8761f;font-weight:600">Expires in ${p.days_to_expire}d</span>`;
-                else if (!p.is_active) badge = '<span style="color:#888">Inactive</span>';
+                let badge = '<span style="color:var(--text-success)">Active</span>';
+                if (p.is_expired) badge = '<span style="color:var(--text-danger);font-weight:600">EXPIRED</span>';
+                else if (p.days_to_expire !== null && p.days_to_expire <= 30) badge = `<span style="color:var(--text-warning);font-weight:600">Expires in ${p.days_to_expire}d</span>`;
+                else if (!p.is_active) badge = '<span style="color:var(--text-muted)">Inactive</span>';
                 const link = p.verification_url ? ` · <a href="${escapeHtml(p.verification_url)}" target="_blank" rel="noopener">Open ${escapeHtml(p.jurisdiction)} lookup</a>` : '';
                 return `<li>${escapeHtml(p.jurisdiction)} · <code>${escapeHtml(p.permit_number)}</code> · ${badge}${p.expires_at ? ` · exp ${escapeHtml(p.expires_at)}` : ''}${link}</li>`;
             }).join('') + '</ul>';
@@ -106,7 +106,7 @@ const CustomersPage = {
         const payRows = payments.slice(0, 10).map(p =>
             `<tr style="cursor:pointer" onclick="PaymentsPage.view(${p.id})">
                 <td>${escapeHtml(p.date || '')}</td>
-                <td>${escapeHtml(p.method || '')}${p.is_voided ? ' <span style="color:#a4242b">(void)</span>' : ''}</td>
+                <td>${escapeHtml(p.method || '')}${p.is_voided ? ' <span style="color:var(--text-danger)">(void)</span>' : ''}</td>
                 <td>${escapeHtml(p.reference || p.check_number || '')}</td>
                 <td class="amount">${formatCurrency(p.amount)}</td>
             </tr>`).join('');
@@ -116,7 +116,7 @@ const CustomersPage = {
         const creditList = (credits && credits.credits) || [];
         const creditsHtml = creditList.length === 0 ? '' : `
             <div style="margin-bottom:14px">
-                <h4 style="font-size:11px;text-transform:uppercase;color:#888;margin:0 0 4px 0">Credits not applied yet (${formatCurrency(credits.total)})</h4>
+                <h4 style="font-size:11px;text-transform:uppercase;color:var(--text-muted);margin:0 0 4px 0">Credits not applied yet (${formatCurrency(credits.total)})</h4>
                 <ul style="margin:0;padding-left:18px;font-size:13px">${creditList.map(c => `<li style="margin:2px 0">
                     ${escapeHtml(PaymentsPage._creditLabel(c))}: <strong>${formatCurrency(c.available)}</strong>
                     <button class="btn btn-sm btn-secondary" style="margin-left:6px" onclick="PaymentsPage.showApplyCredit('${c.kind}', ${c.id}, ${id})">Apply</button>
@@ -129,9 +129,9 @@ const CustomersPage = {
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;flex-wrap:wrap;gap:12px">
                 <div>
                     <h3 style="margin:0;font-size:18px">${escapeHtml(customer.name)}</h3>
-                    ${customer.company ? `<div style="color:#666;font-size:13px">${escapeHtml(customer.company)}</div>` : ''}
-                    <div style="margin-top:6px;font-size:12px;color:#888">
-                        ${customer.is_active === false ? '<span style="color:#a4242b">Inactive</span>' : '<span style="color:#1f7a36">Active</span>'}
+                    ${customer.company ? `<div style="color:var(--text-muted);font-size:13px">${escapeHtml(customer.company)}</div>` : ''}
+                    <div style="margin-top:6px;font-size:12px;color:var(--text-muted)">
+                        ${customer.is_active === false ? '<span style="color:var(--text-danger)">Inactive</span>' : '<span style="color:var(--text-success)">Active</span>'}
                         &nbsp;·&nbsp; Terms: ${escapeHtml(customer.terms || 'Net 30')}
                         ${customer.is_taxable === false ? ' · <strong>Tax exempt</strong>' : ''}
                         ${customer.credit_limit ? ` · Credit limit: ${formatCurrency(customer.credit_limit)}` : ''}
@@ -139,8 +139,8 @@ const CustomersPage = {
                     </div>
                 </div>
                 <div style="text-align:right">
-                    <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.05em">${balance < 0 ? 'Credit' : 'Balance'}</div>
-                    <div style="font-size:22px;font-weight:700;color:${balance > 0 ? '#a4242b' : (balance < 0 ? '#1f7a36' : '#1a1a2e')}">
+                    <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">${balance < 0 ? 'Credit' : 'Balance'}</div>
+                    <div style="font-size:22px;font-weight:700;color:${balance > 0 ? 'var(--text-danger)' : (balance < 0 ? 'var(--text-success)' : 'var(--text-primary)')}">
                         ${formatCurrency(Math.abs(balance))}
                     </div>
                     <div style="margin-top:8px">
@@ -156,30 +156,30 @@ const CustomersPage = {
             <!-- contact + addresses + permits in 3 columns -->
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px">
                 <div>
-                    <h4 style="font-size:11px;text-transform:uppercase;color:#888;margin:0 0 4px 0">Contact</h4>
+                    <h4 style="font-size:11px;text-transform:uppercase;color:var(--text-muted);margin:0 0 4px 0">Contact</h4>
                     <div style="font-size:13px">
                         ${customer.email ? `<div>📧 ${escapeHtml(customer.email)}</div>` : ''}
                         ${customer.phone ? `<div>☎ ${escapeHtml(customer.phone)}</div>` : ''}
                         ${customer.mobile ? `<div>📱 ${escapeHtml(customer.mobile)}</div>` : ''}
                         ${customer.website ? `<div>🌐 ${escapeHtml(customer.website)}</div>` : ''}
-                        ${!customer.email && !customer.phone && !customer.mobile ? '<span style="color:#888">No contact info</span>' : ''}
+                        ${!customer.email && !customer.phone && !customer.mobile ? '<span style="color:var(--text-muted)">No contact info</span>' : ''}
                     </div>
                 </div>
                 <div>
-                    <h4 style="font-size:11px;text-transform:uppercase;color:#888;margin:0 0 4px 0">Billing</h4>
+                    <h4 style="font-size:11px;text-transform:uppercase;color:var(--text-muted);margin:0 0 4px 0">Billing</h4>
                     <pre style="font-size:13px;font-family:inherit;white-space:pre-wrap;margin:0">${escapeHtml(bill || '—')}</pre>
                 </div>
                 <div>
-                    <h4 style="font-size:11px;text-transform:uppercase;color:#888;margin:0 0 4px 0">Shipping</h4>
+                    <h4 style="font-size:11px;text-transform:uppercase;color:var(--text-muted);margin:0 0 4px 0">Shipping</h4>
                     <pre style="font-size:13px;font-family:inherit;white-space:pre-wrap;margin:0">${escapeHtml(ship || (bill ? '(same as billing)' : '—'))}</pre>
                 </div>
             </div>
 
             <!-- notes (inline editable) -->
             <div style="margin-bottom:14px">
-                <h4 style="font-size:11px;text-transform:uppercase;color:#888;margin:0 0 4px 0;display:flex;justify-content:space-between">
+                <h4 style="font-size:11px;text-transform:uppercase;color:var(--text-muted);margin:0 0 4px 0;display:flex;justify-content:space-between">
                     <span>Notes</span>
-                    <span id="cust-note-status-${id}" style="font-size:10px;color:#888;text-transform:none;letter-spacing:0;font-weight:normal"></span>
+                    <span id="cust-note-status-${id}" style="font-size:10px;color:var(--text-muted);text-transform:none;letter-spacing:0;font-weight:normal"></span>
                 </h4>
                 <textarea id="cust-notes-${id}" rows="3" style="width:100%;font-size:13px;font-family:inherit"
                     placeholder="Internal notes about this customer — visible to everyone with admin access."
@@ -190,19 +190,19 @@ const CustomersPage = {
 
             <!-- reseller permits -->
             <div style="margin-bottom:14px">
-                <h4 style="font-size:11px;text-transform:uppercase;color:#888;margin:0 0 4px 0">Reseller permits</h4>
+                <h4 style="font-size:11px;text-transform:uppercase;color:var(--text-muted);margin:0 0 4px 0">Reseller permits</h4>
                 ${permitsBody}
             </div>
 
             <!-- jobs (projects) -->
             <div style="margin-bottom:14px">
-                <h4 style="font-size:11px;text-transform:uppercase;color:#888;margin:0 0 4px 0">Jobs (${jobs.length})</h4>
-                ${jobs.length === 0 ? '<p style="color:#888;font-size:13px;margin:0">No jobs. A job is a project for this customer — invoices, bills, expenses and time can be tagged to it.</p>' :
+                <h4 style="font-size:11px;text-transform:uppercase;color:var(--text-muted);margin:0 0 4px 0">Jobs (${jobs.length})</h4>
+                ${jobs.length === 0 ? '<p style="color:var(--text-muted);font-size:13px;margin:0">No jobs. A job is a project for this customer — invoices, bills, expenses and time can be tagged to it.</p>' :
                     `<table class="data-table" style="font-size:12px">
                         <thead><tr><th scope="col">${T('Job')}</th><th scope="col">Status</th><th scope="col" class="amount">Contract</th><th scope="col"></th></tr></thead>
                         <tbody>${jobs.map(j => `<tr style="cursor:pointer" onclick="closeModal();JobsPage.showDetails(${j.id})">
-                            <td>${escapeHtml(j.name)}${j.job_number ? ` <span style="color:#888">#${escapeHtml(j.job_number)}</span>` : ''}</td>
-                            <td>${escapeHtml((window.JobsPage && JobsPage.STATUS_LABELS[j.status]) || j.status)}${j.is_active ? '' : ' <span style="color:#888">(inactive)</span>'}</td>
+                            <td>${escapeHtml(j.name)}${j.job_number ? ` <span style="color:var(--text-muted)">#${escapeHtml(j.job_number)}</span>` : ''}</td>
+                            <td>${escapeHtml((window.JobsPage && JobsPage.STATUS_LABELS[j.status]) || j.status)}${j.is_active ? '' : ' <span style="color:var(--text-muted)">(inactive)</span>'}</td>
                             <td class="amount">${j.contract_amount ? formatCurrency(j.contract_amount) : ''}</td>
                             <td><a href="#" onclick="event.preventDefault();event.stopPropagation();closeModal();JobsPage.showForm(${j.id})">Edit</a></td>
                         </tr>`).join('')}</tbody>
@@ -212,16 +212,16 @@ const CustomersPage = {
             <!-- recent invoices + payments side by side -->
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
                 <div>
-                    <h4 style="font-size:11px;text-transform:uppercase;color:#888;margin:0 0 4px 0">Recent invoices (${invoices.length})</h4>
-                    ${invoices.length === 0 ? Terms.text('<p style="color:#888;font-size:13px;margin:0">No invoices yet</p>') :
+                    <h4 style="font-size:11px;text-transform:uppercase;color:var(--text-muted);margin:0 0 4px 0">Recent invoices (${invoices.length})</h4>
+                    ${invoices.length === 0 ? Terms.text('<p style="color:var(--text-muted);font-size:13px;margin:0">No invoices yet</p>') :
                         `<table class="data-table" style="font-size:12px">
                             <thead><tr><th scope="col">#</th><th scope="col">Date</th><th scope="col" class="amount">Total</th><th scope="col">Status</th></tr></thead>
                             <tbody>${invRows}</tbody>
                         </table>`}
                 </div>
                 <div>
-                    <h4 style="font-size:11px;text-transform:uppercase;color:#888;margin:0 0 4px 0">Recent payments (${payments.length})</h4>
-                    ${payments.length === 0 ? '<p style="color:#888;font-size:13px;margin:0">No payments yet</p>' :
+                    <h4 style="font-size:11px;text-transform:uppercase;color:var(--text-muted);margin:0 0 4px 0">Recent payments (${payments.length})</h4>
+                    ${payments.length === 0 ? '<p style="color:var(--text-muted);font-size:13px;margin:0">No payments yet</p>' :
                         `<table class="data-table" style="font-size:12px">
                             <thead><tr><th scope="col">Date</th><th scope="col">Method</th><th scope="col">Ref</th><th scope="col" class="amount">Amount</th></tr></thead>
                             <tbody>${payRows}</tbody>

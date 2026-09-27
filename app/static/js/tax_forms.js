@@ -103,7 +103,7 @@ const TaxFormsPage = {
                 </div>
             </div>
 
-            <div class="card" style="padding:16px;background:#fffbe6;border-left:4px solid #f5a623">
+            <div class="card note--caution" style="padding:16px">
                 <p style="margin:0"><strong>Note:</strong> Tax forms are for reference. Verify calculations with a licensed tax professional before filing.</p>
             </div>`;
     },

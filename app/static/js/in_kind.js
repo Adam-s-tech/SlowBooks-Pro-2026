@@ -19,7 +19,7 @@ const InKindPage = {
             <td>${escapeHtml(g.lines.map(l => l.description).join('; '))}</td>
             <td>${escapeHtml(g.class_name || '')}</td>
             <td class="amount">${formatCurrency(g.total)}</td>
-            <td>${g.status === 'void' ? '<span style="color:#a4242b">void</span>' : 'posted'}</td>
+            <td>${g.status === 'void' ? '<span style="color:var(--text-danger)">void</span>' : 'posted'}</td>
         </tr>`).join('');
         return `
             <div class="page-header">
@@ -133,11 +133,11 @@ const InKindPage = {
             <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
                 <div style="font-size:13px">
                     <div><strong>${escapeHtml(g.date)}</strong> · ${escapeHtml(g.customer_name || '')}${g.class_name ? ` · ${escapeHtml(g.class_name)}` : ''}</div>
-                    ${g.memo ? `<div style="color:#666">${escapeHtml(g.memo)}</div>` : ''}
+                    ${g.memo ? `<div style="color:var(--text-muted)">${escapeHtml(g.memo)}</div>` : ''}
                 </div>
                 <div style="text-align:right">
                     <div style="font-size:20px;font-weight:700">${formatCurrency(g.total)}</div>
-                    <div>${g.status === 'void' ? '<span style="color:#a4242b;font-weight:600">VOID</span>' : `<button class="btn btn-sm btn-secondary" onclick="InKindPage.voidEntry(${g.id})">Void</button>`}</div>
+                    <div>${g.status === 'void' ? '<span style="color:var(--text-danger);font-weight:600">VOID</span>' : `<button class="btn btn-sm btn-secondary" onclick="InKindPage.voidEntry(${g.id})">Void</button>`}</div>
                 </div>
             </div>
             <div class="table-container"><table class="data-table" style="font-size:12px">

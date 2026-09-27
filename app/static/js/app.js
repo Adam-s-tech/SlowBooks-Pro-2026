@@ -634,7 +634,7 @@ const App = {
             if (!resp.ok) throw new Error(await API.responseError(resp, 'Import failed'));
             const data = await resp.json();
             const n = data.created ?? data.imported ?? 0;
-            let html = `<div style="color:var(--success); font-size:11px;">Imported ${n} ${entity === 'accounts' ? 'accounts' : entity}${data.updated ? `, updated ${data.updated}` : ''}${data.skipped ? `, ${data.skipped} already there` : ''}.</div>`;
+            let html = `<div style="color:var(--text-success); font-size:11px;">Imported ${n} ${entity === 'accounts' ? 'accounts' : entity}${data.updated ? `, updated ${data.updated}` : ''}${data.skipped ? `, ${data.skipped} already there` : ''}.</div>`;
             if (data.errors && data.errors.length > 0) {
                 html += `<div style="color:var(--danger); font-size:11px; margin-top:6px;">Errors:<br>${data.errors.map(e => escapeHtml(e)).join('<br>')}</div>`;
             }

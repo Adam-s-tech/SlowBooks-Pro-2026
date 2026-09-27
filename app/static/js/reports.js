@@ -217,7 +217,7 @@ const ReportsPage = {
             const data = await API.get(`/reports/account-transactions?${params.toString()}`);
             const rows = (data.entries || []).map(e => {
                 const src = e.source_link
-                    ? `<a href="${escapeHtml(e.source_link)}" style="color:var(--qb-blue,#0066cc); text-decoration:none;">${escapeHtml(e.source_type || '')} #${e.source_id}</a>`
+                    ? `<a href="${escapeHtml(e.source_link)}" style="color:var(--text-link); text-decoration:none;">${escapeHtml(e.source_type || '')} #${e.source_id}</a>`
                     : escapeHtml(e.source_type || '');
                 return `<tr>
                     <td>${formatDate(e.date)}</td>
@@ -450,7 +450,7 @@ const ReportsPage = {
                 if (!items.length) return `<tr><td colspan="2" style="color:var(--gray-400);">None</td></tr>`;
                 return items.map(i =>
                     `<tr><td style="padding-left:24px;">
-                        <a href="javascript:void(0)" style="color:var(--qb-blue,#0066cc); text-decoration:none;"
+                        <a href="javascript:void(0)" style="color:var(--text-link); text-decoration:none;"
                            onclick="${drillCall(i)}">${escapeHtml(i.account_name)}</a>
                         </td><td class="amount">${formatCurrency(i.amount)}</td></tr>`
                 ).join("");
@@ -484,7 +484,7 @@ const ReportsPage = {
             );
             const section = (items) => items.map(i =>
                 `<tr><td style="padding-left:24px;">
-                    <a href="javascript:void(0)" style="color:var(--qb-blue,#0066cc); text-decoration:none;"
+                    <a href="javascript:void(0)" style="color:var(--text-link); text-decoration:none;"
                        onclick="${drillCall(i)}">${escapeHtml(i.account_name)}</a>
                     </td><td class="amount">${formatCurrency(i.amount)}</td></tr>`
             ).join("") || `<tr><td colspan="2" style="color:var(--gray-400);">None</td></tr>`;
@@ -742,7 +742,7 @@ const ReportsPage = {
                     <td class="amount">${formatCurrency(i.net_balance)}</td>
                 </tr>`
             ).join('');
-            const diffColor = Math.abs(data.difference) < 0.01 ? 'var(--success)' : 'var(--danger)';
+            const diffColor = Math.abs(data.difference) < 0.01 ? 'var(--text-success)' : 'var(--text-danger)';
             rows += `<tr style="font-weight:700; background:var(--gray-50);">
                 <td colspan="3">TOTALS</td>
                 <td class="amount">${formatCurrency(data.total_debit)}</td>
@@ -1000,7 +1000,7 @@ ReportsPage.jobBudgetVsActual = async function () {
             <td class="amount">${formatCurrency(j.committed)}</td>
             <td class="amount">${formatCurrency(j.actual)}</td>
             <td class="amount">${formatCurrency(j.projected)}</td>
-            <td class="amount" style="font-weight:700;color:${j.revised && j.variance < 0 ? '#a4242b' : 'inherit'}">${formatCurrency(j.variance)}</td>
+            <td class="amount" style="font-weight:700;color:${j.revised && j.variance < 0 ? 'var(--text-danger)' : 'inherit'}">${formatCurrency(j.variance)}</td>
             <td class="amount">${pct(j.pct_used)}</td>
             <td class="amount">${formatCurrency(j.act_revenue)}</td>
         </tr>`; }).join('');
@@ -1154,7 +1154,7 @@ ReportsPage.statementOfFinancialPosition = async function (prefill) {
         const d = await API.get(`/reports/statement-of-financial-position?${qs}`);
         const drillCall = (i) => escapeHtml(`ReportsPage.openDrillDown(${i.account_id},${JSON.stringify(i.account_name)},null,${JSON.stringify(params.as_of_date)})`);
         const section = (items) => items.map(i => `<tr><td style="padding-left:24px;">
-                ${i.account_id ? `<a href="javascript:void(0)" style="color:var(--qb-blue,#0066cc); text-decoration:none;" onclick="${drillCall(i)}">${escapeHtml(i.account_name)}</a>` : escapeHtml(i.account_name)}
+                ${i.account_id ? `<a href="javascript:void(0)" style="color:var(--text-link); text-decoration:none;" onclick="${drillCall(i)}">${escapeHtml(i.account_name)}</a>` : escapeHtml(i.account_name)}
                 </td><td class="amount">${formatCurrency(i.amount)}</td></tr>`).join('') || `<tr><td colspan="2" style="color:var(--gray-400);">None</td></tr>`;
         const sub = (label, v) => `<tr style="font-weight:600; background:var(--gray-50);"><td>${label}</td><td class="amount">${formatCurrency(v)}</td></tr>`;
         return `${ReportsPage._exportButtons('statement-of-financial-position', qs)}

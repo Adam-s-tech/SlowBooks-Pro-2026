@@ -45,7 +45,7 @@ const CompaniesPage = {
             for (const c of companies) {
                 const fileLabel = c.file || c.database_name || '';
                 html += `<div class="card">
-                    <div class="card-header">${escapeHtml(c.name)}${c.is_current ? ' <span style="font-size:9px;color:var(--success,#2e7d32);">(currently open)</span>' : ''}</div>
+                    <div class="card-header">${escapeHtml(c.name)}${c.is_current ? ' <span style="font-size:9px;color:var(--text-success);">(currently open)</span>' : ''}</div>
                     <div style="font-size:10px;color:var(--text-muted);">${escapeHtml(fileLabel)}</div>
                     ${c.description ? `<div style="font-size:11px;margin-top:4px;">${escapeHtml(c.description)}</div>` : ''}
                     ${c.last_accessed ? `<div style="font-size:9px;color:var(--text-light);margin-top:4px;">Last accessed: ${new Date(c.last_accessed).toLocaleDateString()}</div>` : ''}

@@ -88,6 +88,40 @@ def test_muted_text_token_clears_aa_contrast():
     assert ratio >= 4.5, f"--gray-400 {tok} is {ratio:.2f}:1 on white"
 
 
+def test_the_sign_in_screens_text_colours_clear_aa_on_their_card():
+    """The sign-in and first-run setup screens draw fixed colours on a white
+    card, in either theme (auth.js). Every text colour they set reads at
+    4.5:1 on what it sits on: the section heading's #888 was 3.54:1 and the
+    setup footnote's #777 4.48. The two that sit on something other than the
+    card are named with their ground: the has-books notice and the button."""
+
+    def lum(hexcolor):
+        h = hexcolor.lstrip("#")
+        if len(h) == 3:
+            h = "".join(c * 2 for c in h)
+        r, g, b = (int(h[i : i + 2], 16) / 255 for i in (0, 2, 4))
+
+        def f(c):
+            return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+        return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
+
+    def ratio(fg, bg):
+        hi, lo = sorted((lum(fg), lum(bg)), reverse=True)
+        return (hi + 0.05) / (lo + 0.05)
+
+    js = (ROOT / "app/static/js/auth.js").read_text(encoding="utf-8")
+    grounds = {"#5a4300": "#fff7e0", "#fff": "#0066cc"}
+    colours = set(re.findall(r"(?<![-\w])color:\s*(#[0-9a-fA-F]{3,6})\b", js))
+    assert {"#111", "#555", "#5a4300", "#fff"} <= colours, colours
+    low = {
+        c: round(ratio(c, grounds.get(c, "#ffffff")), 2)
+        for c in colours
+        if ratio(c, grounds.get(c, "#ffffff")) < 4.5
+    }
+    assert low == {}
+
+
 def test_generated_pdfs_are_tagged(client, seed_accounts, seed_customer):
     inv = client.post(
         "/api/invoices",
