@@ -70,7 +70,21 @@ def list_items(
         q = q.filter(Item.item_type == item_type)
     if search:
         q = q.filter(Item.name.ilike(f"%{search}%"))
-    return q.order_by(Item.name).all()
+    return _flag_discounts(db, q.order_by(Item.name).all())
+
+
+def _flag_discounts(db: Session, items):
+    """Item responses, a Discount item marked so the forms let its line
+    take a negative price."""
+    from app.services.qbo_common import discount_item_ids
+
+    discounts = discount_item_ids(db)
+    out = []
+    for item in items:
+        resp = ItemResponse.model_validate(item)
+        resp.is_discount = item.id in discounts
+        out.append(resp)
+    return out
 
 
 @router.get("/low-stock", response_model=list[LowStockResponse])
@@ -128,7 +142,7 @@ def inventory_valuation(db: Session = Depends(get_db)):
 
 @router.get("/{item_id}", response_model=ItemResponse)
 def get_item(item_id: int, db: Session = Depends(get_db)):
-    return get_or_404(db, Item, item_id)
+    return _flag_discounts(db, [get_or_404(db, Item, item_id)])[0]
 
 
 @router.get("/{item_id}/movements", response_model=list[InventoryMovementResponse])

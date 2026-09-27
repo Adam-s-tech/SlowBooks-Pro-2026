@@ -60,6 +60,9 @@ class ItemResponse(BaseModel):
     asset_account_id: Optional[int]
     created_at: datetime
     updated_at: datetime
+    # A Discount item (a QuickBooks Online discount came in on it): a line
+    # on it takes a negative price.
+    is_discount: bool = False
 
     model_config = {"from_attributes": True}
 

@@ -266,6 +266,16 @@ def discount_mapping(db: Session, item_id) -> QBOMapping | None:
     )
 
 
+def discount_item_ids(db: Session) -> set[int]:
+    """Every local item a QuickBooks Online discount came in on."""
+    return {
+        sid
+        for (sid,) in db.query(QBOMapping.slowbooks_id).filter(
+            QBOMapping.entity_type == DISCOUNT_ITEM
+        )
+    }
+
+
 def is_discount_item(db: Session, item_id) -> bool:
     """Whether a local item is one a QuickBooks Online discount came in on:
     a line on it may carry a negative price (routes/invoices/helpers.py,

@@ -33,7 +33,20 @@ const SalesLines = {
         const desc = row.querySelector('.line-desc');
         if (desc) desc.value = item.description || item.name;
         const rate = row.querySelector('.line-rate');
-        if (rate) rate.value = item.rate;
+        if (rate) {
+            rate.value = item.rate;
+            // A Discount item's price is entered negative (-10.00); any other
+            // item gets back the floor its box had.
+            if (item.is_discount) {
+                if (rate.dataset.floor === undefined) rate.dataset.floor = rate.getAttribute('min') || '';
+                rate.removeAttribute('min');
+                rate.placeholder = '-10.00';
+            } else if (rate.dataset.floor !== undefined) {
+                if (rate.dataset.floor) rate.setAttribute('min', rate.dataset.floor);
+                delete rate.dataset.floor;
+                rate.placeholder = '';
+            }
+        }
         const tax = row.querySelector('.line-taxable');
         if (tax) {
             // An exempt customer's boxes are held off (TaxExempt); remember
@@ -730,7 +743,7 @@ const InvoicesPage = {
                 <option value="">--</option>${itemOpts}</select></td>
             <td><input class="line-desc" value="${escapeHtml(line.description || '')}"></td>
             <td><input class="line-qty" type="number" step="0.01" value="${line.quantity || 1}" oninput="InvoicesPage.recalc()"></td>
-            <td><input class="line-rate" type="number" step="0.0001" ${Number(line.rate) < 0 ? '' : 'min="0" '}value="${Number(line.rate) || 0}" oninput="InvoicesPage.recalc()"></td>
+            <td><input class="line-rate" type="number" step="0.0001" ${Number(line.rate) < 0 || items.some(i => i.is_discount && i.id == line.item_id) ? '' : 'min="0" '}value="${Number(line.rate) || 0}" oninput="InvoicesPage.recalc()"></td>
             <td style="text-align:center"><input type="checkbox" class="line-taxable" title="Sales tax applies to this line" ${line.is_taxable === false ? '' : 'checked'} onchange="InvoicesPage.recalc()"></td>
             <td class="col-amount line-amount">${formatCurrency((line.quantity||1) * (line.rate||0))}</td>
             <td><button type="button" class="btn btn-sm btn-danger" aria-label="Remove line" onclick="InvoicesPage.removeLine(${idx})">X</button></td>
