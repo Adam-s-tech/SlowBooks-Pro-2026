@@ -27,6 +27,7 @@ from app.models.invoices import Invoice, InvoiceLine, InvoiceStatus
 from app.models.payments import Payment, PaymentAllocation
 from app.models.qbo_mapping import QBOMapping
 from app.models.transactions import Transaction
+from app.schemas.common import TAX_RATE_PLACES
 from app.services.qbo_common import (
     DELETED_IN_QBO,
     HERE,
@@ -276,7 +277,8 @@ def _tax_code(detail) -> bool | None:
 
 
 # A document's tax rate is a fraction kept to six places (8.875% is 0.08875).
-_RATE_PLACES = Decimal("0.000001")
+# a document rate is stored to six places (app.schemas.common)
+_RATE_PLACES = TAX_RATE_PLACES
 
 
 def _qbo_rate(source, lines, tax) -> Decimal:

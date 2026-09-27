@@ -10,6 +10,7 @@
 # ============================================================================
 
 import logging
+import math
 import os
 import re as _re
 import time as _time
@@ -531,14 +532,28 @@ app.add_exception_handler(MissingControlAccount, _missing_control_account_handle
 # FastAPI's own body, unchanged, with a plain "message" added to each entry
 # ("Name is required.") for the page to show instead of validator text
 # ("name: String should have at least 1 character" — explore 2.17.3, L5).
+def _json_safe(value):
+    """A 422 echoes what was sent, and JSON has no NaN or Infinity: a body
+    carrying one (Python's JSON reader accepts them) turned the refusal
+    into a 500. Name them as text instead."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    return value
+
+
 async def _request_validation_handler(request: Request, exc: RequestValidationError):
     from app.services.validation_messages import with_messages
 
     terms = _company_terms()
     wording = terms.text if terms.is_nonprofit else None
+    errors = _json_safe(jsonable_encoder(exc.errors()))
     return JSONResponse(
         status_code=422,
-        content={"detail": with_messages(jsonable_encoder(exc.errors()), wording)},
+        content={"detail": with_messages(errors, wording)},
     )
 
 

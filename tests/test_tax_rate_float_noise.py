@@ -69,3 +69,21 @@ def test_the_forms_show_the_percent_as_typed():
         assert f"+(({var}.tax_rate || 0) * 100).toFixed(4)" in js, name
         assert f"({var}.tax_rate * 100) || 0" not in js, name
         assert "tax_rate || 0) * 10000) / 100" not in js, name
+
+
+def test_a_rate_that_is_nan_is_refused_as_a_422_not_a_500(
+    client, seed_accounts, seed_customer
+):
+    # Python's JSON reader takes NaN; the refusal echoed it back, and JSON
+    # can't carry it, so the 422 became a 500.
+    r = client.post(
+        "/api/invoices",
+        content=(
+            '{"customer_id": %d, "date": "2026-09-01", "tax_rate": NaN, '
+            '"lines": [{"description": "Loaf", "quantity": 1, "rate": 10}]}'
+            % seed_customer.id
+        ),
+        headers={"content-type": "application/json"},
+    )
+    assert r.status_code == 422, r.text
+    assert "nan" in r.text.lower()
