@@ -33,8 +33,15 @@ LEDGER_TYPE = {
     "sales_receipt": "Sales Receipt",
     "payment": "Payment",
 }
-# Reversals keyed by the id of the transaction they reverse.
-REVERSALS = ("manual_void", "qbo_ledger_void", "qbo_journal_void")
+# Reversals keyed by the id of the transaction they reverse (the journal's
+# own void, the house void_document() convention, a QBO import posting's).
+REVERSALS = (
+    "manual_void",
+    "bank_entry_void",
+    "deposit_void",
+    "qbo_ledger_void",
+    "qbo_journal_void",
+)
 
 
 def origin(db: Session, kinds, slowbooks_id) -> QBOMapping | None:
@@ -377,7 +384,9 @@ def adopt_invoice(db: Session, invoice) -> bool:
                 "amounts and date can't be changed."
             ),
         )
-        restore_local_cost(db, invoice)
+    # Its stock is costed here from now on (a no-op while a cost of ours
+    # stands: the ledger import never posted it).
+    restore_local_cost(db, invoice)
     if mapping.entity_type == "sales_receipt":
         for alloc in invoice.payment_allocations:
             payment = alloc.payment

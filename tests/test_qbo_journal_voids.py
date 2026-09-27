@@ -98,3 +98,20 @@ def test_a_manual_journal_is_voided_once_too(client, db_session, seed_accounts):
     assert (
         db_session.query(Transaction).filter_by(source_type="manual_void").count() == 1
     )
+
+
+def test_an_entry_voided_by_its_own_void_is_not_voided_again_as_a_journal(
+    client, db_session, seed_accounts
+):
+    """A bank entry opens in the journal view from the register; one its own
+    void already reversed (bank_entry_void) is not reversed a second time
+    through the journal's."""
+    from tests.test_bank_entries import _entry
+
+    r = _entry(client, seed_accounts)
+    assert r.status_code == 201, r.text
+    entry = r.json()["id"]  # the journal entry
+    assert client.post(f"/api/banking/entries/{entry}/void").status_code == 200
+    r = client.post(f"/api/journal/{entry}/void")
+    assert r.status_code == 400
+    assert r.json()["detail"] == "This journal entry has already been voided."

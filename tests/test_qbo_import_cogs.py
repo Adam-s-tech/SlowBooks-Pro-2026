@@ -179,3 +179,104 @@ def test_an_edit_makes_the_sale_ours_and_costs_it_here_once(
     db_session.expire_all()
     assert cogs() == Decimal("12.00")
     assert db_session.get(Item, widget.id).quantity_on_hand == Decimal("7")
+
+
+def test_a_receipt_edited_after_its_payment_was_voided_is_costed_here(
+    db_session, seed_accounts, monkeypatch, client
+):
+    """Voiding a QBO sales receipt's payment reverses the receipt's import
+    posting, QBO's cost of goods with it; an edit then makes the receipt
+    ours, and its stock must be costed here, not left costing nothing."""
+    from quickbooks.objects.salesreceipt import SalesReceipt as QBOSalesReceipt
+
+    from app.models.invoices import Invoice
+
+    customer = Customer(name="Acme Diner", is_active=True)
+    widget = Item(
+        name="Widget",
+        item_type=ItemType.PRODUCT,
+        rate=Decimal("25"),
+        track_inventory=True,
+        quantity_on_hand=Decimal("10"),
+        avg_cost=Decimal("4"),
+    )
+    db_session.add_all([customer, widget])
+    db_session.flush()
+    mapped = [("customer", "58", customer.id), ("item", "7", widget.id)]
+    mapped += [
+        ("account", qbo_id, seed_accounts[number].id)
+        for qbo_id, number in [
+            ("79", "4000"),
+            ("80", "5000"),
+            ("81", "1300"),
+            ("35", "1200"),
+        ]
+    ]
+    for kind, qbo_id, local_id in mapped:
+        db_session.add(
+            QBOMapping(entity_type=kind, qbo_id=qbo_id, slowbooks_id=local_id)
+        )
+    db_session.flush()
+    receipt = QBOSalesReceipt.from_json(
+        {
+            "Id": "132",
+            "DocNumber": "SR-9",
+            "TxnDate": DAY.isoformat(),
+            "TotalAmt": 50,
+            "CustomerRef": {"value": "58", "name": "Acme Diner"},
+            "DepositToAccountRef": {"value": "35"},
+            "Line": [
+                {
+                    "Id": "1",
+                    "Amount": 50,
+                    "DetailType": "SalesItemLineDetail",
+                    "SalesItemLineDetail": {
+                        "ItemRef": {"value": "7", "name": "Widget"},
+                        "Qty": 2,
+                        "UnitPrice": 25,
+                    },
+                }
+            ],
+        }
+    )
+    sale = ("Sales Receipt", "132", "SR-9")
+    ledger = LedgerClient(
+        {
+            "35": [(*sale, "50")],
+            "79": [(*sale, "50")],
+            "80": [(*sale, "7")],
+            "81": [(*sale, "-7")],
+        }
+    )
+    monkeypatch.setattr(qbo_import, "get_qbo_client", lambda db: object())
+    monkeypatch.setattr(
+        qbo_import,
+        "_all_qbo_objects",
+        lambda cls, client: [receipt] if cls is QBOSalesReceipt else [],
+    )
+    monkeypatch.setattr(qbo_ledger_import, "get_qbo_client", lambda db: ledger)
+    assert qbo_import.import_sales_receipts(db_session)["errors"] == []
+    assert (
+        qbo_ledger_import.import_ledger(db_session, start=DAY, end=DAY)["errors"] == []
+    )
+    db_session.commit()
+    document = db_session.query(Invoice).one()
+    payment = document.payment_allocations[0].payment
+    assert client.post(f"/api/payments/{payment.id}/void").status_code == 200
+    r = client.put(
+        f"/api/invoices/{document.id}",
+        json={
+            "lines": [
+                {
+                    "item_id": widget.id,
+                    "description": "Widget",
+                    "quantity": 2,
+                    "rate": 25,
+                }
+            ]
+        },
+    )
+    assert r.status_code == 200, r.text
+    db_session.expire_all()
+    cogs_id = seed_accounts["5000"].id
+    assert gl_balances(db_session, [cogs_id])[cogs_id] == Decimal("8.00")
