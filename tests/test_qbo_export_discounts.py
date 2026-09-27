@@ -20,6 +20,7 @@ import json
 import pytest
 from quickbooks.objects.invoice import Invoice as QBOInvoice
 
+from app.models.accounts import Account, AccountType
 from app.models.contacts import Customer
 from app.models.invoices import Invoice, InvoiceLine, InvoiceStatus
 from app.models.items import Item, ItemType
@@ -44,12 +45,16 @@ def sent(monkeypatch):
 
 @pytest.fixture
 def items(db_session, seed_accounts):
-    """Catering (QBO item 21), a Coupon (QBO item 31), and the Discount item
-    QBO's discounts came in on (QBO's discount account 86)."""
+    """Catering (QBO item 21), a Coupon (QBO item 31), and the Discount items
+    QBO's discounts came in on: Discount on "Discounts given" (QBO account
+    86), Promo on "Promotions" (QBO account 87)."""
     customer = Customer(name="Acme Diner", is_active=True)
     db_session.add(customer)
     made = {"customer": customer}
-    for name in ("Catering", "Coupon", "Discount"):
+    for name in ("Discounts given", "Promotions"):
+        made[name] = Account(name=name, account_type=AccountType.INCOME)
+        db_session.add(made[name])
+    for name in ("Catering", "Coupon", "Discount", "Promo"):
         made[name] = Item(
             name=name,
             item_type=ItemType.SERVICE,
@@ -60,29 +65,34 @@ def items(db_session, seed_accounts):
     db_session.flush()
     for kind, qbo_id, local in [
         ("customer", "58", customer.id),
+        ("account", "86", made["Discounts given"].id),
+        ("account", "87", made["Promotions"].id),
         ("item", "21", made["Catering"].id),
         ("item", "31", made["Coupon"].id),
         ("discount_item", "86", made["Discount"].id),
+        ("discount_item", "87", made["Promo"].id),
     ]:
         db_session.add(QBOMapping(entity_type=kind, qbo_id=qbo_id, slowbooks_id=local))
     db_session.commit()
     return made
 
 
-def _invoice(db, items, number, lines):
+def _invoice(db, items, number, lines, tax=0, **fields):
     """(item, description, amount, taxable) lines; quantity 1."""
-    total = sum((Decimal(str(amount)) for _, _, amount, _ in lines), Decimal("0"))
+    subtotal = sum((Decimal(str(amount)) for _, _, amount, _ in lines), Decimal("0"))
+    total = subtotal + Decimal(str(tax))
     invoice = Invoice(
         invoice_number=number,
         customer_id=items["customer"].id,
         date=date(2026, 8, 3),
         due_date=date(2026, 8, 3),
         status=InvoiceStatus.SENT,
-        subtotal=total,
+        subtotal=subtotal,
         tax_rate=Decimal("0"),
-        tax_amount=Decimal("0"),
+        tax_amount=Decimal(str(tax)),
         total=total,
         balance_due=total,
+        **fields,
     )
     db.add(invoice)
     db.flush()
@@ -114,7 +124,11 @@ def test_a_discount_item_line_exports_as_qbos_discount(db_session, items, sent):
             ("Coupon", "Coupon", -5, False),
         ],
     )
-    assert qbo_export.export_invoices(db_session) == {"exported": 1, "errors": []}
+    assert qbo_export.export_invoices(db_session) == {
+        "exported": 1,
+        "errors": [],
+        "notes": [],
+    }
     [invoice] = sent
     catering, discount, coupon = invoice.Line
     assert catering["SalesItemLineDetail"]["ItemRef"] == {"value": "21"}
@@ -133,6 +147,7 @@ def test_a_discount_item_line_exports_as_qbos_discount(db_session, items, sent):
     assert coupon["SalesItemLineDetail"] == {
         "Qty": 1.0,
         "UnitPrice": -5.0,
+        "TaxCodeRef": {"value": "NON"},
         "ItemRef": {"value": "31"},
     }
     assert invoice.ApplyTaxAfterDiscount is True  # it came off the taxable amount
@@ -174,3 +189,43 @@ def test_a_discount_untaxed_leaves_the_tax_worked_out_first(db_session, items, s
     [invoice] = sent
     assert invoice.Line[1]["DetailType"] == "DiscountLineDetail"
     assert invoice.ApplyTaxAfterDiscount is False
+
+
+def test_discounts_on_two_accounts_go_as_one_with_a_note(db_session, items, sent):
+    """QBO takes one discount on a transaction: the two go as one, on the
+    account with the most of it, and the export says where the rest was."""
+    _invoice(
+        db_session,
+        items,
+        "2004",
+        [
+            ("Catering", "Catering", 100, True),
+            ("Discount", "Discount 10%", -10, True),
+            ("Promo", "Spring promotion", -4, True),
+        ],
+    )
+    result = qbo_export.export_invoices(db_session)
+    [invoice] = sent
+    [discount] = [ln for ln in invoice.Line if ln["DetailType"] == "DiscountLineDetail"]
+    assert discount["Amount"] == 14.0
+    assert discount["DiscountLineDetail"]["DiscountAccountRef"] == {"value": "86"}
+    assert discount["Description"] == "Discount 10%"
+    assert [n["message"] for n in result["notes"]] == [
+        "Invoice 2004 went to QuickBooks Online with one discount of 14.00 on "
+        "Discounts given (QBO #86), as QuickBooks Online takes one discount on a "
+        "transaction. It includes 4.00 on Promotions (QBO #87)."
+    ]
+    # and "Export All" carries the note to the page
+    from app.schemas.qbo import QBOExportResult
+
+    assert QBOExportResult(**{"notes": result["notes"]}).notes == result["notes"]
+
+
+def test_one_discount_account_needs_no_note(db_session, items, sent):
+    _invoice(
+        db_session,
+        items,
+        "2005",
+        [("Catering", "Catering", 100, True), ("Discount", "Discount", -10, True)],
+    )
+    assert qbo_export.export_invoices(db_session)["notes"] == []

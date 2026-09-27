@@ -36,6 +36,7 @@ from app.services.qbo_common import (
 from app.services.qbo_documents import (
     amount_of,
     closed_on,
+    paid_past_new_total,
     reverse_for_import,
     void_document_from_qbo,
     why_not_changed,
@@ -258,6 +259,54 @@ def _kept(key: str, mappings) -> None:
         ("journal", qbo_id) if is_journal_entry_type(txn_type) else ("ledger", key),
         mappings,
     )
+
+
+def _paid_past(db: Session, key: str, entry: dict, txn) -> dict | None:
+    """For an invoice the QBO import made: QBO's new total, read from the
+    new version of its posting on the account the old one took the
+    invoice's total to (A/R), when it is below the payments recorded
+    against the invoice here. The document import leaves such a change too
+    (qbo_documents.paid_past_new_total): the line both give, else None."""
+    from app.models.invoices import Invoice, InvoiceStatus
+    from app.services.accounting import _q
+
+    txn_type, _, qbo_id = key.partition(":")
+    if txn_type.lower().replace(" ", "") != "invoice":
+        return None
+    mapping = (
+        db.query(QBOMapping).filter_by(entity_type="invoice", qbo_id=qbo_id).first()
+    )
+    invoice = db.get(Invoice, mapping.slowbooks_id) if mapping else None
+    if (
+        invoice is None
+        or invoice.transaction_id is not None
+        or invoice.status == InvoiceStatus.VOID
+        or not invoice.amount_paid
+    ):
+        return None
+    rate = Decimal(str(invoice.exchange_rate or 1))
+    total = _q(Decimal(str(invoice.total)) * rate)
+    net = defaultdict(Decimal)
+    for line in txn.lines:
+        net[line.account_id] += Decimal(str(line.debit)) - Decimal(str(line.credit))
+    receivable = [
+        account_id
+        for account_id, amount in net.items()
+        if amount == total
+        and getattr(db.get(Account, account_id), "account_type", None)
+        == AccountType.ASSET
+    ]
+    if len(receivable) != 1:
+        return None  # which line is its total can't be told: posted as QBO has it
+    new = sum(
+        (
+            line["debit"] - line["credit"]
+            for line in entry["lines"]
+            if line["account_id"] == receivable[0]
+        ),
+        Decimal("0"),
+    )
+    return paid_past_new_total(invoice, qbo_id, _q(new / rate))
 
 
 def _document(key: str, number: str) -> str:
@@ -592,6 +641,11 @@ def import_ledger(
             why = why_not_changed(db, txn, entry["date"])
             if why:
                 not_applied(key, entry["number"], "changed", why)
+                continue
+            held = _paid_past(db, key, entry, txn)
+            if held:
+                # the document import leaves it too: one line for both
+                qbo_progress.append_error(unapplied, held)
                 continue
             changes.append((key, entry, existing, fingerprint, txn))
             qbo_progress.validated(key)
