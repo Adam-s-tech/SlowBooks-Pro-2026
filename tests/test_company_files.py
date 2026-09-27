@@ -28,7 +28,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from starlette.requests import HTTPConnection
 
@@ -69,7 +69,16 @@ class _Company:
         self.engine = create_engine(
             "sqlite:///" + path.as_posix(), connect_args={"check_same_thread": False}
         )
-        enable_sqlite_tuning(self.engine)  # the app's own PRAGMAs
+        # Every connection starts from the SQLite default the Windows and
+        # macOS builds have: deleted bytes left in free pages. (Debian's and
+        # Ubuntu's SQLite is compiled with secure_delete on, which would hide
+        # whether the app turns it on.)
+        event.listen(
+            self.engine,
+            "connect",
+            lambda conn, _record: conn.execute("PRAGMA secure_delete=OFF"),
+        )
+        enable_sqlite_tuning(self.engine)  # the app's own PRAGMAs, after
         self.Session = sessionmaker(bind=self.engine, autoflush=False)
         register_audit_hooks(self.Session)
 
@@ -232,7 +241,9 @@ def test_an_updated_w4_is_a_second_document_and_the_first_is_kept(client):
 def test_a_deleted_documents_bytes_are_nowhere(client, companies):
     """skytech: deleting an employee document removed only the row, so a
     "deleted" W-4 (with its SSN) stayed on disk. Now its bytes go with it:
-    they are in no file under the data folder, and not in the database."""
+    not in any file under the data folder, and not left in the company
+    file's free pages either (secure_delete), where a later copy or backup
+    of the file would still carry them."""
     marker = b"SSN 123-45-6789 marker-for-a-deleted-w4"
     company = companies.open(companies.a)
     emp = _employee(client, "Marisol")
@@ -246,9 +257,9 @@ def test_a_deleted_documents_bytes_are_nowhere(client, companies):
         p for p in _files_under(storage.files_root()) if marker in p.read_bytes()
     ]
     assert leftovers == [], f"the deleted W-4 is still on disk: {leftovers}"
-    with company.Session() as db:
-        stored = db.execute(text("SELECT count(*) FROM stored_files")).scalar()
-    assert stored == 0
+    company.engine.dispose()  # the last connection closes: WAL checkpointed
+    for path in company.path.parent.glob(company.path.name + "*"):
+        assert marker not in path.read_bytes(), f"the deleted W-4 is still in {path}"
 
 
 # ---------------------------------------------------------------------------
