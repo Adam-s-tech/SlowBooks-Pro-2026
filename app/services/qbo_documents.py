@@ -393,7 +393,63 @@ def adopt_invoice(db: Session, invoice) -> bool:
             if payment and not payment.is_voided and payment.transaction_id is None:
                 post_payment_journal(db, payment)
     mark_changed_here(db, mapping, ledger)
+    adopt_unposted_payments(db, invoice)
     return True
+
+
+def adopt_unposted_payments(db: Session, invoice) -> None:
+    """The QBO payments on an invoice that becomes ours, when they have no
+    posting at all (the ledger import never posted them): ours too, and
+    posted, so A/R is right at once (the invoice posts its own debit). A
+    later ledger import keeps them (CHANGED_HERE).
+
+    Such a payment may also pay other invoices the import made, with no
+    posting either; those become ours with it, so every part of its credit
+    to A/R meets an invoice's debit there. With the ledger import run, each
+    payment already has its posting, and nothing here changes."""
+    from app.routes.invoices.helpers import _post_invoice_journal
+
+    invoices, payments = [invoice], set()
+    seen = {invoice.id}
+    while invoices:
+        paid = invoices.pop()
+        for alloc in list(paid.payment_allocations):
+            payment = alloc.payment
+            if payment is None or payment.id in payments or payment.is_voided:
+                continue
+            payments.add(payment.id)
+            mapping = origin(db, ("payment",), payment.id)
+            if (
+                mapping is None
+                or payment.transaction_id is not None
+                or import_posting(db, mapping) is not None
+            ):
+                continue
+            post_payment_journal(db, payment)
+            mark_changed_here(db, mapping)
+            for other in payment.allocations:
+                sibling = other.invoice
+                if sibling is None or sibling.id in seen:
+                    continue
+                seen.add(sibling.id)
+                sibling_map = invoice_origin(db, sibling)
+                if (
+                    sibling_map is None
+                    or sibling.status == InvoiceStatus.VOID
+                    or import_posting(db, sibling_map) is not None
+                ):
+                    continue
+                restore_local_cost(db, sibling)
+                txn = _post_invoice_journal(
+                    db,
+                    sibling,
+                    list(sibling.lines),
+                    sibling.customer.name if sibling.customer else "",
+                    balance_on_income=True,
+                )
+                sibling.transaction_id = txn.id
+                mark_changed_here(db, sibling_map)
+                invoices.append(sibling)
 
 
 # ---------------------------------------------------------------------------
