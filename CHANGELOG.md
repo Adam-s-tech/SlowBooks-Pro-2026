@@ -300,7 +300,8 @@ from the rates and puts the rounding difference on line 7.
   counts — that survives leaving the page. One import runs per company;
   a restore waits for it; the books stay writable between its steps; and
   it works when the Docker image runs several worker processes.
-- **Connecting when the redirect can't reach SlowBooks.** An administrator
+- **Connecting from the desktop app** opens Intuit's sign-in in your
+  browser. **When the redirect can't reach SlowBooks,** an administrator
   can complete the connection by pasting Intuit's callback address (or the
   code and Realm ID from Intuit's OAuth Playground). Starting an import or
   a connection is administrator-only.
