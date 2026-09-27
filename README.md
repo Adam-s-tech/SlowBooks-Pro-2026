@@ -66,7 +66,9 @@ entries and posted ledger activity, with a live import log (#192), a switch
 for the company logo on invoices, and **Fetch older history** for SimpleFIN
 bank feeds — up to a year where the provider keeps it (#181). Tax rates take
 four decimal places (8.875%), and the payment screens see every open invoice
-and bill, not just the newest 500 (#191).
+and bill, not just the newest 500 (#191). Each company now keeps its logo,
+attachments and employee documents in its own company file: companies on
+one desktop shared them, and a server published them without a sign-in.
 
 **v2.17 — Your ledger, in a spreadsheet.** Trial Balance and General Ledger
 save as a CSV and a printable PDF, and Profit & Loss and Balance Sheet gain
@@ -112,7 +114,7 @@ against any of eight providers (xAI Grok, Groq, Cloudflare Workers AI,
 Anthropic Claude, OpenAI, Google Gemini, a Cloudflare Worker you host
 yourself, or any OpenAI-compatible endpoint you name) — keys encrypted at rest with versioned, rotatable ciphertext.
 And the whole app is agent-operable: every install serves a
-self-documenting local REST API (538 operations in v2.18) — point Claude
+self-documenting local REST API (542 operations in v2.18) — point Claude
 Code or any agentic CLI at it; the
 [AI setup guide](https://www.slowbookspro.com/ai/) has the paste-prompt.
 

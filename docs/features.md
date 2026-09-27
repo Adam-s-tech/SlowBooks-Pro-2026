@@ -599,18 +599,20 @@ All payroll, HR, tax-form, and self-service portal endpoints are documented with
 | Endpoint | Methods | Description |
 |----------|---------|-------------|
 | `/pay/{token}` | GET | Public payment page (no auth) |
-| `/api/stripe/create-checkout-session` | POST | Create Stripe Checkout session |
-| `/api/stripe/webhook` | POST | Stripe webhook handler |
-| `/api/stripe/payment-link/{id}` | GET | Get public payment URL for invoice |
+| `/api/payments/{provider}/create-checkout-session` | POST | Create a hosted checkout for an invoice (public; the token is the capability) |
+| `/api/payments/{provider}/webhook` | POST | Provider webhook handler (`/api/stripe/webhook` still works) |
+| `/api/payments/{provider}/check-status/{invoice_id}` | POST | Ask the provider whether an invoice was paid |
+| `/api/payments/payment-link/{invoice_id}` | GET | Public payment URL for an invoice (a read-only sign-in reads one; it can't make one) |
 
 ### System
 | Endpoint | Methods | Description |
 |----------|---------|-------------|
 | `/api/audit` | GET | Audit log viewer |
 | `/api/backups` | GET, POST | Backup management |
-| `/api/backups/{id}/download` | GET | Download backup file |
+| `/api/backups/{id}/download` | GET | Download backup file (administrator) |
 | `/api/companies` | GET, POST | Multi-company management |
-| `/api/uploads/logo` | POST | Upload company logo |
+| `/api/uploads/logo` | GET, POST, DELETE | Company logo: describe, upload, remove (upload and remove: administrator) |
+| `/api/uploads/logo/{id}` | GET | The logo image, from the company's database |
 | `/api/attachments/{type}/{id}` | GET, POST, DELETE | File attachments CRUD |
 | `/api/bank-rules` | GET, POST, PUT, DELETE | Bank transaction categorization rules |
 | `/api/budgets` | GET, POST, PUT, DELETE | Budget management |

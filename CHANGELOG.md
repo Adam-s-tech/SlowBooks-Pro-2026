@@ -19,8 +19,9 @@ couldn't see, flows that couldn't be finished from the screen, and tax forms
 mapped wrong. Seventy-four findings between them, sixty-eight once the
 overlaps were merged, and this release fixes every one — along with
 twenty-nine more that fixing them turned up. The release gate's own run
-found another twenty-odd, fixed here too. And @Sciumo's QuickBooks Online
-work (#192) and a longer reach for SimpleFIN bank feeds are in it.
+found more, fixed here too — the largest, that companies on one desktop
+shared their uploaded files. And @Sciumo's QuickBooks Online work (#192)
+and a longer reach for SimpleFIN bank feeds are in it.
 
 #### Money that was wrong
 
@@ -116,6 +117,39 @@ word (850 EUR at a typed 1.10 posted as $968.80). A typed rate is kept.
 **Tax forms produced nothing in the Mac app.** W-2, W-3, 940, 941 and the
 New-Hire Report open in the viewer as invoices do. The 941 works lines 5a–5d
 from the rates and puts the rounding difference on line 7.
+
+#### Each company's files, in its own company file
+
+**Companies on one desktop shared their files.** Every company wrote its
+logo, attachments, employee documents and waiting receipt scans into one
+folder, and nothing in a file's name said whose it was. A second company's
+logo printed on the first company's invoices; its invoice 1 "receipt.pdf"
+replaced the first company's, and deleting it left the first with nothing;
+its employee #1's W-4 opened from the first company's employee #1; an
+updated W-4.pdf replaced the original; a deleted document stayed on disk;
+every company's dashboard listed every company's pending scans; and a
+backup carried none of it. A company's files are now kept in its own
+database: a backup carries them, a second file with the same name is a
+second document, and deleting one deletes its bytes (overwritten, not left
+in the file's free space).
+
+- Upgrading copies each company's files in from the shared folder the first
+  time the company opens on 2.18. Nothing there recorded whose a file was,
+  so a copied logo or attachment says it came from the folder earlier
+  versions shared (upload it again if it isn't yours), and a file that
+  wasn't there is named, without a download. The shared folder is left
+  where it was.
+- **Security.** The shared folder was published at `/static/uploads/`,
+  which needs no sign-in: on a Server Edition or `--serve-lan` install,
+  anyone who could reach the server could fetch a company's logo,
+  attachments and employee documents (W-4s, I-9s) at addresses that were
+  easy to guess. Nothing is served from it now; a company's files come
+  from signed-in routes. A read-only sign-in could also download an
+  employee's documents through the attachment routes, and a bookkeeper
+  could delete one; employee documents are now reached only through the HR
+  routes, which are the administrator's. And any sign-in could download a
+  backup, which is the whole company, sign-in password hashes included:
+  only an administrator can now.
 
 #### Purchases
 
@@ -247,10 +281,16 @@ from the rates and puts the rounding difference on line 7.
   message stays long enough to read (three seconds for a few words, more
   for more, at least six for an error; hovering holds it, a click closes
   it).
-- A read-only sign-in isn't offered what it can't do: Edit, Mark Sent,
-  Void, Duplicate, Upload and every other write action are hidden for it
-  on pages and in dialogs, where the server refused them; and it can read
-  an invoice's payment link but no longer makes one.
+- A read-only sign-in isn't offered what it can't do. Edit, Mark Sent,
+  Void, Duplicate, file choosers and every other write are hidden on pages
+  and in dialogs, where the server refused them after the form was filled
+  in; Settings, Quick Entry and Batch Payments show locked, with a sentence
+  saying why; Payroll and HR opened by their address say they are the
+  administrator's; Alt+N, Alt+P and Alt+Q say it is read-only. It can read
+  an invoice's payment link but no longer makes one, and leaves Settings
+  without being asked to save.
+- The company logo is the administrator's to change, like every other
+  setting, and Settings can remove it.
 - A disabled button looks disabled (it drew at full colour and did
   nothing), and the QuickBooks Online page says why Import is unavailable.
 
@@ -386,7 +426,17 @@ from the rates and puts the rounding difference on line 7.
   is a 405); `POST /api/qbo/import-runs`, `GET
   /api/qbo/import-runs/latest`, `POST /api/qbo/connect-manual`
   (administrators); `POST /api/simplefin/sync` takes an optional
-  `{"history_months": 1-24}`. 538 operations.
+  `{"history_months": 1-24}`; `GET` and `DELETE /api/uploads/logo`, `GET
+  /api/uploads/logo/{id}`, `GET /portal/logo`. 542 operations.
+- A company's files are served from its database: an attachment's
+  `file_path` is `stored_files/<id>`, attachments and employee documents
+  carry `from_shared_folder` and `missing`, and `POST /api/uploads/logo`
+  answers with the logo's address (`/api/uploads/logo/<id>`).
+  `/static/uploads/` is a 404. The generic attachment routes answer 404 for
+  an employee document and refuse a record type that takes no attachments.
+- Administrator-only (403 otherwise): downloading a backup, and uploading or
+  removing the logo. `GET /api/payments/payment-link/{id}` from a read-only
+  sign-in is a 403 for an invoice with no payment link yet.
 - Income by Customer `total_sales` excludes tax (new `total_tax`);
   `/api/checks/print` takes `bill_payment_id` only.
 - A document `tax_rate` is a fraction kept to six places (8.875% is
@@ -423,19 +473,34 @@ from the rates and puts the rounding difference on line 7.
   was stored rounded to four places of the fraction on PostgreSQL; those
   documents keep the rounded rate (SQLite files kept the full rate, and it
   now reads back as sent).
+- A company's logo, attachments and employee documents move into its
+  company file the first time it opens on 2.18, so the file and its backups
+  grow by their size. A logo or attachment marked as copied from the shared
+  folder may be another company's: upload yours again. A receipt scan
+  waiting to be attached when you upgrade isn't carried over (scans expire
+  after a day); scan it again.
+- **Docker:** keep the `slowbooks_uploads` volume mounted when 2.18 first
+  starts; the upgrade copies the files from it into the database, and your
+  database backups carry them from then on.
+- A bookkeeper can no longer change the logo or download a backup.
 
 #### For developers
 
 - The test suite runs in a data folder of its own: it never reads the
   machine's companies or the checkout's `.env`, and writes nothing into
   `app/static`. #192's node test suites run under pytest.
+- A browser test signs in read-only and visits every page and dialog
+  beside an administrator; any write it is offered fails the test.
+- A write control a read-only sign-in can't use is marked `data-write`
+  where it is built.
 
 #### Schema
 
-Four migrations: sales line prices to four places, deposits remember their
+Five migrations: sales line prices to four places, deposits remember their
 payments, purchase and item prices to four places (which also gives old
-PO-made bills their due dates), and document tax rates to four places of a
-percent. An existing company file upgrades when it opens.
+PO-made bills their due dates), document tax rates to four places of a
+percent, and each company's files in its own database. An existing company
+file upgrades when it opens.
 
 ### v2.17.3 — Payments land on the right account
 

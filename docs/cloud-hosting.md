@@ -222,8 +222,10 @@ chmod +x ~/backup.sh
 
 Restoring is the same command the other way, from [operations.md](operations.md):
 `docker compose -f docker-compose.prod.yml exec -T postgres psql -U bookkeeper bookkeeper < <(gunzip -c the-file.sql.gz)`
-on a fresh stack that has run once. Uploaded receipts and attachments live in
-the `slowbooks_uploads` volume; the weekly snapshot below covers them.
+on a fresh stack that has run once. Uploaded receipts, attachments and the
+logo are in the database from 2.18, so the dump carries them; the
+`slowbooks_uploads` volume holds what earlier versions wrote, which 2.18's
+first start copies in. Keep it mounted.
 
 **Provider snapshots** of the whole disk, weekly, from the control panel.
 They are cheap and they restore the proxy and the secrets along with the data.

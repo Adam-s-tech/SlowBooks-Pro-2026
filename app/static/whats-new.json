@@ -9,7 +9,8 @@
       "Foreign-currency invoices show their currency and can be paid from Receive Payment; unit prices and tax rates take four decimal places (8.875%)",
       "Backups are kept per company and can be restored from Settings; Settings refuses values that can't work, in plain words",
       "QuickBooks Online: import journal entries and posted ledger activity, watched in a live import log (#192, @Sciumo); a switch for the company logo on invoices",
-      "Bank feeds: Fetch older history reaches a SimpleFIN feed back up to a year where the provider keeps it"
+      "Bank feeds: Fetch older history reaches a SimpleFIN feed back up to a year where the provider keeps it",
+      "Each company keeps its logo, attachments and employee documents in its own company file, and its backups carry them; a read-only sign-in is offered only what it can do"
     ]
   },
   "2.17.3": {
