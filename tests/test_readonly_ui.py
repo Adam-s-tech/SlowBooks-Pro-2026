@@ -26,7 +26,7 @@ def test_the_page_learns_the_role_from_auth_status():
 
 def test_create_buttons_are_hidden_for_a_read_only_sign_in():
     app = _js("app.js")
-    body = app[app.index("hideWriteControls(root) {") :][:700]
+    body = app[app.index("hideWriteControls(root) {") :][:1500]
     assert "label.startsWith('+')" in body
     assert "el.classList.contains('btn-primary') && el.closest('.page-header')" in body
     assert "el.classList.add('hidden')" in body
