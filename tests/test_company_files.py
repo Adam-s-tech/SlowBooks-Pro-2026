@@ -35,11 +35,15 @@ from starlette.requests import HTTPConnection
 import app.database as db_module
 from app.database import enable_sqlite_tuning, get_db
 from app.main import app
+from app.models.users import ROLE_BOOKKEEPER, ROLE_READONLY, User
+from app.services import auth as auth_service
 from app.services import storage
 from app.services.audit import register_audit_hooks
 
 PNG_ACME = b"\x89PNG\r\n\x1a\n" + b"acme-red-logo"
 PNG_BRAVO = b"\x89PNG\r\n\x1a\n" + b"bravo-blue-logo"
+VIEWER_PW = "viewer-password-1"
+KEEPER_PW = "keeper-password-1"
 
 
 # ---------------------------------------------------------------------------
@@ -555,3 +559,52 @@ def test_a_backup_restored_on_another_machine_brings_every_file_back(
         if moved.exists():
             shutil.rmtree(machine_1_uploads, ignore_errors=True)
             shutil.move(str(moved), str(machine_1_uploads))
+
+
+# ---------------------------------------------------------------------------
+# Who may read what
+# ---------------------------------------------------------------------------
+
+
+def _sign_in_as(client, db_session, username, password, role):
+    db_session.add(
+        User(
+            username=username,
+            display_name=username.title(),
+            password_hash=auth_service.hash_password(password),
+            role=role,
+            is_active=True,
+        )
+    )
+    db_session.commit()
+    client.post("/api/auth/logout")
+    r = client.post(
+        "/api/auth/login", json={"username": username, "password": password}
+    )
+    assert r.status_code == 200, r.text
+
+
+def test_employee_documents_stay_behind_the_hr_rule(client, db_session):
+    """Employee documents are attachments rows too, and the generic
+    attachment routes had none of their admin-only rule: a read-only sign-in
+    could download a W-4 by its id, and a bookkeeper could delete one."""
+    emp = _employee(client, "Marisol")
+    doc = _w4(client, emp["id"], b"%PDF-1.4 W-4 Marisol 123-45-6789")
+
+    _sign_in_as(client, db_session, "viewer", VIEWER_PW, ROLE_READONLY)
+    # the rule: HR's documents are admin-only
+    r = client.get(f"/api/employees/{emp['id']}/documents/{doc['id']}")
+    assert r.status_code == 403, r.status_code
+    # ...and the attachment routes don't go around it
+    r = client.get(f"/api/attachments/download/{doc['id']}")
+    assert r.status_code == 404, r.status_code
+    assert b"123-45-6789" not in r.content
+    r = client.get(f"/api/attachments/employee/{emp['id']}")
+    assert r.status_code == 400, r.text
+
+    _sign_in_as(client, db_session, "keeper", KEEPER_PW, ROLE_BOOKKEEPER)
+    assert client.delete(f"/api/attachments/{doc['id']}").status_code == 404
+    db_session.expire_all()
+    from app.models.attachments import Attachment
+
+    assert db_session.get(Attachment, doc["id"]) is not None

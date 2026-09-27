@@ -91,7 +91,8 @@ def _sanitize_filename(raw: str) -> str:
 
 
 def _entity_type(entity_type: str) -> str:
-    """The whitelisted record type, or 400."""
+    """The whitelisted record type, or 400. Employee documents are not one:
+    they are HR's, reached only through /api/employees (admin only)."""
     type_dir = _ENTITY_TYPE_DIRS.get(entity_type)
     if type_dir is None:
         raise HTTPException(
@@ -99,6 +100,21 @@ def _entity_type(entity_type: str) -> str:
             detail=f"Invalid entity type. Allowed: {', '.join(sorted(_ENTITY_TYPE_DIRS))}",
         )
     return type_dir
+
+
+def _record_attachment(db: Session, attachment_id: int) -> Attachment | None:
+    """An attachment on a record — never an employee document. Those share
+    the table, and this route has none of their admin-only rule: a read-only
+    sign-in could download a W-4 by its id here, or a bookkeeper delete one."""
+    return (
+        db.query(Attachment)
+        .filter(
+            Attachment.id == attachment_id,
+            Attachment.employee_id.is_(None),
+            Attachment.entity_type.in_(list(_ENTITY_TYPE_DIRS)),
+        )
+        .first()
+    )
 
 
 @router.post(
@@ -153,7 +169,7 @@ async def upload_attachment(
 # 2.10.3 gate). The literal-prefix route must stay ABOVE the catch-all.
 @router.get("/download/{attachment_id}")
 def download_attachment(attachment_id: int, db: Session = Depends(get_db)):
-    attachment = db.query(Attachment).filter(Attachment.id == attachment_id).first()
+    attachment = _record_attachment(db, attachment_id)
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
     return file_store.attachment_response(db, attachment)
@@ -161,10 +177,13 @@ def download_attachment(attachment_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{entity_type}/{entity_id}", response_model=list[AttachmentResponse])
 def list_attachments(entity_type: str, entity_id: int, db: Session = Depends(get_db)):
+    _entity_type(entity_type)
     return (
         db.query(Attachment)
         .filter(
-            Attachment.entity_type == entity_type, Attachment.entity_id == entity_id
+            Attachment.entity_type == entity_type,
+            Attachment.entity_id == entity_id,
+            Attachment.employee_id.is_(None),
         )
         .order_by(Attachment.uploaded_at.desc(), Attachment.id.desc())
         .all()
@@ -173,7 +192,7 @@ def list_attachments(entity_type: str, entity_id: int, db: Session = Depends(get
 
 @router.delete("/{attachment_id}")
 def delete_attachment(attachment_id: int, db: Session = Depends(get_db)):
-    attachment = db.query(Attachment).filter(Attachment.id == attachment_id).first()
+    attachment = _record_attachment(db, attachment_id)
     if not attachment:
         raise HTTPException(status_code=404, detail="Attachment not found")
     # The bytes go with the row: nothing is left behind anywhere.
