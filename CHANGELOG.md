@@ -138,7 +138,9 @@ in the file's free space).
   so a copied logo or attachment says it came from the folder earlier
   versions shared (upload it again if it isn't yours), and a file that
   wasn't there is named, without a download. The shared folder is left
-  where it was.
+  where it was until every company on the install has been opened on 2.18;
+  then an administrator can remove it from Settings → Files from earlier
+  versions, and a document deleted in the app leaves no old copy behind.
 - **Security.** The shared folder was published at `/static/uploads/`,
   which needs no sign-in: on a Server Edition, `--serve-lan` or Docker
   install, anyone who could reach the server could fetch a company's logo,
@@ -458,7 +460,10 @@ in the file's free space).
   removing the logo. `GET /api/payments/payment-link/{id}` from a read-only
   sign-in is a 403 for an invoice with no payment link yet.
 - New: `GET /api/settings/unreadable-secrets` names the saved secrets no
-  key on the install decrypts. `GET /api/employees/{id}/portal-token`
+  key on the install decrypts. `GET /api/uploads/legacy` (administrators)
+  says what the folder earlier versions shared still holds and which
+  companies still need it; `DELETE /api/uploads/legacy` removes its files,
+  or answers 409 naming those companies. `GET /api/employees/{id}/portal-token`
   answers `portal_token: null` with a `note` when the link's stored copy
   can't be decrypted (the link still works).
 - Income by Customer `total_sales` excludes tax (new `total_tax`);
