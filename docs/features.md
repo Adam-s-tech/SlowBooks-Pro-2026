@@ -178,11 +178,12 @@ Each provider's model string is configurable from **Settings → AI Insights** �
 
 **Settings encryption.** API keys are stored in the `settings` table under `ai_api_key`, encrypted with **Fernet** (AES-128-CBC + HMAC-SHA256) via `app/services/crypto.py`. Ciphertext rows carry the prefix `fernet:v1:` so legacy plaintext rows are detected and migrated gracefully. The master key is resolved in priority order:
 
-1. `SETTINGS_ENCRYPTION_KEY` environment variable (ops-preferred)
-2. `.slowbooks-master.key` file next to the repo (zero-config default; auto-created at 0600)
-3. Fresh generation on first run (logged as a warning)
+1. `SETTINGS_ENCRYPTION_KEY` environment variable (ops-preferred; the desktop app keeps one in its per-user `.env`)
+2. `.slowbooks-master.key` file next to the repo (an install that has one keeps using it)
+3. Derived from `PAYROLL_ENCRYPTION_SECRET` when that is set to a real secret (v2.18+; how a Docker install keeps its key when the container is recreated). During a payroll-secret rotation the previous secret's key still decrypts, and `python -m app.services.encryption rewrap` re-encrypts these too.
+4. Fresh generation on first run, written to (2) at 0600 (logged as a warning)
 
-**Never commit `.slowbooks-master.key`** — it is in `.gitignore`. Losing it means losing every encrypted secret.
+**Never commit `.slowbooks-master.key`** — it is in `.gitignore`. A secret no key on the install decrypts reads as not set (v2.18+): what uses it stops, and Settings names it to be entered again (`GET /api/settings/unreadable-secrets`).
 
 `GET /api/analytics/ai-config` returns `{provider, model, cloudflare_account_id, worker_url, has_api_key, api_key_encrypted, providers}` — the raw key is **never** in the response body. `PUT /api/analytics/ai-config` accepts a Pydantic `AIConfigUpdate` model — `{provider, model, cloudflare_account_id, worker_url, api_key}` — so malformed payloads are rejected with a 422 before they reach the service layer. An empty/missing `api_key` is interpreted as "keep the existing encrypted value", so re-saving the provider won't clobber the stored key.
 

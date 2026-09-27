@@ -150,6 +150,12 @@ in the file's free space).
   routes, which are the administrator's. And any sign-in could download a
   backup, which is the whole company, sign-in password hashes included:
   only an administrator can now.
+- **Employees' portal links** were kept in the company file as issued, so a
+  copy of it, or a backup, held every employee's working link, and a link
+  signs in as that employee, the bank account their pay goes to included.
+  A link is now kept as a digest the portal checks and a copy encrypted
+  with the payroll key, which is kept outside the company file. Links
+  already sent keep working, and Copy Link still shows them.
 
 #### Purchases
 
@@ -291,6 +297,14 @@ in the file's free space).
   without being asked to save.
 - The company logo is the administrator's to change, like every other
   setting, and Settings can remove it.
+- **Docker: saved passwords survive an upgrade.** With no settings key
+  configured, the key for saved passwords and API keys lived inside the
+  container, so recreating it for an upgrade made a new one: every saved
+  secret stopped decrypting, and every page that reads the settings failed.
+  The key now comes from `PAYROLL_ENCRYPTION_SECRET`, which a Docker install
+  keeps in `.env`. A secret that can't be decrypted reads as not set (what
+  uses it stops, and nothing is let through without it), and Settings names
+  each one and where to enter it again.
 - **Docker: Create Backup works.** Every backup on a Docker install failed
   with "Permission denied", and so did every logo and attachment upload,
   since 2.0: the volumes docker compose mounts were created owned by root,
@@ -443,6 +457,10 @@ in the file's free space).
 - Administrator-only (403 otherwise): downloading a backup, and uploading or
   removing the logo. `GET /api/payments/payment-link/{id}` from a read-only
   sign-in is a 403 for an invoice with no payment link yet.
+- New: `GET /api/settings/unreadable-secrets` names the saved secrets no
+  key on the install decrypts. `GET /api/employees/{id}/portal-token`
+  answers `portal_token: null` with a `note` when the link's stored copy
+  can't be decrypted (the link still works).
 - Income by Customer `total_sales` excludes tax (new `total_tax`);
   `/api/checks/print` takes `bill_payment_id` only.
 - A document `tax_rate` is a fraction kept to six places (8.875% is
@@ -488,7 +506,12 @@ in the file's free space).
 - **Docker:** keep both volumes mounted when 2.18 first starts. Any files
   in `slowbooks_uploads` are copied into the database (your database
   backups carry them from then on), and `slowbooks_backups` becomes
-  writable, so Create Backup works.
+  writable, so Create Backup works. If you saved an email password, payment
+  keys, a QuickBooks Online connection or a bank feed, copy the settings key
+  out of the running container before upgrading
+  (`docker compose exec slowbooks cat /app/.slowbooks-master.key`) and put
+  it in `.env` as `SETTINGS_ENCRYPTION_KEY=...`; otherwise Settings asks for
+  them again after the upgrade.
 - A bookkeeper can no longer change the logo or download a backup.
 
 #### For developers
@@ -500,14 +523,17 @@ in the file's free space).
   beside an administrator; any write it is offered fails the test.
 - A write control a read-only sign-in can't use is marked `data-write`
   where it is built.
+- `python -m app.services.encryption rewrap` also re-encrypts the saved
+  settings when their key is derived from `PAYROLL_ENCRYPTION_SECRET`.
 
 #### Schema
 
-Five migrations: sales line prices to four places, deposits remember their
+Six migrations: sales line prices to four places, deposits remember their
 payments, purchase and item prices to four places (which also gives old
 PO-made bills their due dates), document tax rates to four places of a
-percent, and each company's files in its own database. An existing company
-file upgrades when it opens.
+percent, each company's files in its own database, and employees' portal
+links kept as a digest and an encrypted copy. An existing company file
+upgrades when it opens.
 
 ### v2.17.3 — Payments land on the right account
 

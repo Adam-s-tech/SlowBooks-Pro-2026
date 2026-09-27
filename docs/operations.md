@@ -104,7 +104,10 @@ python -m app.services.encryption rewrap
 
 Master key files (`.slowbooks-master.key`, `.slowbooks-session.key`)
 are excluded in `.gitignore` — never commit them. Losing the master
-key means losing every encrypted secret in the database.
+key means entering every saved password and API key again: since 2.18 a
+secret no key decrypts reads as not set, and Settings names each one. A
+Docker install with no `SETTINGS_ENCRYPTION_KEY` derives its settings key
+from `PAYROLL_ENCRYPTION_SECRET`, so keeping that secret keeps both.
 
 ---
 
