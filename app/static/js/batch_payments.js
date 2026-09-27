@@ -45,7 +45,7 @@ const BatchPaymentsPage = {
                     <div class="form-group"><label>Reference</label>
                         <input name="reference"></div>
                 </div>
-                <div style="margin:8px 0;"><button type="button" class="btn btn-sm btn-secondary" onclick="BatchPaymentsPage.selectAll()">Select All</button></div>`;
+                <div style="margin:8px 0;" data-write><button type="button" class="btn btn-sm btn-secondary" onclick="BatchPaymentsPage.selectAll()">Select All</button></div>`;
 
         if (Object.keys(byCustomer).length === 0) {
             html += '<div class="empty-state"><p>No open invoices to pay</p></div>';
@@ -72,7 +72,7 @@ const BatchPaymentsPage = {
             html += `<p style="margin-top:8px;color:var(--gray-500);">${foreignCount} open ${one ? T('invoice') : T('invoices')} in another currency ${one ? 'is' : 'are'} not listed here: a batch payment is in ${escapeHtml(home)}, so pay ${one ? 'it' : 'each'} on its own.</p>`;
         }
         html += `<div id="batch-total" style="margin-top:12px;font-size:16px;font-weight:700;color:var(--qb-navy);">Total: $0.00</div>
-            <div class="form-actions">
+            <div class="form-actions" data-write>
                 <button type="submit" class="btn btn-primary">Apply Batch Payment</button>
             </div></form>`;
 

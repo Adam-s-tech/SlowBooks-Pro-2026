@@ -377,7 +377,7 @@ const ReportsPage = {
         const startingPeriod = prefill.period || initialPeriod;
 
         const saveBtn = reportType
-            ? `<button class="btn btn-secondary" id="report-save-btn">Add to Saved Reports…</button>`
+            ? `<button class="btn btn-secondary" id="report-save-btn" data-write>Add to Saved Reports…</button>`
             : '';
 
         openModal(title, `
@@ -675,7 +675,7 @@ const ReportsPage = {
             rows += agingRow(t, 'TOTAL', 'font-weight:700; background:var(--gray-50);');
             return `
                 <p style="margin-bottom:12px; color:var(--gray-500);">As of ${formatDate(data.as_of_date)}</p>
-                <div style="margin-bottom:12px; display:flex; gap:8px;">
+                <div style="margin-bottom:12px; display:flex; gap:8px;" data-write>
                     <button class="btn btn-sm btn-secondary" onclick="ReportsPage.applyLateFees()">Apply Late Fees</button>
                     <button class="btn btn-sm btn-secondary" onclick="ReportsPage.batchEmailStatements()">Email All Overdue</button>
                     <select id="collection-letter-type" style="font-size:11px; padding:2px 6px;">

@@ -59,7 +59,7 @@ const DashboardPage = {
                         <button class="btn btn-sm btn-secondary" onclick="DashboardPage.resetLayout()" title="Back to the standard overview">Reset</button>
                         <button class="btn btn-sm btn-secondary" onclick="DashboardPage.cancelEdit()">Cancel</button>
                         <button class="btn btn-sm btn-primary" onclick="DashboardPage.saveLayout()">Save layout</button>`
-                    : `<button class="btn btn-sm btn-secondary" onclick="DashboardPage.startEdit()" title="Choose which cards show and in what order">Customize</button>`}
+                    : `<button class="btn btn-sm btn-secondary" data-write onclick="DashboardPage.startEdit()" title="Choose which cards show and in what order">Customize</button>`}
                 </div>
             </div>
             ${editing ? '<div style="font-size:11px;color:var(--gray-500);margin-bottom:8px;">Use the arrows to reorder, × to hide. Your layout is remembered for your login.</div>' : ''}
@@ -68,7 +68,7 @@ const DashboardPage = {
 
     _gridHtml() {
         if (!DashboardPage._order.length) {
-            return `<div class="empty-state" style="grid-column:1/-1"><p>No cards on your overview.</p><button class="btn btn-primary" onclick="DashboardPage.startEdit();DashboardPage.showAdd()">Add a card</button></div>`;
+            return `<div class="empty-state" style="grid-column:1/-1"><p>No cards on your overview.</p><button class="btn btn-primary" data-write onclick="DashboardPage.startEdit();DashboardPage.showAdd()">Add a card</button></div>`;
         }
         return DashboardPage._order.map((id, i) => DashboardPage._cardHtml(id, i)).join('');
     },

@@ -158,7 +158,7 @@ const SettingsPage = {
                                     aria-describedby="closing-date-state"
                                     oninput="SettingsPage.showClosingState()" onchange="SettingsPage.showClosingState()"
                                     oninvalid="SettingsPage.closingDateInvalid()">
-                                <button type="button" class="btn btn-sm btn-secondary" id="closing-date-clear"
+                                <button type="button" class="btn btn-sm btn-secondary" id="closing-date-clear" data-write
                                     onclick="SettingsPage.clearClosingDate()" ${s.closing_date ? '' : 'disabled'}>Clear</button>
                             </div>
                             <!-- An empty date field shows today's date in grey on macOS, which
@@ -198,7 +198,7 @@ const SettingsPage = {
                                 <option value="false" ${s.smtp_use_tls === 'false' ? 'selected' : ''}>No</option>
                             </select></div>
                     </div>
-                    <button type="button" class="btn btn-sm btn-secondary" onclick="SettingsPage.testEmail()" style="margin-top:8px;">
+                    <button type="button" class="btn btn-sm btn-secondary" data-write onclick="SettingsPage.testEmail()" style="margin-top:8px;">
                         Send Test Email</button>
                 </div>
 
@@ -355,7 +355,7 @@ const SettingsPage = {
                         Customize email templates for invoices, payment receipts, and collection notices.
                         Templates use Jinja2 syntax. Available variables: {{ invoice }}, {{ customer_name }}, {{ company }}, {{ pay_url }}. The donation acknowledgment letter (nonprofit) also gets {{ donor }}, {{ donor_name }}, {{ gift }} and {{ irs.text }}.
                     </div>
-                    <div style="display:flex; gap:8px; margin-bottom:12px;">
+                    <div style="display:flex; gap:8px; margin-bottom:12px;" data-write>
                         <button type="button" class="btn btn-sm btn-secondary" onclick="SettingsPage.seedTemplates()">Seed Default Templates</button>
                     </div>
                     <div id="email-template-list"></div>
@@ -367,7 +367,7 @@ const SettingsPage = {
                         Track income and expenses by department, location, or line of
                         business. ${T('Classes')} appear on entry forms and the ${T('P&L by Class')} report.
                     </div>
-                    <div style="display:flex; gap:8px; margin-bottom:12px;">
+                    <div style="display:flex; gap:8px; margin-bottom:12px;" data-write>
                         <input type="text" id="new-class-name" placeholder="New ${T('class')} name" style="width:220px;">
                         <button type="button" class="btn btn-primary" onclick="SettingsPage.addClass()">Add ${T('Class')}</button>
                     </div>
@@ -383,7 +383,7 @@ const SettingsPage = {
                         code has none; the offset accounts are the credit side of job cost entries (payroll clearing,
                         applied equipment, applied overhead).
                     </div>
-                    <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+                    <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;" data-write>
                         <input type="text" id="new-ct-code" placeholder="Code (e.g. permits)" style="width:150px;">
                         <input type="text" id="new-ct-name" placeholder="Name" style="width:200px;">
                         <label style="font-weight:normal;font-size:11px;"><input type="checkbox" id="new-ct-labor"> labor-type (burden applies)</label>
@@ -401,7 +401,7 @@ const SettingsPage = {
                         to. Picked per line on bills, expenses, purchase orders and journal
                         entries; ${Terms.text('the Job detail rolls costs up by code and cost type.')}
                     </div>
-                    <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+                    <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;" data-write>
                         <input type="text" id="new-cc-code" placeholder="Code" style="width:90px;">
                         <input type="text" id="new-cc-name" placeholder="Name" style="width:220px;">
                         <select id="new-cc-type">
@@ -423,7 +423,7 @@ const SettingsPage = {
                         ${Terms.text('Owned machines charged to jobs by the hour from a Job Cost Entry.')} The recovery account is
                         the credit side (defaults to the equipment cost type's offset).
                     </div>
-                    <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+                    <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;" data-write>
                         <input type="text" id="new-eq-code" placeholder="Code" style="width:90px;">
                         <input type="text" id="new-eq-name" placeholder="Name (Skid steer, F-250…)" style="width:220px;">
                         <input type="number" step="0.01" id="new-eq-rate" placeholder="$/hr" style="width:90px;">
@@ -439,7 +439,7 @@ const SettingsPage = {
                         company with the backup; a safety backup of the books as they are is taken first,
                         so a restore can be undone by restoring that one.
                     </div>
-                    <div style="display:flex; gap:8px; margin-bottom:12px;">
+                    <div style="display:flex; gap:8px; margin-bottom:12px;" data-write>
                         <button type="button" class="btn btn-primary" onclick="SettingsPage.createBackup()">Create Backup</button>
                     </div>
                     <div id="backup-list"></div>
@@ -505,7 +505,7 @@ const SettingsPage = {
                 <!-- Always in reach: the one Save for the settings above sat at
                      the very bottom, after 25 other buttons, and the first
                      "Save" on the page was AI Insights' (explore 2.17.3, L16). -->
-                <div class="form-actions" id="settings-savebar"
+                <div class="form-actions" id="settings-savebar" data-write
                     style="position:sticky; bottom:0; z-index:5; align-items:center; background:var(--content-bg);
                            padding-bottom:10px; box-shadow:0 -4px 8px -6px rgba(0,0,0,0.25);">
                     <span id="settings-dirty-note" role="status" aria-live="polite"
@@ -971,7 +971,7 @@ const SettingsPage = {
                     <td>${escapeHtml(SettingsPage._when(b.created_at))}</td>
                     <td class="actions">
                         <a href="/api/backups/download/${encodeURIComponent(b.filename)}" class="btn btn-sm btn-secondary" download>Download</a>
-                        <button type="button" class="btn btn-sm btn-secondary" data-filename="${escapeHtml(b.filename)}"
+                        <button type="button" class="btn btn-sm btn-secondary" data-write data-filename="${escapeHtml(b.filename)}"
                             onclick="SettingsPage.confirmRestore(this.dataset.filename)">Restore…</button>
                     </td>
                 </tr>`).join('')}</tbody>
@@ -1080,7 +1080,7 @@ const SettingsPage = {
                     <td>${escapeHtml(t.template_type)}</td>
                     <td style="font-size:11px;">${escapeHtml(t.subject_template)}</td>
                     <td class="actions">
-                        <button class="btn btn-sm btn-secondary" onclick="SettingsPage.editTemplate(${t.id})">Edit</button>
+                        <button class="btn btn-sm btn-secondary" data-readonly-ok onclick="SettingsPage.editTemplate(${t.id})">Edit</button>
                     </td>
                 </tr>`).join('')}</tbody>
             </table></div>`;
@@ -1298,16 +1298,16 @@ const SettingsPage = {
                 </p>
             </fieldset>
             <label class="form-field">
-                <span>API Key / Shared Secret ${hasKey ? '<em class="ai-key-saved">(saved &#10003;)</em> <button type="button" class="btn btn-sm" id="ai-settings-key-remove" title="Remove the stored key">Remove</button>' : ''}</span>
+                <span>API Key / Shared Secret ${hasKey ? '<em class="ai-key-saved">(saved &#10003;)</em> <button type="button" class="btn btn-sm" id="ai-settings-key-remove" data-write title="Remove the stored key">Remove</button>' : ''}</span>
                 <input type="password" id="ai-settings-key"
                        placeholder="${hasKey ? 'Leave blank to keep existing' : 'Paste key or openssl rand -hex 32'}"
                        autocomplete="new-password">
             </label>
             <div class="ai-settings-buttons">
-                <button type="button" class="btn btn-secondary btn-sm" id="ai-settings-test">Test</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-write id="ai-settings-test">Test</button>
                 <span id="ai-settings-test-result" class="ai-settings-test-result"></span>
                 <div class="ai-settings-spacer"></div>
-                <button type="button" class="btn btn-primary btn-sm" id="ai-settings-save">Save AI settings</button>
+                <button type="button" class="btn btn-primary btn-sm" data-write id="ai-settings-save">Save AI settings</button>
             </div>
         `;
     },
@@ -1476,10 +1476,10 @@ SettingsPage.loadClasses = async function () {
                 ${fundCells(c)}
                 <td>${c.is_archived ? 'Archived' : 'Active'}</td>
                 <td class="actions">
-                    ${np ? `<button type="button" class="btn btn-sm btn-secondary" onclick="SettingsPage.editFund(${c.id})">Edit</button>` : ''}
+                    ${np ? `<button type="button" class="btn btn-sm btn-secondary" data-readonly-ok onclick="SettingsPage.editFund(${c.id})">Edit</button>` : ''}
                     ${c.is_system_default ? '' : `
-                        <button type="button" class="btn btn-sm btn-secondary" onclick="SettingsPage.renameClass(${c.id})">Rename</button>
-                        <button type="button" class="btn btn-sm btn-secondary" onclick="SettingsPage.toggleArchiveClass(${c.id}, ${!c.is_archived})">${c.is_archived ? 'Unarchive' : 'Archive'}</button>`}
+                        <button type="button" class="btn btn-sm btn-secondary" data-write onclick="SettingsPage.renameClass(${c.id})">Rename</button>
+                        <button type="button" class="btn btn-sm btn-secondary" data-write onclick="SettingsPage.toggleArchiveClass(${c.id}, ${!c.is_archived})">${c.is_archived ? 'Unarchive' : 'Archive'}</button>`}
                 </td>
             </tr>`).join('') + `</tbody></table></div>`;
     } catch (err) {
@@ -1590,8 +1590,8 @@ SettingsPage.loadCostCodes = async function () {
                 <td>${escapeHtml(c.account_name || '')}</td>
                 <td>${c.is_active ? 'Active' : 'Inactive'}</td>
                 <td class="actions">
-                    <button type="button" class="btn btn-sm btn-secondary" onclick="SettingsPage.renameCostCode(${c.id})">Rename</button>
-                    <button type="button" class="btn btn-sm btn-secondary" onclick="SettingsPage.toggleCostCode(${c.id}, ${!c.is_active})">${c.is_active ? 'Deactivate' : 'Activate'}</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-write onclick="SettingsPage.renameCostCode(${c.id})">Rename</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-write onclick="SettingsPage.toggleCostCode(${c.id}, ${!c.is_active})">${c.is_active ? 'Deactivate' : 'Activate'}</button>
                 </td>
             </tr>`).join('') + `</tbody></table></div>`;
     } catch (err) {
@@ -1690,8 +1690,8 @@ SettingsPage.loadCostTypes = async function () {
                 <td><select class="ct-offset">${await SettingsPage._accountOptions(t.offset_account_id)}</select></td>
                 <td><select class="ct-burden-offset">${await SettingsPage._accountOptions(t.burden_offset_account_id)}</select></td>
                 <td class="actions">
-                    <button type="button" class="btn btn-sm btn-primary" onclick="SettingsPage.saveCostType(${t.id})">Save</button>
-                    <button type="button" class="btn btn-sm btn-secondary" onclick="SettingsPage.toggleCostType(${t.id}, ${!t.is_active})">${t.is_active ? 'Deactivate' : 'Activate'}</button>
+                    <button type="button" class="btn btn-sm btn-primary" data-write onclick="SettingsPage.saveCostType(${t.id})">Save</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-write onclick="SettingsPage.toggleCostType(${t.id}, ${!t.is_active})">${t.is_active ? 'Deactivate' : 'Activate'}</button>
                 </td>
             </tr>`);
         }
@@ -1769,8 +1769,8 @@ SettingsPage.loadEquipment = async function () {
                 <td>${escapeHtml(q.cost_code_label || '')}</td>
                 <td>${q.is_active ? 'Active' : 'Inactive'}</td>
                 <td class="actions">
-                    <button type="button" class="btn btn-sm btn-secondary" onclick="SettingsPage.rateEquipment(${q.id})">Set rate</button>
-                    <button type="button" class="btn btn-sm btn-secondary" onclick="SettingsPage.toggleEquipment(${q.id}, ${!q.is_active})">${q.is_active ? 'Deactivate' : 'Activate'}</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-write onclick="SettingsPage.rateEquipment(${q.id})">Set rate</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-write onclick="SettingsPage.toggleEquipment(${q.id}, ${!q.is_active})">${q.is_active ? 'Deactivate' : 'Activate'}</button>
                 </td>
             </tr>`).join('') + `</tbody></table></div>`;
     } catch (err) {

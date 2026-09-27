@@ -26,7 +26,7 @@ const DepositsPage = {
                     Select payments to deposit from Undeposited Funds to a bank account
                 </div>
             </div>
-            <div class="toolbar">
+            <div class="toolbar" data-write>
                 <label style="font-size:10px;font-weight:700;">Deposit To:</label>
                 <select id="deposit-bank-acct">${bankOpts.length ? bankOpts : '<option>No bank accounts</option>'}</select>
                 <label style="font-size:10px;font-weight:700;">Date:</label>
@@ -42,14 +42,14 @@ const DepositsPage = {
         } else {
             html += `<div class="table-container"><table>
                 <thead><tr>
-                    <th scope="col" style="width:30px;"><input type="checkbox" id="dep-select-all" aria-label="Select all payments" onchange="DepositsPage.toggleAll()"></th>
+                    <th scope="col" style="width:30px;"><input type="checkbox" id="dep-select-all" data-write aria-label="Select all payments" onchange="DepositsPage.toggleAll()"></th>
                     <th scope="col">Date</th><th scope="col">Received From</th><th scope="col">Description</th>
                     <th scope="col">Check # / Ref</th><th scope="col">Method</th>
                     <th scope="col" class="amount">Amount</th>
                 </tr></thead><tbody>`;
             for (const p of pending) {
                 html += `<tr>
-                    <td><input type="checkbox" class="dep-check" data-lineid="${p.transaction_line_id}" data-amount="${p.amount}" aria-label="Deposit ${escapeHtml(p.description)}" onchange="DepositsPage.recalc()"></td>
+                    <td><input type="checkbox" class="dep-check" data-write data-lineid="${p.transaction_line_id}" data-amount="${p.amount}" aria-label="Deposit ${escapeHtml(p.description)}" onchange="DepositsPage.recalc()"></td>
                     <td>${formatDate(p.date)}</td>
                     <td>${escapeHtml(p.received_from || '')}</td>
                     <td>${escapeHtml(p.description)}${DepositsPage._paid(p)}</td>
@@ -59,7 +59,7 @@ const DepositsPage = {
                 </tr>`;
             }
             html += `</tbody></table></div>
-                <div style="margin-top:12px; display:flex; justify-content:space-between; align-items:center;">
+                <div style="margin-top:12px; display:flex; justify-content:space-between; align-items:center;" data-write>
                     <div id="deposit-total" style="font-size:16px; font-weight:700; color:var(--qb-navy);">
                         Selected: $0.00 (0 items)
                     </div>

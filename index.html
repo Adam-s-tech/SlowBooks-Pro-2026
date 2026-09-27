@@ -107,7 +107,9 @@
                         <span class="nav-icon">&#8634;</span> Recurring Invoices</a></li>
                     <li><a href="#/credit-memos" class="nav-link" data-page="credit-memos">
                         <span class="nav-icon">&#8722;</span> Credit Memos</a></li>
-                    <li><a href="#/batch-payments" class="nav-link" data-page="batch-payments">
+                    <!-- data-write: a page that only enters things. A read-only
+                         sign-in is not offered it (app.js App.setRole). -->
+                    <li data-write><a href="#/batch-payments" class="nav-link" data-page="batch-payments">
                         <span class="nav-icon">&#10003;</span> Batch Payments</a></li>
 
                     <li class="nav-section">Vendors & Payables</li>
@@ -155,9 +157,9 @@
                         <span class="nav-icon">&#9889;</span> Bank Rules</a></li>
                     <li><a href="#/fixed-assets" class="nav-link" data-page="fixed-assets">
                         <span class="nav-icon">&#127970;</span> Fixed Assets</a></li>
-                    <li><a href="#/opening-balances" class="nav-link" data-page="opening-balances">
+                    <li data-write><a href="#/opening-balances" class="nav-link" data-page="opening-balances">
                         <span class="nav-icon">&#9878;</span> Opening Balances</a></li>
-                    <li><a href="#/migrate" class="nav-link" data-page="migrate">
+                    <li data-write><a href="#/migrate" class="nav-link" data-page="migrate">
                         <span class="nav-icon">&#10515;</span> Migrate Data</a></li>
                     <li><a href="#/deposits" class="nav-link" data-page="deposits">
                         <span class="nav-icon">&#9660;</span> Make Deposits</a></li>
