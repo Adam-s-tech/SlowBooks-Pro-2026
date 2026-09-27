@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 from app.config import FORCE_HTTPS
 from app.database import get_db
 from app.models.bank_accounts import BankAccountKind, DepositType, EmployeeBankAccount
-from app.models.payroll import Employee, FilingStatus
+from app.models.payroll import Employee, FilingStatus, portal_token_digest
 from app.models.portal_access import PortalAccess
 from app.models.pto import PTOAccrual, PTOPolicy, PTORequest, PTOType
 from app.services import file_store
@@ -72,9 +72,16 @@ def _get_employee(token: str, db: Session) -> Employee:
     """Resolve a portal token to an active, non-expired employee, or HTTPException.
 
     Updates `portal_token_last_used` on every successful lookup. 90-day idle
-    + hard expiry-at enforced.
+    + hard expiry-at enforced. A link is found by its SHA-256: the token
+    itself is not kept (app/models/payroll.py).
     """
-    employee = db.query(Employee).filter(Employee.portal_token == token).first()
+    employee = None
+    if token and len(token) <= 128:
+        employee = (
+            db.query(Employee)
+            .filter(Employee.portal_token_hash == portal_token_digest(token))
+            .first()
+        )
     if not employee or not employee.is_active:
         raise HTTPException(status_code=404, detail="Portal not found")
 
@@ -90,6 +97,11 @@ def _get_employee(token: str, db: Session) -> Employee:
             raise HTTPException(status_code=410, detail="Portal token has expired")
 
     employee.portal_token_last_used = now
+    if employee.portal_token is None:
+        # Its encrypted copy was saved under a payroll key this install no
+        # longer has: the link just proved itself, so keep it again under
+        # the key it has now, for the cookie and for an administrator.
+        employee.portal_token = token
     db.commit()
     return employee
 

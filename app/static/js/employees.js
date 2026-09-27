@@ -383,6 +383,13 @@ const EmployeesPage = {
         const expiryClass = daysUntilExpiry !== null && daysUntilExpiry < 30
             ? 'style="color:var(--text-danger);font-weight:600"' : '';
 
+        // A link whose saved copy this install can't open still works; it
+        // just can't be shown or copied until the employee uses it again.
+        if (!url) {
+            return `<p style="margin:0 0 6px 0">${escapeHtml(token.note || 'This link can’t be shown here.')}</p>
+                <button class="btn btn-sm btn-secondary" onclick="EmployeesPage._regeneratePortalToken(${id})">Rotate Token</button>`;
+        }
+
         let html = `
             <p style="margin:0 0 4px 0">Portal URL: <a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a>
                 <span style="font-size:11px;color:var(--gray-400);">opens in the employee's browser — the address must be reachable from where they are (this machine only for a desktop install; the LAN or your public name for Server Edition)</span></p>

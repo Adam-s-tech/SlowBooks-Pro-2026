@@ -58,7 +58,9 @@ _PORTAL_TOKEN_LIFETIME = timedelta(days=365)
 
 
 def _mint_portal_token(emp: Employee) -> None:
-    """Assign a fresh portal token plus its idle and hard expiry timestamps."""
+    """Assign a fresh portal token plus its idle and hard expiry timestamps.
+    The token is kept as a digest and an encrypted copy, never as issued
+    (see Employee.portal_token)."""
     now = datetime.now(timezone.utc)
     emp.portal_token = secrets.token_urlsafe(24)
     emp.portal_token_last_used = now
@@ -224,16 +226,28 @@ def get_portal_token(request: Request, emp_id: int, db: Session = Depends(get_db
     emp = db.query(Employee).filter(Employee.id == emp_id).first()
     if not emp:
         raise HTTPException(status_code=404, detail="Employee not found")
-    if not emp.portal_token:
+    if not emp.portal_token_hash:
         _mint_portal_token(emp)
         db.commit()
-    return {
+    token = emp.portal_token
+    answer = {
         "employee_id": emp.id,
-        "portal_token": emp.portal_token,
-        "portal_url": _portal_url(request, emp.portal_token),
+        "portal_token": token,
+        "portal_url": _portal_url(request, token) if token else None,
         "expires_at": _iso_utc(emp.portal_token_expires_at),
         "last_used_at": _iso_utc(emp.portal_token_last_used),
     }
+    if not token:
+        # A link whose encrypted copy this install's payroll key can't open:
+        # it still works, and the next time the employee uses it the copy is
+        # kept again (routes/portal.py). Never re-minted here: that would
+        # break the link the employee has.
+        answer["note"] = (
+            "This link can't be shown here: it was saved under a payroll key "
+            "this install no longer has. The employee's link still works; "
+            "Rotate Token makes a new one to send."
+        )
+    return answer
 
 
 @router.get("/{emp_id}/everify")

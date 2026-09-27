@@ -5,6 +5,7 @@
 # ============================================================================
 
 import enum
+import hashlib
 
 from sqlalchemy import (
     Column,
@@ -22,6 +23,13 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 from app.database import Base
+
+
+def portal_token_digest(token: str) -> str:
+    """What the portal looks a self-service link up by: its SHA-256. The
+    link is 32 random URL-safe characters, so the digest can't be reversed
+    by guessing."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 class PayType(str, enum.Enum):
@@ -149,7 +157,20 @@ class Employee(Base):
     # inactivity (last_used rolls forward on every authenticated request) or
     # 1 year hard. Rotating the token via POST /api/employees/{id}/portal-token
     # bumps both columns to 'now' + the windows.
-    portal_token = Column(String(64), nullable=True, unique=True)
+    #
+    # The token is never kept as issued. A copy of the company file, or a
+    # backup, held every employee's working link, and a link signs in as that
+    # employee, the bank account their pay goes to included. The portal looks
+    # a link up by its SHA-256 (portal_token_hash); the copy an administrator
+    # can show again is encrypted with the payroll key (portal_token_enc),
+    # which is kept outside the database. `portal_token` is the property
+    # below. The "portal_token" column held the link as issued before 2.18.0
+    # (migration e2b7c4d9a1f3 moved each one over) and stays empty.
+    portal_token_retired = Column(
+        "portal_token", String(64), nullable=True, unique=True
+    )
+    portal_token_hash = Column(String(64), nullable=True, unique=True, index=True)
+    portal_token_enc = Column(Text, nullable=True)
     portal_token_last_used = Column(DateTime(timezone=True), nullable=True)
     portal_token_expires_at = Column(DateTime(timezone=True), nullable=True)
     # E-Verify case tracking. The actual federal E-Verify system is a
@@ -183,6 +204,24 @@ class Employee(Base):
     @property
     def full_name(self) -> str:
         return f"{self.first_name} {self.last_name}"
+
+    @property
+    def portal_token(self) -> str | None:
+        """The self-service link's token, decrypted for an administrator to
+        copy; None when there is none, or when it was saved under a payroll
+        key this install no longer has (the link itself still works)."""
+        if not self.portal_token_enc:
+            return None
+        from app.services.encryption import decrypt
+
+        return decrypt(self.portal_token_enc)
+
+    @portal_token.setter
+    def portal_token(self, token: str | None) -> None:
+        from app.services.encryption import encrypt
+
+        self.portal_token_hash = portal_token_digest(token) if token else None
+        self.portal_token_enc = encrypt(token) if token else None
 
 
 class PayRun(Base):
