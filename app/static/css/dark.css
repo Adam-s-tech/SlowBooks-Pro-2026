@@ -16,6 +16,8 @@
     --text-success:   #4ade80;   /* 9.32:1 — the light theme's #166534 is 2.28 here */
     --text-danger:    #e46969;   /* = --qb-red: 5.05:1 on the panel */
     --text-warning:   #e0a840;   /* 7.62:1 on the panel */
+    --aging-30:       #e0a840;   /* 7.62:1 on the card */
+    --aging-60:       #f97316;   /* 5.80 */
     --qb-teal:        #7abfbf;
     --qb-green:       #4caf7a;
     --qb-green-dark:  #3d9065;

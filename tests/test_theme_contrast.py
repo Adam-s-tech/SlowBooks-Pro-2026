@@ -12,8 +12,13 @@ primary button, the dark skip link and the void badge.
 This is the same sweep in playwright's Chromium, so the list is kept at zero
 here rather than found again on a gate box:
 
-- the gate's JavaScript, verbatim: a translucent layer is composited, a
-  gradient is scored at its worst stop, a bitmap is left out;
+- the gate's JavaScript: a translucent layer is composited, a gradient is
+  scored at its worst stop, a bitmap is left out; and one thing the gate's
+  scorer missed. It kept a text colour's r, g and b and dropped its alpha,
+  so rgba(255,255,255,0.35) scored as white (skytech R3-1). Here the text
+  is painted as the browser paints it: its colour's alpha, and every
+  element's opacity, over each ground. A disabled control has no
+  requirement (WCAG 1.4.3) and is left out;
 - its thresholds: 4.5:1, or 3:1 for text of 24px, or 18.66px bold;
 - its pages in its order, in dark and then light, and then the splash with
   the licence terms and What's new showing, in light and then dark.
@@ -26,10 +31,9 @@ dashboard with all its cards, a job's own page, the bank register, the
 global search's results, the update notice, the notices (toasts) a save
 shows. The dialogs are swept in tests/test_dialog_contrast.py.
 
-One thing is left out, and only off the gate's pages: a colour key, the
-"■" beside each band of the dashboard's A/R aging bar. It is not text but
-the band's colour, so WCAG 1.4.11 (3:1 for a graphic) applies to it rather
-than 1.4.3, and the words beside it carry the band's name and amount.
+A colour key, the "■" beside each band of the dashboard's A/R aging bar,
+is a graphic rather than text: it is held to 3:1 (WCAG 1.4.11), and the
+words beside it carry the band's name and amount (macbase1 NEW-11).
 
 The page is the real index.html, scripts and stylesheets, served by the app
 itself through the test client, on a bakery's books entered through the API
@@ -58,7 +62,8 @@ GATE_ROUTES = (
 )
 # A route that only moves the address to another page
 REDIRECTS = {"/check-register"}
-# The aging bar's colour keys (see the module's docstring)
+# Colour keys, the "■" beside each band of the A/R aging bar: graphics, not
+# text, so they are held to 3:1 (WCAG 1.4.11) rather than 4.5.
 COLOUR_KEYS = {"■"}
 
 # check_css_regressions.py's SWEEP, verbatim but for its comments.
@@ -74,6 +79,16 @@ SWEEP = r"""
     return [fg[0]*a + bg[0]*(1-a), fg[1]*a + bg[1]*(1-a),
             fg[2]*a + bg[2]*(1-a), 1];
   }
+  // Premultiplied colours, [r*a, g*a, b*a, a]: an element with opacity
+  // paints its own content, then lays it over what is behind at that
+  // opacity, and source-over in premultiplied form is exactly that.
+  function pm(c){ return [c[0]*c[3], c[1]*c[3], c[2]*c[3], c[3]]; }
+  function pover(top, under){
+    var a = top[3];
+    return [top[0] + under[0]*(1-a), top[1] + under[1]*(1-a),
+            top[2] + under[2]*(1-a), a + under[3]*(1-a)];
+  }
+  function fade(c, o){ return [c[0]*o, c[1]*o, c[2]*o, c[3]*o]; }
   // A gradient between known colours is a range: its stops. Only a bitmap
   // (url(...)) is unresolvable from here.
   function stops(bgi){
@@ -87,42 +102,52 @@ SWEEP = r"""
     }
     return out.length ? out : null;
   }
-  function bg(el){
-    var layers = [], e = el, img = false, grad = null;
+  var rgbs = function(c){ return 'rgb(' + Math.round(c[0]) + ', '
+                 + Math.round(c[1]) + ', ' + Math.round(c[2]) + ')'; };
+  // The text and the ground under it, as painted: the walk up to the
+  // ground is the gate's; each element passed keeps its background and its
+  // opacity, and the text colour's own alpha is painted on top. A gradient
+  // is a range, so one pair per stop.
+  function bg(el, text){
+    var levels = [], e = el, img = false, grad = null, ground = null;
     while (e && e !== document.documentElement) {
       var cs = getComputedStyle(e), c = parse(cs.backgroundColor);
       var gs = stops(cs.backgroundImage);
       var hasImg = cs.backgroundImage && cs.backgroundImage !== 'none';
-      if (gs && !grad) grad = gs;          // the nearest gradient wins
+      var level = {color: c && c[3] > 0 ? c : null, opacity: +cs.opacity, grad: null};
+      levels.push(level);
+      if (gs && !grad) { grad = gs; level.grad = gs; }  // the nearest gradient wins
       if (c && c[3] > 0) {
-        layers.push(c);
-        if (c[3] >= 0.999) { img = img || (!!hasImg && !gs); break; }
+        if (c[3] >= 0.999) { img = img || (!!hasImg && !gs); ground = e; break; }
         if (hasImg && !gs) img = true;
       } else if (hasImg && !gs) {
         img = true;                         // a bitmap: genuinely unresolvable
       }
-      if (gs) break;                        // the gradient supplies the paint
+      if (gs) { ground = e; break; }        // the gradient supplies the paint
       e = e.parentElement;
     }
+    // opacity above the ground fades all of it over the page
+    var above = 1;
+    for (var p = ground && ground.parentElement; p && p !== document.documentElement;
+         p = p.parentElement) above *= +getComputedStyle(p).opacity;
     var base = parse(getComputedStyle(document.body).backgroundColor)
                || [255,255,255,1];
     if (base[3] < 0.999) base = [255,255,255,1];
-    var acc = base;
-    for (var i = layers.length - 1; i >= 0; i--) acc = over(layers[i], acc);
-    var rgbs = function(c){ return 'rgb(' + Math.round(c[0]) + ', '
-                   + Math.round(c[1]) + ', ' + Math.round(c[2]) + ')'; };
-    // The gradient is the bottom layer; what was collected above it is
-    // composited over each stop.
-    var cands = [];
-    if (grad) {
-      for (var k = 0; k < grad.length; k++) {
-        var t = over(grad[k], base);
-        for (var j = layers.length - 1; j >= 0; j--) t = over(layers[j], t);
-        cands.push(rgbs(t));
+    function paint(withText, stop){
+      var content = withText ? pm(text) : [0, 0, 0, 0];
+      for (var i = 0; i < levels.length; i++) {
+        var L = levels[i];
+        if (L.grad && stop) content = pover(content, pm(stop));  // image over colour
+        if (L.color) content = pover(content, pm(L.color));
+        content = fade(content, L.opacity);
       }
+      return pover(fade(content, above), pm(base));
     }
-    return {color: rgbs(acc), image: img,
-            candidates: cands.length ? cands : null};
+    var pairs = [];
+    var each = grad || [null];
+    for (var k = 0; k < each.length; k++)
+      pairs.push([rgbs(paint(true, each[k])), rgbs(paint(false, each[k]))]);
+    return {color: pairs[0][1], image: img, pairs: pairs};
   }
   var out = [], seen = {};
   var nodes = document.querySelectorAll(
@@ -139,12 +164,17 @@ SWEEP = r"""
     if (r.width < 4 || r.height < 4) continue;
     var cs = getComputedStyle(el);
     if (cs.visibility === 'hidden' || cs.display === 'none' || +cs.opacity === 0) continue;
-    var key = own + '|' + cs.color;
+    // a disabled control has no contrast requirement (WCAG 1.4.3)
+    if (el.closest('button:disabled, fieldset:disabled')) continue;
+    var dim = 1;
+    for (var q = el; q && q !== document.documentElement; q = q.parentElement)
+      dim *= +getComputedStyle(q).opacity;
+    var key = own + '|' + cs.color + '|' + dim;
     if (seen[key]) continue;
     seen[key] = 1;
-    var b = bg(el);
+    var b = bg(el, parse(cs.color));
     out.push({text: own.slice(0, 42), color: cs.color, background: b.color,
-              candidates: b.candidates, unmeasurable: b.image,
+              pairs: b.pairs, unmeasurable: b.image,
               size: parseFloat(cs.fontSize) || 0,
               weight: cs.fontWeight, tag: el.tagName.toLowerCase(),
               cls: (el.className || '').toString().slice(0, 40)});
@@ -176,16 +206,23 @@ PAGE_SWEEP = sweep_of(cap=5000)
 TOAST_SWEEP = sweep_of("document.getElementById('toast-container')")
 
 
-def _rgb(s):
+def _rgba(s):
     m = re.findall(r"[\d.]+", s or "")
-    return [float(x) for x in m[:3]] if len(m) >= 3 else None
+    if len(m) < 3:
+        return None
+    return [float(x) for x in m[:3]] + [float(m[3]) if len(m) > 3 else 1.0]
 
 
 def contrast(fg, bg):
-    """WCAG contrast ratio between two computed colours (the gate's)."""
-    a, b = _rgb(fg), _rgb(bg)
+    """WCAG contrast ratio between two computed colours. A translucent text
+    colour is seen over its ground, so it is composited there first: the
+    gate's scorer kept only r, g and b, and scored rgba(255,255,255,0.35) as
+    white (skytech R3-1)."""
+    a, b = _rgba(fg), _rgba(bg)
     if not a or not b:
         return None
+    a = [a[i] * a[3] + b[i] * (1 - a[3]) for i in range(3)]
+    b = b[:3]
 
     def lum(c):
         out = []
@@ -206,16 +243,17 @@ SPLASH_BOLD = ("600",) + PAGE_BOLD
 
 def _score(item, bold):
     """(ratio, needed) for one swept element, or None where it cannot be
-    measured. A gradient is a range: the stop that reads worst."""
+    measured. A gradient is a range: the stop that reads worst. A colour key
+    is a graphic: 3:1 (WCAG 1.4.11)."""
     if item.get("unmeasurable"):
         return None
-    cands = item.get("candidates") or [item.get("background")]
-    ratios = [r for r in (contrast(item.get("color"), b) for b in cands) if r]
+    ratios = [r for r in (contrast(fg, bg) for fg, bg in item["pairs"]) if r]
     if not ratios:
         return None
     size = item.get("size") or 0
     heavy = str(item.get("weight")) in bold
-    need = 3.0 if (size >= 24 or (size >= 18.66 and heavy)) else AA
+    large = size >= 24 or (size >= 18.66 and heavy)
+    need = 3.0 if large or item["text"] in COLOUR_KEYS else AA
     return min(ratios), need
 
 
@@ -225,8 +263,6 @@ def below_threshold(sweeps, bold=PAGE_BOLD):
     groups = {}
     for (theme, where), items in sweeps.items():
         for it in items:
-            if it["text"] in COLOUR_KEYS and where == "#/":
-                continue  # A/R legend keys: graphics beside their text labels
             scored = _score(it, bold)
             if not scored or scored[0] >= scored[1]:
                 continue
@@ -751,6 +787,26 @@ def seed_books(client, seed_accounts):
         f"/api/reseller-permits/{S['permit_active']}/mark-verified",
         {"verified_by": "TVH"},
     )
+    # a void expense and an inactive vendor and item, which their lists keep,
+    # set aside
+    voided = post(
+        "/api/expenses",
+        {
+            "date": "2026-09-03",
+            "expense_account_id": a["6000"],
+            "paid_from_account_id": a["1000"],
+            "amount": "12.00",
+            "memo": "Entered twice",
+        },
+    )["id"]
+    post(f"/api/expenses/{voided}/void")
+    old = post("/api/vendors", {"name": "Old Harbor Ice Co."})["id"]
+    _ok(client.put(f"/api/vendors/{old}", json={"is_active": False}))
+    stollen = post(
+        "/api/items",
+        {"name": "Holiday Stollen", "item_type": "product", "rate": 14},
+    )["id"]
+    _ok(client.put(f"/api/items/{stollen}", json={"is_active": False}))
     # every card on the dashboard, not only the ones it starts with
     cards = _ok(client.get("/api/dashboard/widgets"))["widgets"]
     order = {"value": {"order": [c["id"] for c in cards]}}

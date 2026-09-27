@@ -11,7 +11,7 @@ const ReleasesPage = {
 
     async render() {
         const releases = await API.get('/nonprofit/releases');
-        const rows = releases.map(r => `<tr class="clickable" onclick="ReleasesPage.view(${r.id})" style="${r.status === 'void' ? 'opacity:.6' : ''}">
+        const rows = releases.map(r => `<tr class="clickable${r.status === 'void' ? ' row--dim' : ''}" onclick="ReleasesPage.view(${r.id})">
             <td>${escapeHtml(r.number)}</td>
             <td>${escapeHtml(r.date)}</td>
             <td>${escapeHtml(r.class_name || '')}</td>
@@ -153,7 +153,7 @@ const AllocationsPage = {
     async render() {
         const [runs, rules] = await Promise.all([API.get('/nonprofit/allocations'), API.get('/nonprofit/allocation-rules?include_inactive=true')]);
         AllocationsPage._rules = rules;
-        const rows = runs.map(a => `<tr class="clickable" onclick="AllocationsPage.view(${a.id})" style="${a.status === 'void' ? 'opacity:.6' : ''}">
+        const rows = runs.map(a => `<tr class="clickable${a.status === 'void' ? ' row--dim' : ''}" onclick="AllocationsPage.view(${a.id})">
             <td>${escapeHtml(a.number)}</td>
             <td>${escapeHtml(a.date)}</td>
             <td>${escapeHtml(a.rule_name || '')}</td>
@@ -161,7 +161,7 @@ const AllocationsPage = {
             <td class="amount">${formatCurrency(a.total)}</td>
             <td>${a.status === 'void' ? '<span style="color:var(--text-danger)">void</span>' : 'posted'}</td>
         </tr>`).join('');
-        const ruleRows = rules.map(r => `<tr style="${r.is_active ? '' : 'opacity:.6'}">
+        const ruleRows = rules.map(r => `<tr${r.is_active ? '' : ' class="row--dim"'}>
             <td>${escapeHtml(r.name)}</td>
             <td>${escapeHtml({ percent: 'Percent', square_feet: 'Square feet', hours: 'Hours on grants' }[r.basis] || r.basis)}</td>
             <td>${escapeHtml(r.source_account_name || 'any expense')}${r.source_class_name ? ` · ${escapeHtml(r.source_class_name)}` : ''}</td>

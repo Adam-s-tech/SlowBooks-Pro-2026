@@ -1112,7 +1112,7 @@ const SettingsPage = {
                 <div style="font-size:10px; color:var(--text-muted); margin:8px 0;">
                     Variables: {{ invoice.invoice_number }}, {{ invoice.total }}, {{ invoice.due_date }}, {{ customer_name }},
                     {{ company.company_name }}, {{ doc_label }}, {{ pay_url }}. Filters: | currency, | fdate
-                    <br><span style="opacity:.8;">{{ doc_label }} reads &ldquo;Invoice&rdquo; or &ldquo;Sales Receipt&rdquo; to match the document.
+                    <br><span>{{ doc_label }} reads &ldquo;Invoice&rdquo; or &ldquo;Sales Receipt&rdquo; to match the document.
                     {{ pay_url }} is only set when a payment provider is enabled &mdash; guard it with {% if pay_url %}.</span>
                 </div>
                 ${t.template_type === 'invoice' ? `<div style="margin-top:12px;">

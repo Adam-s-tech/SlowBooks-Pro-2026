@@ -480,8 +480,11 @@ def test_the_pdf_window_meets_aa_in_both_colour_schemes(browser):
     swept = {}
     try:
         page.set_content(html)
+        # as the window is once its bridge is ready: the buttons enabled
         page.evaluate("""() => { document.getElementById('note').textContent =
-                       'Not available in this window.'; }""")
+                       'Not available in this window.';
+                       document.querySelectorAll('button')
+                           .forEach(b => { b.disabled = false; }); }""")
         for scheme in ("light", "dark"):
             page.emulate_media(color_scheme=scheme)
             swept[(scheme, "PDF window")] = page.evaluate(PAGE_SWEEP)

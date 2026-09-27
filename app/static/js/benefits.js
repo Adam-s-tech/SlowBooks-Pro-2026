@@ -70,7 +70,7 @@ const BenefitsPage = {
 
     async _codesTab() {
         const codes = await API.get('/benefits/codes?include_inactive=true');
-        const rows = codes.map(c => `<tr ${c.is_active ? '' : 'style="opacity:.55"'}>
+        const rows = codes.map(c => `<tr ${c.is_active ? '' : 'class="row--dim"'}>
             <td class="amount">${c.sequence}</td>
             <td><strong>${escapeHtml(c.code)}</strong><br><span style="font-size:12px;">${escapeHtml(c.name)}</span></td>
             <td>${escapeHtml(c.kind)} · ${c.category === 'pretax' ? 'pre-tax' : 'post-tax'}</td>
@@ -386,7 +386,7 @@ const BenefitsPage = {
             API.get(`/benefits/enrollments?employee_id=${empId}&include_inactive=true`),
             API.get(`/benefits/employee/${empId}/resolved`),
         ]);
-        const enrolled = rows.map(r => `<tr ${r.is_active ? '' : 'style="opacity:.55"'}>
+        const enrolled = rows.map(r => `<tr ${r.is_active ? '' : 'class="row--dim"'}>
             <td><strong>${escapeHtml(r.code || '')}</strong> ${escapeHtml(r.name || '')}</td>
             <td class="amount">${r.employee_rate ?? '<span style="color:var(--gray-400)">code</span>'}</td>
             <td class="amount">${r.employer_rate ?? '<span style="color:var(--gray-400)">code</span>'}</td>

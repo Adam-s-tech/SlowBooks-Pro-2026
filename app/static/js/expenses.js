@@ -27,7 +27,7 @@ const ExpensesPage = {
                 <th scope="col">Status</th><th scope="col" class="amount">Amount</th><th scope="col"></th></tr></thead><tbody>`;
             for (const x of expenses) {
                 const isVoid = x.status === 'void';
-                html += `<tr data-status="${x.status}"${isVoid ? ' style="opacity:0.6; text-decoration:line-through;"' : ''}>
+                html += `<tr data-status="${x.status}"${isVoid ? ' class="row--dim" style="text-decoration:line-through;"' : ''}>
                     <td>${formatDate(x.date)}</td>
                     <td>${escapeHtml(x.payee || '')}</td>
                     <td>${escapeHtml(x.expense_account_name || '')}</td>
