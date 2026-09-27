@@ -251,20 +251,26 @@ def kept_here(key, mappings) -> None:
 DISCOUNT_ITEM = "discount_item"
 
 
-def is_discount_item(db: Session, item_id) -> bool:
-    """Whether a local item is one a QuickBooks Online discount came in on:
-    a line on it may carry a negative price (routes/invoices/helpers.py,
-    refuse_negative_lines)."""
+def discount_mapping(db: Session, item_id) -> QBOMapping | None:
+    """The mapping of a local item a QuickBooks Online discount came in on;
+    its qbo_id is QBO's discount account (empty when QBO named none)."""
+    if not item_id:
+        return None
     return (
-        bool(item_id)
-        and db.query(QBOMapping.id)
+        db.query(QBOMapping)
         .filter(
             QBOMapping.entity_type == DISCOUNT_ITEM,
             QBOMapping.slowbooks_id == item_id,
         )
         .first()
-        is not None
     )
+
+
+def is_discount_item(db: Session, item_id) -> bool:
+    """Whether a local item is one a QuickBooks Online discount came in on:
+    a line on it may carry a negative price (routes/invoices/helpers.py,
+    refuse_negative_lines), and exports as QBO's discount (qbo_export)."""
+    return discount_mapping(db, item_id) is not None
 
 
 def ledger_posting(db: Session, txn_type: str, qbo_id) -> QBOMapping | None:

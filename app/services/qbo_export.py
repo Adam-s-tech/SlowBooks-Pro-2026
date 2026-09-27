@@ -10,6 +10,8 @@
 # ============================================================================
 
 
+from decimal import Decimal
+
 from sqlalchemy.orm import Session
 
 from app.models.accounts import Account, AccountType
@@ -21,6 +23,7 @@ from app.services.qbo_common import (
     ACCOUNT_TYPE_TO_QBO,
     ITEM_TYPE_TO_QBO,
     create_mapping,
+    discount_mapping,
     get_mapping_by_slowbooks_id,
 )
 from app.services.qbo_service import get_qbo_client
@@ -299,6 +302,31 @@ def export_items(db: Session) -> dict:
     return {"exported": exported, "errors": errors}
 
 
+def _discount_line(db: Session, inv_line, discount) -> dict:
+    """A line on a Discount item (qbo_common.discount_mapping) as QBO's own
+    discount: a DiscountLineDetail for the amount, on QBO's discount
+    account (the one it came in on, else the item's income account where
+    that is mapped), not a negative sales line with no item."""
+    detail = {"PercentBased": False}
+    account = discount.qbo_id
+    if not account:
+        item = db.get(Item, inv_line.item_id)
+        mapped = (
+            get_mapping_by_slowbooks_id(db, "account", item.income_account_id)
+            if item is not None and item.income_account_id
+            else None
+        )
+        account = mapped.qbo_id if mapped else ""
+    if account:
+        detail["DiscountAccountRef"] = {"value": account}
+    return {
+        "DetailType": "DiscountLineDetail",
+        "Amount": float(-Decimal(str(inv_line.amount or 0))),
+        "Description": inv_line.description or "",
+        "DiscountLineDetail": detail,
+    }
+
+
 def export_invoices(db: Session) -> dict:
     """Export Slowbooks invoices to QBO."""
     from quickbooks.objects.invoice import Invoice as QBOInvoice
@@ -345,7 +373,26 @@ def export_invoices(db: Session) -> dict:
                 .all()
             )
 
+            discounts = {}  # one QBO discount for each Discount item
             for inv_line in inv_lines:
+                discount = discount_mapping(db, inv_line.item_id)
+                if discount is not None and (inv_line.amount or 0) < 0:
+                    merged = discounts.get(inv_line.item_id)
+                    if merged is None:
+                        merged = discounts[inv_line.item_id] = _discount_line(
+                            db, inv_line, discount
+                        )
+                        lines.append(merged)
+                    else:
+                        merged["Amount"] = float(
+                            Decimal(str(merged["Amount"]))
+                            - Decimal(str(inv_line.amount))
+                        )
+                    # the discount comes off the taxable amount, as QBO's does
+                    # when it works the tax out after the discount
+                    if inv_line.is_taxable:
+                        qbo_inv.ApplyTaxAfterDiscount = True
+                    continue
                 detail = {
                     "Qty": float(inv_line.quantity or 1),
                     "UnitPrice": float(inv_line.rate or 0),
