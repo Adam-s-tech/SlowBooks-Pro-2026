@@ -77,7 +77,7 @@ const JobCostsPage = {
                 <div style="font-size:11px;color:var(--gray-500);margin-bottom:6px">
                     Pick equipment to charge its hourly rate; pick an employee for internal labor (enter the hours and loaded rate). Leave the accounts blank to use the cost code's / cost type's defaults.
                 </div>
-                <div class="table-container table-container--scroll"><table class="line-items-table">
+                <div class="table-container table-container--scroll"><table class="line-items-table line-items-table--wide">
                     <thead><tr><th scope="col">Cost code</th><th scope="col">Type</th><th scope="col">Description</th><th scope="col">Employee / Equipment</th><th scope="col" class="col-qty">Qty</th><th scope="col" class="col-rate">Rate</th><th scope="col" class="col-amount">Amount</th><th scope="col">Cost acct</th><th scope="col">Offset acct</th><th scope="col" title="Billable">Bill?</th><th scope="col"></th></tr></thead>
                     <tbody id="jc-lines">${JobCostsPage.lineHtml(0)}</tbody>
                 </table></div>

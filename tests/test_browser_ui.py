@@ -311,3 +311,35 @@ def test_a_sidebar_link_works_after_a_toolbar_button(browser):
         assert page.evaluate("location.hash") == "#/"
     finally:
         page.close()
+
+
+LINE_TABLE_FITS = """() => {
+    const wrap = document.querySelector('#modal-body .table-container');
+    const box = wrap.getBoundingClientRect();
+    const out = [];
+    if (wrap.scrollWidth > wrap.clientWidth + 1) {
+        out.push(`the line table scrolls sideways: ${wrap.scrollWidth} > ${wrap.clientWidth}`);
+    }
+    for (const cell of wrap.querySelectorAll('tbody td.col-amount')) {
+        const r = cell.getBoundingClientRect();
+        if (r.right > box.right + 0.5) out.push(`Amount past the edge: ${r.right} > ${box.right}`);
+        if (cell.scrollWidth > cell.clientWidth + 1) out.push(`Amount clipped: ${cell.textContent}`);
+    }
+    return out;
+}"""
+
+
+def test_the_estimate_line_table_fits_the_dialog_at_1280(browser):
+    # 2.18.0 gate, macbase1 NEW-12: a 1,180px floor meant for the job cost
+    # grid made the estimate's table scroll sideways, its Amount cut off
+    # at "$1,0…".
+    page = _open(browser, 1280, 800, "#/estimates")
+    try:
+        _open_dialog(page, "EstimatesPage.showForm(1)", "#est-form")
+        page.fill("#est-lines tr:first-child .line-qty", "1")
+        page.fill("#est-lines tr:first-child .line-rate", "12345.67")
+        amount = page.inner_text("#est-lines tr:first-child .line-amount")
+        assert amount.startswith("$12,345.67"), amount
+        assert page.evaluate(LINE_TABLE_FITS) == []
+    finally:
+        page.close()

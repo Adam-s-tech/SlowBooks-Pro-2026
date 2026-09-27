@@ -847,7 +847,11 @@ a:hover { text-decoration: underline; }
 .table-container--scroll {
     overflow-x: auto;
 }
-.table-container--scroll .line-items-table {
+/* Only the job cost entry's grid is wider than the dialog (its Bill? and
+   remove columns); the estimate's fits, and a floor on every scrolling grid
+   pushed its Amount column past the dialog's edge at 1280 wide (2.18.0 gate,
+   macbase1 NEW-12). */
+.table-container--scroll .line-items-table--wide {
     min-width: 1180px;
 }
 
@@ -991,7 +995,7 @@ a:hover { text-decoration: underline; }
 
 .line-items-table .col-qty    { width: 60px; }
 .line-items-table .col-rate   { width: 80px; }
-.line-items-table .col-amount { width: 80px; text-align: right; }
+.line-items-table .col-amount { width: 80px; text-align: right; white-space: nowrap; }
 .line-items-table .col-actions{ width: 30px; text-align: center; }
 
 .invoice-logo-option {
