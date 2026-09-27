@@ -140,8 +140,8 @@ in the file's free space).
   wasn't there is named, without a download. The shared folder is left
   where it was.
 - **Security.** The shared folder was published at `/static/uploads/`,
-  which needs no sign-in: on a Server Edition or `--serve-lan` install,
-  anyone who could reach the server could fetch a company's logo,
+  which needs no sign-in: on a Server Edition, `--serve-lan` or Docker
+  install, anyone who could reach the server could fetch a company's logo,
   attachments and employee documents (W-4s, I-9s) at addresses that were
   easy to guess. Nothing is served from it now; a company's files come
   from signed-in routes. A read-only sign-in could also download an
@@ -291,6 +291,12 @@ in the file's free space).
   without being asked to save.
 - The company logo is the administrator's to change, like every other
   setting, and Settings can remove it.
+- **Docker: Create Backup works.** Every backup on a Docker install failed
+  with "Permission denied", and so did every logo and attachment upload,
+  since 2.0: the volumes docker compose mounts were created owned by root,
+  and the app runs as a user of its own. The image now gives them to that
+  user, and an existing install's volumes, left empty by those failures,
+  take the right owner when 2.18 starts.
 - A disabled button looks disabled (it drew at full colour and did
   nothing), and the QuickBooks Online page says why Import is unavailable.
 
@@ -479,9 +485,10 @@ in the file's free space).
   folder may be another company's: upload yours again. A receipt scan
   waiting to be attached when you upgrade isn't carried over (scans expire
   after a day); scan it again.
-- **Docker:** keep the `slowbooks_uploads` volume mounted when 2.18 first
-  starts; the upgrade copies the files from it into the database, and your
-  database backups carry them from then on.
+- **Docker:** keep both volumes mounted when 2.18 first starts. Any files
+  in `slowbooks_uploads` are copied into the database (your database
+  backups carry them from then on), and `slowbooks_backups` becomes
+  writable, so Create Backup works.
 - A bookkeeper can no longer change the logo or download a backup.
 
 #### For developers
