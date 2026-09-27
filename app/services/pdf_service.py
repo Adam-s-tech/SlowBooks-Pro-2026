@@ -2,66 +2,26 @@
 # PDF generation — WeasyPrint + Jinja2 templates.
 # ============================================================================
 
-import base64
-import mimetypes
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
-from app.services import storage
-
 TEMPLATE_DIR = Path(__file__).parent.parent / "templates"
 _jinja_env = Environment(autoescape=True, loader=FileSystemLoader(str(TEMPLATE_DIR)))
-
-# MIME types we'll embed as data URIs. Keep this tight — WeasyPrint will
-# happily render whatever, but we don't want a path traversal turning into
-# a binary smuggle vector.
-_LOGO_ALLOWED_MIMES = {
-    "image/png",
-    "image/jpeg",
-    "image/gif",
-    "image/svg+xml",
-    "image/webp",
-}
 
 
 def _company_logo_data_uri(company_settings: dict) -> str:
     """Return the company logo as a base64 data URI, or empty string.
 
-    Constrains the file to the active upload storage root so a tampered
-    `company_logo_path` setting can't read files outside that directory.
+    The logo is read from the company's own database (the stored file its
+    company_logo_path setting names), never from a file on disk: every
+    company on a desktop install used to share one uploads/company_logo.png,
+    so one company's invoices went out with another's logo (2.18.0 gate).
+    Only a stored logo of an image type is ever embedded.
     """
-    logo_path = (company_settings or {}).get("company_logo_path") or ""
-    if not logo_path:
-        return ""
+    from app.services.file_store import logo_data_uri
 
-    # Stored value is "/static/uploads/company_logo.png" — strip the URL
-    # prefix and resolve relative to the static dir.
-    relative = logo_path.lstrip("/")
-    if relative.startswith("static/"):
-        relative = relative[len("static/") :]
-    uploads_dir = storage.uploads_root().resolve()
-    candidate = (uploads_dir.parent / relative).resolve()
-
-    # Path containment check — reject if the resolved path escapes the
-    # uploads directory (defends against ../ in stored value).
-    try:
-        candidate.relative_to(uploads_dir)
-    except ValueError:
-        return ""
-
-    if not candidate.is_file():
-        return ""
-
-    mime = mimetypes.guess_type(candidate.name)[0] or ""
-    if mime not in _LOGO_ALLOWED_MIMES:
-        return ""
-
-    try:
-        encoded = base64.b64encode(candidate.read_bytes()).decode("ascii")
-    except OSError:
-        return ""
-    return f"data:{mime};base64,{encoded}"
+    return logo_data_uri(company_settings)
 
 
 # WeasyPrint is imported lazily (issue #121). Importing it pulls in the

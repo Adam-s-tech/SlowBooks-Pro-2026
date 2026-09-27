@@ -90,6 +90,7 @@ from app.models.qbo_mapping import QBOMapping
 from app.models.bank_rules import BankRule
 from app.models.budgets import Budget
 from app.models.attachments import Attachment
+from app.models.stored_files import StoredFile
 from app.models.email_templates import EmailTemplate
 
 # Phase 11: Inventory + Saved Reports
@@ -164,6 +165,7 @@ __all__ = [
     "BankRule",
     "Budget",
     "Attachment",
+    "StoredFile",
     "EmailTemplate",
     # Phase 11
     "InventoryMovement",

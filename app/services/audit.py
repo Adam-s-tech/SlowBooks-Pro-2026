@@ -5,7 +5,7 @@
 
 from datetime import datetime
 from decimal import Decimal
-from sqlalchemy import event, inspect
+from sqlalchemy import LargeBinary, event, inspect
 from sqlalchemy.orm import Session
 
 from app.models.audit import AuditLog
@@ -69,12 +69,22 @@ def _serialize_value(val):
         return str(val)
 
 
+def _is_file_content(column) -> bool:
+    """A file's bytes (stored_files.data). Never copied into the audit log:
+    a deleted W-4 must be gone, not kept as text in audit_log, and a deleted
+    row's deferred bytes cannot be loaded after the DELETE anyway. The row's
+    name, size and sha256 are logged; they say what the file was."""
+    return isinstance(getattr(column, "type", None), LargeBinary)
+
+
 def _get_instance_dict(instance):
     """Get a dict of column values from a model instance."""
     mapper = inspect(type(instance))
     result = {}
     for col in mapper.columns:
         key = col.key
+        if _is_file_content(col):
+            continue
         if key in _REDACT_COLUMNS:
             result[key] = "***"
             continue
@@ -148,7 +158,10 @@ def _after_flush(session, flush_context):
         old_vals = {}
         new_vals = {}
         changed = []
+        file_content = {c.key for c in insp.mapper.columns if _is_file_content(c)}
         for attr in insp.attrs:
+            if attr.key in file_content:
+                continue
             hist = attr.history
             if hist.has_changes():
                 key = attr.key

@@ -7,9 +7,8 @@
 # PDFs in assets/sample-receipts land in the finishing-touches slice.
 # ============================================================================
 
-import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.services import ocr_service
 
@@ -148,13 +147,26 @@ class TestExtract:
 
 
 # ---------------------------------------------------------------------------
-# Endpoint tests (Tesseract mocked; intake bucket redirected to tmp_path)
+# Endpoint tests (Tesseract mocked). A pending scan is kept in the company's
+# own database (stored_files, kind receipt_scan) since 2.18.0: the intake
+# folder was shared by every company on a desktop install.
 # ---------------------------------------------------------------------------
 
 
-def _scan(client, monkeypatch, tmp_path, text=CANNED_RECEIPT_TEXT) -> str:
+def _intake_row(db_session, intake_id):
+    """The pending scan's stored file, or None."""
+    from app.models.stored_files import StoredFile
+
+    db_session.expire_all()
+    return (
+        db_session.query(StoredFile)
+        .filter(StoredFile.token == intake_id, StoredFile.kind == "receipt_scan")
+        .first()
+    )
+
+
+def _scan(client, monkeypatch, text=CANNED_RECEIPT_TEXT) -> str:
     """Helper: run a mocked scan and return the intake id."""
-    monkeypatch.setattr(ocr_service, "INTAKE_DIR", tmp_path)
     monkeypatch.setattr(ocr_service, "tesseract_available", lambda: True)
     monkeypatch.setattr(ocr_service, "ocr_language", lambda: "eng")
     monkeypatch.setattr(
@@ -193,14 +205,15 @@ def test_requires_auth(unauthed_client):
     )
 
 
-def test_scan_happy_path(client, monkeypatch, tmp_path):
-    intake_id = _scan(client, monkeypatch, tmp_path)
-    # intake file + sidecar stored under the (tmp) intake dir
-    assert list(tmp_path.glob(f"{intake_id}.*"))
+def test_scan_happy_path(client, db_session, monkeypatch):
+    intake_id = _scan(client, monkeypatch)
+    # the scan is kept, bytes and all, in this company's database
+    row = _intake_row(db_session, intake_id)
+    assert row is not None and row.original_name == "receipt.png"
+    assert row.data == _png_bytes() and row.content_type == "image/png"
 
 
 def test_scan_response_fields(client, monkeypatch, tmp_path):
-    monkeypatch.setattr(ocr_service, "INTAKE_DIR", tmp_path)
     monkeypatch.setattr(ocr_service, "tesseract_available", lambda: True)
     monkeypatch.setattr(ocr_service, "ocr_language", lambda: "eng")
     monkeypatch.setattr(
@@ -228,7 +241,6 @@ def test_scan_response_fields(client, monkeypatch, tmp_path):
 
 
 def test_scan_tesseract_missing(client, monkeypatch, tmp_path):
-    monkeypatch.setattr(ocr_service, "INTAKE_DIR", tmp_path)
     monkeypatch.setattr(ocr_service, "tesseract_available", lambda: False)
     r = client.post(
         "/api/ocr/receipt",
@@ -242,7 +254,6 @@ def test_scan_tesseract_missing(client, monkeypatch, tmp_path):
 
 
 def test_scan_missing_date_defaults_today(client, monkeypatch, tmp_path):
-    monkeypatch.setattr(ocr_service, "INTAKE_DIR", tmp_path)
     monkeypatch.setattr(ocr_service, "tesseract_available", lambda: True)
     monkeypatch.setattr(ocr_service, "ocr_language", lambda: "eng")
     monkeypatch.setattr(
@@ -262,7 +273,6 @@ def test_scan_missing_date_defaults_today(client, monkeypatch, tmp_path):
 
 
 def test_scan_unusable_language_data(client, monkeypatch, tmp_path):
-    monkeypatch.setattr(ocr_service, "INTAKE_DIR", tmp_path)
     monkeypatch.setattr(ocr_service, "tesseract_available", lambda: True)
     monkeypatch.setattr(ocr_service, "ocr_language", lambda: None)
     r = client.post(
@@ -275,7 +285,6 @@ def test_scan_unusable_language_data(client, monkeypatch, tmp_path):
 
 
 def test_scan_bad_content_type(client, monkeypatch, tmp_path):
-    monkeypatch.setattr(ocr_service, "INTAKE_DIR", tmp_path)
     r = client.post(
         "/api/ocr/receipt",
         files={"file": ("receipt.txt", b"hello", "text/plain")},
@@ -285,8 +294,6 @@ def test_scan_bad_content_type(client, monkeypatch, tmp_path):
 
 def test_scan_oversize(client, monkeypatch, tmp_path):
     from fastapi import HTTPException
-
-    monkeypatch.setattr(ocr_service, "INTAKE_DIR", tmp_path)
 
     async def tiny_read_limited(file, max_bytes=0, label="File"):
         content = await file.read(1024 + 1)
@@ -303,7 +310,6 @@ def test_scan_oversize(client, monkeypatch, tmp_path):
 
 
 def test_scan_pdf_multi_page(client, monkeypatch, tmp_path):
-    monkeypatch.setattr(ocr_service, "INTAKE_DIR", tmp_path)
     monkeypatch.setattr(ocr_service, "tesseract_available", lambda: True)
     monkeypatch.setattr(ocr_service, "ocr_language", lambda: "eng")
     monkeypatch.setattr(
@@ -331,7 +337,6 @@ def test_scan_pdf_without_any_renderer_400(client, monkeypatch, tmp_path):
 
     from app.services import ocr_engines
 
-    monkeypatch.setattr(ocr_service, "INTAKE_DIR", tmp_path)
     monkeypatch.setattr(ocr_service, "tesseract_available", lambda: True)
     monkeypatch.setattr(ocr_service, "poppler_available", lambda: False)
     monkeypatch.setattr(pdf_raster, "windows_available", lambda: False)
@@ -367,7 +372,7 @@ def test_scan_pdf_without_any_renderer_400(client, monkeypatch, tmp_path):
 def test_attach_to_invoice(
     client, db_session, monkeypatch, tmp_path, seed_accounts, seed_customer
 ):
-    intake_id = _scan(client, monkeypatch, tmp_path)
+    intake_id = _scan(client, monkeypatch)
 
     inv = client.post(
         "/api/invoices",
@@ -399,14 +404,17 @@ def test_attach_to_invoice(
         .first()
     )
     assert row is not None
-    # intake consumed
-    assert list(tmp_path.glob(f"{intake_id}.*")) == []
+    # intake consumed: its stored file is now the attachment's, not a copy
+    assert _intake_row(db_session, intake_id) is None
+    assert row.stored_file.kind == "attachment" and row.stored_file.token is None
+    download = client.get(f"/api/attachments/download/{row.id}")
+    assert download.status_code == 200 and download.content == _png_bytes()
 
 
 def test_attach_to_expense(client, db_session, monkeypatch, tmp_path, seed_accounts):
     """Paid receipts land on the one-step Expense form; the scan attaches to
     the posted transaction."""
-    intake_id = _scan(client, monkeypatch, tmp_path)
+    intake_id = _scan(client, monkeypatch)
     exp = client.post(
         "/api/expenses",
         json={
@@ -428,10 +436,10 @@ def test_attach_to_expense(client, db_session, monkeypatch, tmp_path, seed_accou
     assert r.json()["entity_type"] == "expense"
     listed = client.get(f"/api/attachments/expense/{exp_id}")
     assert listed.status_code == 200 and len(listed.json()) == 1
-    assert list(tmp_path.glob(f"{intake_id}.*")) == []
+    assert _intake_row(db_session, intake_id) is None
 
     # A non-expense transaction id is not an expense.
-    intake_id = _scan(client, monkeypatch, tmp_path)
+    intake_id = _scan(client, monkeypatch)
     r = client.post(
         f"/api/ocr/intake/{intake_id}/attach",
         json={"entity_type": "expense", "entity_id": 999999},
@@ -439,19 +447,19 @@ def test_attach_to_expense(client, db_session, monkeypatch, tmp_path, seed_accou
     assert r.status_code == 404
 
 
-def test_attach_missing_entity(client, monkeypatch, tmp_path):
-    intake_id = _scan(client, monkeypatch, tmp_path)
+def test_attach_missing_entity(client, db_session, monkeypatch):
+    intake_id = _scan(client, monkeypatch)
     r = client.post(
         f"/api/ocr/intake/{intake_id}/attach",
         json={"entity_type": "invoice", "entity_id": 999999},
     )
     assert r.status_code == 404
     # intake survives a failed attach
-    assert list(tmp_path.glob(f"{intake_id}.*"))
+    assert _intake_row(db_session, intake_id) is not None
 
 
 def test_attach_bad_entity_type(client, monkeypatch, tmp_path):
-    intake_id = _scan(client, monkeypatch, tmp_path)
+    intake_id = _scan(client, monkeypatch)
     r = client.post(
         f"/api/ocr/intake/{intake_id}/attach",
         json={"entity_type": "vendor", "entity_id": 1},
@@ -459,13 +467,16 @@ def test_attach_bad_entity_type(client, monkeypatch, tmp_path):
     assert r.status_code == 400
 
 
-def test_attach_expired_intake_404(client, monkeypatch, tmp_path):
-    intake_id = _scan(client, monkeypatch, tmp_path)
-    # backdate the sidecar beyond the TTL
-    meta_path = tmp_path / f"{intake_id}.json"
-    meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    meta["created_at"] = (datetime.now() - timedelta(hours=25)).isoformat()
-    meta_path.write_text(json.dumps(meta), encoding="utf-8")
+def _backdate(db_session, intake_id, hours):
+    row = _intake_row(db_session, intake_id)
+    row.created_at = datetime.now(timezone.utc) - timedelta(hours=hours)
+    db_session.commit()
+
+
+def test_attach_expired_intake_404(client, db_session, monkeypatch):
+    intake_id = _scan(client, monkeypatch)
+    # backdate the scan beyond the TTL
+    _backdate(db_session, intake_id, 25)
     r = client.post(
         f"/api/ocr/intake/{intake_id}/attach",
         json={"entity_type": "invoice", "entity_id": 1},
@@ -474,33 +485,29 @@ def test_attach_expired_intake_404(client, monkeypatch, tmp_path):
     assert "expired" in r.json()["detail"]
 
 
-def test_delete_intake(client, monkeypatch, tmp_path):
-    intake_id = _scan(client, monkeypatch, tmp_path)
+def test_delete_intake(client, db_session, monkeypatch):
+    intake_id = _scan(client, monkeypatch)
     assert client.delete(f"/api/ocr/intake/{intake_id}").status_code == 200
-    assert list(tmp_path.glob(f"{intake_id}.*")) == []
+    assert _intake_row(db_session, intake_id) is None
     # idempotent
     assert client.delete(f"/api/ocr/intake/{intake_id}").status_code == 200
 
 
-def test_sweep_expires_old_intakes(tmp_path, monkeypatch):
-    monkeypatch.setattr(ocr_service, "INTAKE_DIR", tmp_path)
-    old_id = ocr_service.save_intake(b"x", "old.png", "image/png")
-    fresh_id = ocr_service.save_intake(b"y", "fresh.png", "image/png")
+def test_sweep_expires_old_intakes(db_session):
+    old_id = ocr_service.save_intake(db_session, b"x", "old.png", "image/png")
+    fresh_id = ocr_service.save_intake(db_session, b"y", "fresh.png", "image/png")
     # backdate only the OLD intake (after both saves, since each save sweeps)
-    meta_path = tmp_path / f"{old_id}.json"
-    meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    meta["created_at"] = (datetime.now() - timedelta(hours=25)).isoformat()
-    meta_path.write_text(json.dumps(meta), encoding="utf-8")
+    _backdate(db_session, old_id, 25)
 
-    assert ocr_service.sweep_intake() == 1
-    assert ocr_service.get_intake(old_id) is None
-    assert ocr_service.get_intake(fresh_id) is not None
+    assert ocr_service.sweep_intake(db_session) == 1
+    db_session.commit()
+    assert ocr_service.get_intake(db_session, old_id) is None
+    assert ocr_service.get_intake(db_session, fresh_id)["data"] == b"y"
 
 
-def test_get_intake_rejects_traversal(tmp_path, monkeypatch):
-    monkeypatch.setattr(ocr_service, "INTAKE_DIR", tmp_path)
-    assert ocr_service.get_intake("..%2f..%2fetc") is None
-    assert ocr_service.get_intake("nothex") is None
+def test_get_intake_rejects_traversal(db_session):
+    assert ocr_service.get_intake(db_session, "..%2f..%2fetc") is None
+    assert ocr_service.get_intake(db_session, "nothex") is None
 
 
 # ---------------------------------------------------------------------------

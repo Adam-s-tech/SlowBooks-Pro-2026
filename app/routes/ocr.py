@@ -6,6 +6,9 @@
 # GET  /api/ocr/status           is Tesseract available? (frontend gating)
 # POST /api/ocr/intake/{id}/attach  link a stored scan to a saved document
 # DELETE /api/ocr/intake/{id}    discard a pending scan
+#
+# A pending scan is kept in the company's own database (stored_files), not
+# in an intake folder every company shared (2.18.0 gate).
 # ============================================================================
 
 import logging
@@ -17,7 +20,6 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models.attachments import Attachment
 from app.models.bills import Bill
 from app.models.invoices import Invoice
 from app.models.transactions import Transaction
@@ -32,11 +34,11 @@ from app.schemas.ocr import (
     OcrWordBox,
 )
 from app.services import (
+    file_store,
     ocr_engines,
     ocr_regions,
     ocr_service,
     ocr_template_store,
-    storage,
 )
 from app.services.rate_limit import limiter
 from app.services.settings_service import get_setting_raw
@@ -52,13 +54,10 @@ ALLOWED_CONTENT_TYPES = {"image/png", "image/jpeg", "image/webp", "application/p
 ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".pdf"}
 _SAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9 ._()\-]")
 
-STATIC_BASE = storage.files_root().resolve()
-UPLOAD_BASE = (STATIC_BASE / "uploads" / "attachments").resolve()
-
 
 def _sanitize_filename(raw: str) -> str:
     """Mirror of attachments._sanitize_filename: strip path separators and
-    restrict to a safe character set before touching the filesystem."""
+    restrict to a safe character set before the name is stored or sent."""
     base = Path(raw or "").name
     if not base or base.startswith("."):
         raise HTTPException(status_code=400, detail="Invalid filename")
@@ -144,8 +143,9 @@ async def scan_receipt(
     lang = result.language
 
     extracted = ocr_service.extract_receipt(raw_text)
+    # Kept in this company's own database until it is attached or discarded.
     intake_id = ocr_service.save_intake(
-        content, file.filename or "receipt", content_type
+        db, content, file.filename or "receipt", content_type
     )
 
     # Date default: receipts without a readable date use today (flagged).
@@ -232,16 +232,16 @@ async def scan_receipt(
 def attach_intake(
     intake_id: str, body: OcrAttachRequest, db: Session = Depends(get_db)
 ):
-    """Move a stored scan into the attachments store for a saved document.
-    The frontend calls this after the bill/receipt is created (spec §6.5);
-    sales receipts attach as entity_type='invoice'."""
+    """Attach a stored scan to a saved document: the scan's stored file
+    becomes the attachment's. The frontend calls this after the bill/receipt
+    is created (spec §6.5); sales receipts attach as entity_type='invoice'."""
     if body.entity_type not in ("invoice", "bill", "expense"):
         raise HTTPException(
             status_code=400,
             detail="entity_type must be 'invoice', 'bill' or 'expense'",
         )
 
-    intake = ocr_service.get_intake(intake_id)
+    intake = ocr_service.intake_file(db, intake_id)
     if intake is None:
         raise HTTPException(
             status_code=404,
@@ -267,33 +267,14 @@ def attach_intake(
             detail=f"{body.entity_type} {body.entity_id} not found",
         )
 
-    # Original filename is user input — sanitize, and prefix with the intake
-    # id so repeated scans of same-named files never collide.
-    safe_filename = _sanitize_filename(intake.get("original_filename") or "receipt")
-    target_name = f"{intake_id[:8]}-{safe_filename}"
-
-    upload_dir = (UPLOAD_BASE / body.entity_type / str(body.entity_id)).resolve()
-    if not upload_dir.is_relative_to(UPLOAD_BASE):
-        raise HTTPException(status_code=400, detail="Invalid path")
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    dest = (upload_dir / target_name).resolve()
-    if not dest.is_relative_to(upload_dir):
-        raise HTTPException(status_code=400, detail="Invalid path")
-    dest.write_bytes(intake["data"])
-
-    attachment = Attachment(
-        entity_type=body.entity_type,
-        entity_id=body.entity_id,
-        filename=safe_filename,
-        file_path=str(dest.relative_to(STATIC_BASE)),
-        mime_type=intake.get("mime_type"),
-        file_size=intake.get("size"),
+    # Original filename is user input — sanitize it. Two scans of the same
+    # name are two stored files, so no prefix is needed to keep them apart.
+    safe_filename = _sanitize_filename(intake.original_name or "receipt")
+    attachment = file_store.attach_stored(
+        db, intake, body.entity_type, body.entity_id, safe_filename
     )
-    db.add(attachment)
     db.commit()
     db.refresh(attachment)
-
-    ocr_service.delete_intake(intake_id)
     return attachment
 
 
@@ -307,11 +288,11 @@ def _intake_image_bytes(intake: dict) -> bytes:
 
 
 @router.get("/intake/{intake_id}/image")
-def intake_image(intake_id: str):
+def intake_image(intake_id: str, db: Session = Depends(get_db)):
     """Serve the stored scan as a PNG/image for the box-to-fix canvas.
     Auth'd like everything else; the intake id is unguessable and expiring,
     but this endpoint still sits behind the session like the rest."""
-    intake = ocr_service.get_intake(intake_id)
+    intake = ocr_service.get_intake(db, intake_id)
     if intake is None:
         raise HTTPException(
             status_code=404,
@@ -342,7 +323,7 @@ def ocr_intake_region(
     """OCR one user-drawn rectangle of a stored scan with field-aware
     settings (crop + upscale + contrast + single-line PSM + charset). The
     canvas calls this when the operator adjusts or draws a box."""
-    intake = ocr_service.get_intake(intake_id)
+    intake = ocr_service.get_intake(db, intake_id)
     if intake is None:
         raise HTTPException(
             status_code=404,
@@ -405,7 +386,8 @@ def ocr_intake_region(
 
 
 @router.delete("/intake/{intake_id}")
-def discard_intake(intake_id: str):
-    """Discard a pending scan (modal cancel / unsaved form). Idempotent."""
-    ocr_service.delete_intake(intake_id)
+def discard_intake(intake_id: str, db: Session = Depends(get_db)):
+    """Discard a pending scan (modal cancel / unsaved form), bytes and all.
+    Idempotent."""
+    ocr_service.delete_intake(db, intake_id)
     return {"status": "deleted"}

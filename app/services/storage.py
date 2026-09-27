@@ -1,17 +1,20 @@
 # ============================================================================
-# Storage roots — where user-generated files (uploads, attachments, backups)
-# live on disk.
+# Storage roots — where files live on disk.
 #
-# Server installs keep the historical locations (app/static/uploads and
-# <repo>/backups) so existing deployments, URLs, and volume mounts are
-# untouched. Desktop installs set SLOWBOOKS_DATA_DIR (launcher-managed,
-# per-user, e.g. %LOCALAPPDATA%\SlowBooksPro\data) because the install dir
-# (Program Files) is read-only at runtime — everything writable is
-# redirected under the data dir.
+# Backups: server installs keep the historical location (<repo>/backups) so
+# existing deployments and volume mounts are untouched. Desktop installs set
+# SLOWBOOKS_DATA_DIR (launcher-managed, per-user, e.g.
+# %LOCALAPPDATA%\SlowBooksPro\data) because the install dir (Program Files)
+# is read-only at runtime — everything writable is redirected under the data
+# dir.
 #
-# Attachment paths stored in the database are relative to files_root() in
-# BOTH modes ("uploads/attachments/..."), so a company database keeps
-# working when moved between a desktop and a server install.
+# Uploads: since 2.18.0 a company's files (logo, attachments, employee
+# documents, scanned receipts) are kept in its own database —
+# app/services/file_store.py. files_root()/uploads_root() name the folder
+# earlier releases wrote EVERY company's uploads to (app/static/uploads on
+# a server, <data dir>/uploads on a desktop). Nothing writes there any more;
+# the upgrade migration (c5e1f7a9b3d2) reads it, once per company, to copy in
+# the files that company's rows point at.
 # ============================================================================
 
 import os
@@ -21,7 +24,8 @@ _APP_DIR = Path(__file__).resolve().parent.parent  # app/
 
 
 def files_root() -> Path:
-    """Root for user-generated web-served files (logo uploads, attachments)."""
+    """Where releases before 2.18.0 kept every company's uploads (the
+    stored attachment paths were relative to this)."""
     override = os.environ.get("SLOWBOOKS_DATA_DIR")
     if override:
         return Path(override)

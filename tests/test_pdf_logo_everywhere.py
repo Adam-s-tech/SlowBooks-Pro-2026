@@ -11,13 +11,9 @@ DATA_URI = "data:image/png;base64,iVBORw0KGgo="
 
 
 @pytest.fixture
-def logo(tmp_path, monkeypatch, client):
-    monkeypatch.setenv("SLOWBOOKS_DATA_DIR", str(tmp_path))
-    (tmp_path / "uploads").mkdir()
-    (tmp_path / "uploads" / "company_logo.png").write_bytes(PNG)
-    r = client.put(
-        "/api/settings", json={"company_logo_path": "/static/uploads/company_logo.png"}
-    )
+def logo(monkeypatch, client):
+    # kept in the company's own database since 2.18.0 (macbase1 NEW-14)
+    r = client.post("/api/uploads/logo", files={"file": ("logo.png", PNG, "image/png")})
     assert r.status_code == 200, r.text
     # capture the HTML the PDF engine would have rendered
     monkeypatch.setattr(pdf_service, "render_pdf", lambda html, **kw: html.encode())

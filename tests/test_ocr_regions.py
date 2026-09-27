@@ -126,7 +126,6 @@ def test_region_reads_back_the_word_the_page_found():
 def test_region_endpoint_end_to_end(client, monkeypatch, tmp_path):
     """Scan a fixture through the API, then region-OCR a full-page merchant
     box via the endpoint using the returned intake id + image endpoint."""
-    monkeypatch.setattr(ocr_service, "INTAKE_DIR", tmp_path)
     fx = FIXTURES[0]
     r = client.post(
         "/api/ocr/receipt",

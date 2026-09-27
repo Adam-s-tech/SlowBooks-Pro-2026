@@ -229,7 +229,6 @@ def test_reads_are_clean_gate():
 
 
 def _mock_engine(monkeypatch, tmp_path, words):
-    monkeypatch.setattr(ocr_service, "INTAKE_DIR", tmp_path)
     monkeypatch.setattr(ocr_service, "tesseract_available", lambda: True)
     monkeypatch.setattr(ocr_service, "ocr_language", lambda: "eng")
     monkeypatch.setattr(ocr_service, "preprocess_page", lambda data: (data, 1))
