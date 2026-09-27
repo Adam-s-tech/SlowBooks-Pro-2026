@@ -47,3 +47,37 @@ for (const kind of ['manual_void', 'qbo_ledger_void', 'bill_payment', 'deposit']
         assert.doesNotMatch(f.dialogs[0].html, /JournalPage\.void/);
     });
 }
+
+// 2.18.0: an entry already voided says "Voided" and offers no Void, in the
+// list and in its view (a second Void used to answer "already voided").
+function listPage(entries) {
+    const context = {
+        API: { get: async url => (url === '/journal' ? entries : entries[0]) },
+        escapeHtml: value => String(value ?? '').replace(/[&<>"']/g, character => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+        })[character]),
+        formatDate: value => value, formatCurrency: value => `$${value}`,
+        CostCodes: { headHtml: () => '' },
+        openModal: (title, html) => { context.shown = html; },
+    };
+    vm.createContext(context);
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../../app/static/js/journal.js'), 'utf8') + '\nthis.JournalPage = JournalPage;', context);
+    return context;
+}
+
+for (const kind of ['manual', 'qbo_journal']) {
+    test(`a voided ${kind} entry shows Voided and no Void, in the list and its view`, async () => {
+        const voided = { ...entry(kind), voided: true };
+        const standing = { ...entry(kind), id: 8, voided: false };
+        const f = listPage([voided, standing]);
+        const html = await f.JournalPage.render();
+        const [first, second] = html.split('<tr>').slice(2);
+        assert.match(first, /Voided/);
+        assert.doesNotMatch(first, /JournalPage\.void\(/);
+        assert.doesNotMatch(second, /Voided/);
+        assert.match(second, /JournalPage\.void\(8\)/);
+        await f.JournalPage.view(7);
+        assert.match(f.shown, /Voided/);
+        assert.doesNotMatch(f.shown, /JournalPage\.void\(/);
+    });
+}

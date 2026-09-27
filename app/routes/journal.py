@@ -66,6 +66,14 @@ def list_journal_entries(source_type: str = None, db: Session = Depends(get_db))
         )
     entries = q.order_by(Transaction.date.desc()).all()
     accounts = {a.id: a for a in db.query(Account).all()}
+    from app.services.qbo_documents import REVERSALS
+
+    voided = {
+        source_id
+        for (source_id,) in db.query(Transaction.source_id).filter(
+            Transaction.source_type.in_(REVERSALS), Transaction.source_id.isnot(None)
+        )
+    }
     results = []
     for txn in entries:
         lines_data = []
@@ -81,6 +89,7 @@ def list_journal_entries(source_type: str = None, db: Session = Depends(get_db))
                 lines=lines_data,
                 total_debit=float(sum(line.debit for line in txn.lines)),
                 total_credit=float(sum(line.credit for line in txn.lines)),
+                voided=txn.id in voided,
             )
         )
     return results
@@ -91,6 +100,8 @@ def get_journal_entry(entry_id: int, db: Session = Depends(get_db)):
     txn = db.query(Transaction).filter(Transaction.id == entry_id).first()
     if not txn:
         raise HTTPException(status_code=404, detail="Journal entry not found")
+    from app.services.qbo_documents import reversed_already
+
     accounts = {a.id: a for a in db.query(Account).all()}
     lines_data = []
     for line in txn.lines:
@@ -104,6 +115,7 @@ def get_journal_entry(entry_id: int, db: Session = Depends(get_db)):
         lines=lines_data,
         total_debit=float(sum(line.debit for line in txn.lines)),
         total_credit=float(sum(line.credit for line in txn.lines)),
+        voided=reversed_already(db, txn),
     )
 
 
@@ -182,6 +194,7 @@ def void_journal_entry(entry_id: int, db: Session = Depends(get_db)):
         # would (its posting is reversed with it), so the two stay together.
         found = qbo_documents.document_of_posting(db, txn)
         if found is not None:
+            from app.models.invoices import InvoiceStatus
             from app.routes.invoices.lifecycle import void_invoice
             from app.routes.payments import void_payment
 
@@ -190,10 +203,13 @@ def void_journal_entry(entry_id: int, db: Session = Depends(get_db)):
                 void_payment(document.id, db)
             else:
                 if kind == "sales_receipt":
+                    # Its payment's void voids the receipt too.
                     for alloc in list(document.payment_allocations):
                         if alloc.payment is not None and not alloc.payment.is_voided:
                             void_payment(alloc.payment_id, db)
-                void_invoice(document.id, db)
+                    db.refresh(document)
+                if document.status != InvoiceStatus.VOID:
+                    void_invoice(document.id, db)
             reversal = (
                 db.query(Transaction)
                 .filter(

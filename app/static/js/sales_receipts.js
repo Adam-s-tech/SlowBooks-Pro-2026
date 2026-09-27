@@ -93,7 +93,10 @@ const SalesReceiptsPage = {
             const sr = await API.get(`/invoices/${id}`);
             const payment = await SalesReceiptsPage._findPayment(sr);
             if (payment) await API.post(`/payments/${payment.id}/void`);
-            await API.post(`/invoices/${id}/void`);
+            // A receipt brought in from QuickBooks Online is voided with its
+            // payment; any other is voided here.
+            const after = payment ? await API.get(`/invoices/${id}`) : sr;
+            if (after.status !== 'void') await API.post(`/invoices/${id}/void`);
             toast('Sales receipt voided');
             closeModal();
             App.navigate(location.hash);

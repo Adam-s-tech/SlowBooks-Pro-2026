@@ -81,6 +81,18 @@ def skipped(message="Existing record; no duplicate created"):
         reporter.skip(message)
 
 
+def kept(key, message=None) -> bool:
+    """A transaction changed in SlowBooks, which the import keeps as it is
+    here (qbo_common.kept_here): counted in the run's one line for them,
+    with `message` as its own line when given. True when a run's log
+    counted it."""
+    reporter = _reporter.get()
+    if reporter:
+        reporter.keep(key, message)
+        return True
+    return False
+
+
 def mapped(entity, qbo_id):
     reporter = _reporter.get()
     if reporter and reporter.matches(entity, qbo_id):

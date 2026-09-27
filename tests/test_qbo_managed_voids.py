@@ -120,12 +120,21 @@ class Books:
             lambda cls, client: self.sources.get(cls, []),
         )
         monkeypatch.setattr(qbo_ledger_import, "get_qbo_client", lambda db: self._gl())
+        # what the import log says of each item it skips or keeps
         self.kept = []
-        original = qbo_progress.skipped
+        original, keep = qbo_progress.skipped, qbo_progress.kept
         monkeypatch.setattr(
             qbo_progress,
             "skipped",
             lambda message="": (self.kept.append(message), original(message)),
+        )
+        monkeypatch.setattr(
+            qbo_progress,
+            "kept",
+            lambda key, message=None: (
+                self.kept.append(message) if message else None,
+                keep(key, message),
+            )[1],
         )
 
     def _gl(self):
@@ -233,18 +242,27 @@ def test_voiding_a_qbo_payment_reverses_its_import_posting(client, books):
     assert books.balance("1200") == Decimal("30.00")  # the receipt's cash only
 
 
-def test_voiding_a_qbo_sales_receipt_takes_it_off_the_books(client, books):
-    """The Sales Receipts page voids the receipt's payment, then the receipt."""
+@pytest.mark.parametrize("ledger_ran", [True, False])
+def test_voiding_a_qbo_sales_receipts_payment_voids_the_receipt_too(
+    client, books, ledger_ran
+):
+    """Through the API alone, as the Sales Receipts page does it: the
+    receipt is voided with its payment, never left open with nothing in
+    A/R (the payment's void reverses the receipt's import posting)."""
     books.documents()
-    books.ledger()
+    if ledger_ran:
+        books.ledger()
     receipt = books.invoice("SR-9")
     payment = receipt.payment_allocations[0].payment
-    assert client.post(f"/api/payments/{payment.id}/void").status_code == 200
-    r = client.post(f"/api/invoices/{receipt.id}/void")
+    r = client.post(f"/api/payments/{payment.id}/void")
     assert r.status_code == 200, r.text
-    assert books.balance("4000") == Decimal("90.00")  # the 30.00 sale is gone
-    assert books.balance("1200") == Decimal("20.00")  # its cash too
-    assert books.balance("1100") == Decimal("70.00")  # A/R untouched
+    receipt = books.invoice("SR-9")
+    assert receipt.status == InvoiceStatus.VOID
+    assert receipt.balance_due == Decimal("0")
+    if ledger_ran:
+        assert books.balance("4000") == Decimal("90.00")  # the 30.00 sale is gone
+        assert books.balance("1200") == Decimal("20.00")  # its cash too
+        assert books.balance("1100") == Decimal("70.00")  # A/R untouched
 
 
 def test_a_qbo_payment_deposited_voids_once_its_deposit_is_voided(client, books):

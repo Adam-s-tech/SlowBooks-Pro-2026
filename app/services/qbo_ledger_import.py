@@ -22,12 +22,14 @@ from app.services.accounting import create_journal_entry
 from app.services.closing_date import check_closing_date
 from app.services.qbo_common import (
     CHANGED_HERE,
+    HERE,
     NOT_OWNED,
     VOIDED_IN_QBO,
     apply_rollup_repair,
     get_mapping_by_qbo_id,
     is_journal_entry_type,
     journal_posting_matches,
+    kept_here,
     legacy_rollup_repair,
     rebase_account_balances,
 )
@@ -214,14 +216,14 @@ def _posted_document(db: Session, txn_type: str, qbo_id: str) -> str | None:
     from app.models.invoices import Invoice
     from app.models.payments import Payment
 
+    if _documents_here(db, txn_type, qbo_id):
+        return CHANGED_HERE
     kinds = _MAPPED_DOCUMENTS.get(txn_type.lower().replace(" ", ""))
     if not kinds:
         return None
     for mapping in db.query(QBOMapping).filter(
         QBOMapping.entity_type.in_(kinds), QBOMapping.qbo_id == qbo_id
     ):
-        if mapping.qbo_sync_token == CHANGED_HERE:
-            return CHANGED_HERE
         model = Payment if mapping.entity_type == "payment" else Invoice
         document = db.get(model, mapping.slowbooks_id)
         if document is not None and document.transaction_id is not None:
@@ -230,9 +232,32 @@ def _posted_document(db: Session, txn_type: str, qbo_id: str) -> str | None:
     return None
 
 
-def _kept_here() -> None:
-    """One line in the import log: changed here, so the import leaves it."""
-    qbo_progress.skipped("Changed in SlowBooks; kept as it is here")
+def _documents_here(db: Session, txn_type: str, qbo_id: str) -> list:
+    """The mappings of the local document for a QBO transaction, when that
+    document was voided or edited here (qbo_common.HERE)."""
+    kinds = _MAPPED_DOCUMENTS.get(txn_type.lower().replace(" ", ""))
+    if not kinds:
+        return []
+    return (
+        db.query(QBOMapping)
+        .filter(
+            QBOMapping.entity_type.in_(kinds),
+            QBOMapping.qbo_id == qbo_id,
+            QBOMapping.qbo_sync_token.in_(HERE),
+        )
+        .all()
+    )
+
+
+def _kept(key: str, mappings) -> None:
+    """Changed here, so the import leaves it as it is: one line for the
+    run counts it (qbo_common.kept_here). A journal is the same transaction
+    to the JournalEntry import, which may have kept it earlier in the run."""
+    txn_type, _, qbo_id = key.partition(":")
+    kept_here(
+        ("journal", qbo_id) if is_journal_entry_type(txn_type) else ("ledger", key),
+        mappings,
+    )
 
 
 def _document(key: str, number: str) -> str:
@@ -414,12 +439,14 @@ def import_ledger(
         .all()
     }
 
-    def changed_here(key: str) -> bool:
+    def changed_here(key: str) -> list:
+        """The mappings saying it was voided or edited here, which a later
+        import leaves as it is; empty when it was not."""
         existing = tracked.get(key)
         if existing is not None:
-            return existing.qbo_sync_token == CHANGED_HERE
+            return [existing] if existing.qbo_sync_token in HERE else []
         txn_type, _, qbo_id = key.partition(":")
-        return _posted_document(db, txn_type, qbo_id) == CHANGED_HERE
+        return _documents_here(db, txn_type, qbo_id)
 
     def imported(key: str) -> bool:
         """Posted by an earlier import, and still the import's to update."""
@@ -477,8 +504,9 @@ def import_ledger(
     voids = []  # QBO voided an imported transaction: reverse, void its document
     for key, entry in entries.items():
         qbo_progress.item(key, entry["number"])
-        if changed_here(key):
-            _kept_here()
+        here = changed_here(key)
+        if here:
+            _kept(key, here)
             continue
         existing = tracked.get(key)
         if (key, entry["number"]) in missing_accounts:
@@ -520,8 +548,8 @@ def import_ledger(
             journal_map = get_mapping_by_qbo_id(
                 db, "journal_entry", key.partition(":")[2]
             )
-            if journal_map and journal_map.qbo_sync_token == CHANGED_HERE:
-                _kept_here()
+            if journal_map and journal_map.qbo_sync_token in HERE:
+                _kept(key, [journal_map])
                 continue
             if journal_map:
                 # The journal import brings this journal, and its changes.
@@ -581,9 +609,9 @@ def import_ledger(
     # Voided in QBO: an imported transaction whose rows now all read 0.00.
     for key in sorted(zeroed - entries.keys()):
         existing = tracked.get(key)
-        if existing is not None and existing.qbo_sync_token == CHANGED_HERE:
+        if existing is not None and existing.qbo_sync_token in HERE:
             qbo_progress.item(key, "")
-            _kept_here()
+            _kept(key, [existing])
             continue
         if existing is None or not imported(key):
             continue

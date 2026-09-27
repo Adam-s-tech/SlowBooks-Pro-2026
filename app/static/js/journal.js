@@ -26,6 +26,7 @@ const JournalPage = {
                     <td class="amount">${formatCurrency(e.total_credit)}</td>
                     <td class="actions">
                         <button class="btn btn-sm btn-secondary" onclick="JournalPage.view(${e.id})">View</button>
+                        ${e.voided ? '<span class="journal-voided" style="color:var(--danger);font-weight:700;">Voided</span>' : ''}
                         ${JournalPage.canVoid(e) ? `<button class="btn btn-sm btn-danger" onclick="JournalPage.void(${e.id})">Void</button>` : ''}
                     </td>
                 </tr>`;
@@ -39,7 +40,7 @@ const JournalPage = {
     // here with a reversing entry; a document's own posting (a bill payment,
     // a deposit...) voids from its document, so its view offers no Void.
     canVoid(e) {
-        return ['manual', 'qbo_journal', 'qbo_ledger'].includes(e.source_type || '');
+        return !e.voided && ['manual', 'qbo_journal', 'qbo_ledger'].includes(e.source_type || '');
     },
 
     async view(id) {
@@ -57,6 +58,7 @@ const JournalPage = {
                 <strong>Description:</strong> ${escapeHtml(entry.description)}<br>
                 ${entry.reference ? `<strong>Reference:</strong> ${escapeHtml(entry.reference)}<br>` : ''}
                 <strong>Type:</strong> ${escapeHtml(entry.source_type)}
+                ${entry.voided ? '<div class="journal-voided" style="color:var(--danger);font-weight:700;margin-top:6px;">Voided</div>' : ''}
             </div>
             <div class="table-container"><table>
                 <thead><tr><th scope="col">Account</th><th scope="col">Description</th>${CostCodes.headHtml()}<th scope="col" class="amount">Debit</th><th scope="col" class="amount">Credit</th></tr></thead>

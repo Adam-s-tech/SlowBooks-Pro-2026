@@ -123,3 +123,75 @@ def test_an_edit_before_the_ledger_import_is_not_posted_again_by_it(client, book
     books.ledger()
     assert books.balance("1100") == Decimal("85.00")  # + 1037's 30, not 1038 again
     assert books.kept.count(KEPT) == 1
+
+
+def _aging(books):
+    """What A/R Aging adds up: every open invoice's balance."""
+    from app.models.invoices import Invoice
+
+    books.db.expire_all()
+    return sum(
+        (inv.balance_due for inv in books.db.query(Invoice) if inv.status != "void"),
+        Decimal("0"),
+    )
+
+
+def test_an_edit_before_the_ledger_import_brings_the_invoices_payment_in_too(
+    client, books
+):
+    """The ledger import has not run: nothing from QBO is in the books. The
+    edited invoice posts its A/R, and its QBO payment (20.00) is posted
+    with it, so A/R is right at once, and later imports keep both."""
+    from app.models.payments import Payment
+
+    books.documents()
+    invoice = books.invoice("1037")
+    r = client.put(
+        f"/api/invoices/{invoice.id}",
+        json={"lines": [{"description": "Catering", "quantity": 1, "rate": 60}]},
+    )
+    assert r.status_code == 200, r.text
+    assert books.balance("1100") == Decimal("40.00")  # 60 less the 20 paid
+    payment = books.db.query(Payment).filter_by(amount=Decimal("20")).one()
+    assert payment.transaction_id is not None
+    books.ledger()
+    assert books.balance("1100") == Decimal("80.00") == _aging(books)  # + 1038's 40
+
+
+def test_a_payment_shared_with_another_invoice_brings_that_invoice_in_too(
+    client, books
+):
+    """The QBO payment also paid 10.00 of invoice 1038: that part of its
+    credit to A/R needs 1038's debit there too."""
+    from quickbooks.objects.payment import Payment as QBOPayment
+
+    books.sources[QBOPayment] = [
+        QBOPayment.from_json(
+            {
+                "Id": "131",
+                "TxnDate": "2026-08-03",
+                "TotalAmt": 30,
+                "CustomerRef": {"value": "58", "name": "Acme Diner"},
+                "DepositToAccountRef": {"value": "35"},
+                "Line": [
+                    {
+                        "Amount": 20,
+                        "LinkedTxn": [{"TxnId": "130", "TxnType": "Invoice"}],
+                    },
+                    {
+                        "Amount": 10,
+                        "LinkedTxn": [{"TxnId": "133", "TxnType": "Invoice"}],
+                    },
+                ],
+            }
+        )
+    ]
+    books.documents()
+    invoice = books.invoice("1037")
+    r = client.put(
+        f"/api/invoices/{invoice.id}",
+        json={"lines": [{"description": "Catering", "quantity": 1, "rate": 60}]},
+    )
+    assert r.status_code == 200, r.text
+    assert books.invoice("1038").transaction_id is not None
+    assert books.balance("1100") == Decimal("70.00") == _aging(books)  # 40 + 30

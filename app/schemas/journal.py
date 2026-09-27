@@ -53,3 +53,6 @@ class JournalEntryResponse(BaseModel):
     lines: list[JournalLineResponse] = []
     total_debit: float = 0
     total_credit: float = 0
+    # A reversing entry stands against it (its own void, or its document's):
+    # the page shows "Voided" instead of offering Void again.
+    voided: bool = False

@@ -226,9 +226,24 @@ def rebase_account_balances(db: Session, accounts) -> None:
 # "journal_entry" mapping) that the import no longer owns. Otherwise it
 # holds QBO's SyncToken (journals) or the posting's fingerprint (ledger).
 CHANGED_HERE = "changed-in-slowbooks"  # voided or replaced here: kept as is
+KEPT_HERE = "kept-in-slowbooks"  # the same, once an import's log said so
+HERE = (CHANGED_HERE, KEPT_HERE)
 VOIDED_IN_QBO = "voided-in-qbo"  # reversed by the import: QBO voided it
 DELETED_IN_QBO = "deleted-in-qbo"  # reversed by the import: QBO deleted it
-NOT_OWNED = (CHANGED_HERE, VOIDED_IN_QBO, DELETED_IN_QBO)
+NOT_OWNED = (CHANGED_HERE, KEPT_HERE, VOIDED_IN_QBO, DELETED_IN_QBO)
+KEPT_MESSAGE = "Changed in SlowBooks; kept as it is here"
+
+
+def kept_here(key, mappings) -> None:
+    """An import leaves a transaction changed in SlowBooks as it is here.
+    The run's log counts it in one line for the run (qbo_progress.kept);
+    the first run to keep it also gives it a line of its own, and marks
+    its mappings KEPT_HERE so that later runs only count it. `key` names
+    the transaction once however many steps of a run keep it."""
+    first = [m for m in mappings if m is not None and m.qbo_sync_token == CHANGED_HERE]
+    if qbo_progress.kept(key, KEPT_MESSAGE if first else None):
+        for mapping in first:
+            mapping.qbo_sync_token = KEPT_HERE
 
 
 def ledger_posting(db: Session, txn_type: str, qbo_id) -> QBOMapping | None:

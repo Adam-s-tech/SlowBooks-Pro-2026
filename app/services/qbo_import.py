@@ -28,8 +28,8 @@ from app.models.payments import Payment, PaymentAllocation
 from app.models.qbo_mapping import QBOMapping
 from app.models.transactions import Transaction
 from app.services.qbo_common import (
-    CHANGED_HERE,
     DELETED_IN_QBO,
+    HERE,
     NOT_OWNED,
     QBO_TO_ACCOUNT_TYPE,
     VOIDED_IN_QBO,
@@ -39,6 +39,7 @@ from app.services.qbo_common import (
     get_mapping_by_qbo_id,
     is_journal_entry_type,
     journal_posting_matches,
+    kept_here,
     ledger_posting,
     legacy_rollup_repair,
     rebase_account_balances,
@@ -266,6 +267,56 @@ def _sync_bank_identity(db: Session, account: Account, qbo_type: str) -> None:
 _LABEL = {"invoice": "Invoice", "sales_receipt": "Sales receipt", "payment": "Payment"}
 
 
+def _tax_code(detail) -> bool | None:
+    """A QBO sales line's taxable flag, from its TaxCodeRef: "TAX" taxable,
+    "NON" not (a US company's two codes); None when it has no code."""
+    ref = _safe(detail, "TaxCodeRef")
+    code = str(_safe(ref, "value", "") or "").strip().upper() if ref else ""
+    return True if code == "TAX" else False if code == "NON" else None
+
+
+def _qbo_rate(source, lines, tax) -> Decimal:
+    """QBO's sales tax as a document's rate (a fraction): its tax lines'
+    percentages together, when they are all percentages of one taxable
+    amount and that rate, as stored (four places), applied to the lines
+    marked taxable, gives QBO's tax to the cent, so an edit re-totals to
+    QBO's total. 0 otherwise: the document keeps QBO's tax amount, and an
+    edit keeps it as it is rather than working it out as 0.00."""
+    from app.services.accounting import _q
+
+    if not tax:
+        return Decimal("0")
+    detail = _safe(source, "TxnTaxDetail")
+    percents, bases = [], set()
+    for tax_line in (_safe(detail, "TaxLine") or []) if detail else []:
+        line_detail = _safe(tax_line, "TaxLineDetail")
+        percent = _field(line_detail, "TaxPercent") if line_detail else None
+        if (
+            not line_detail
+            or not _field(line_detail, "PercentBased")
+            or percent is None
+        ):
+            return Decimal("0")
+        percents.append(Decimal(str(percent)))
+        base = _field(line_detail, "NetAmountTaxable")
+        if base is not None:
+            bases.add(Decimal(str(base)))
+    if not percents or len(bases) > 1:
+        return Decimal("0")
+    rate = (sum(percents) / 100).quantize(Decimal("0.0001"))
+    taxable = _q(
+        sum(
+            (
+                _q(line["quantity"] * line["rate"])
+                for line in lines
+                if line["is_taxable"]
+            ),
+            Decimal("0"),
+        )
+    )
+    return rate if _q(taxable * rate) == _q(tax) else Decimal("0")
+
+
 def _document_values(db, source, kind) -> dict:
     """What the document import makes of a QBO invoice or sales receipt: the
     same reading as when it first came in, for bringing one it made up to
@@ -290,6 +341,7 @@ def _document_values(db, source, kind) -> dict:
             item_map = get_mapping_by_qbo_id(db, "item", _safe(item_ref, "value", ""))
             if item_map:
                 item_id = item_map.slowbooks_id
+        taxable = _tax_code(detail)
         lines.append(
             {
                 "item_id": item_id,
@@ -297,6 +349,7 @@ def _document_values(db, source, kind) -> dict:
                 "quantity": _safe_decimal(detail, "Qty") or Decimal("1"),
                 "rate": _safe_decimal(detail, "UnitPrice"),
                 "amount": _safe_decimal(qbo_line, "Amount"),
+                "is_taxable": True if taxable is None else taxable,
             }
         )
     due = day if kind == "sales_receipt" else _parse_qbo_date(_safe(source, "DueDate"))
@@ -307,6 +360,7 @@ def _document_values(db, source, kind) -> dict:
         "due_date": due,
         "subtotal": total - tax,
         "tax_amount": tax,
+        "tax_rate": _qbo_rate(source, lines, tax),
         "total": total,
         "lines": lines,
     }
@@ -316,12 +370,21 @@ def _same_document(invoice, values) -> bool:
     header = ("customer_id", "job_id", "date", "due_date", "subtotal", "tax_amount")
     if any(getattr(invoice, key) != values[key] for key in header + ("total",)):
         return False
+    if Decimal(str(invoice.tax_rate or 0)) != values["tax_rate"]:
+        return False
     ours = [
-        (ln.item_id, ln.description, ln.quantity, ln.rate, ln.amount)
+        (ln.item_id, ln.description, ln.quantity, ln.rate, ln.amount, ln.is_taxable)
         for ln in sorted(invoice.lines, key=lambda ln: ln.line_order)
     ]
     theirs = [
-        (ln["item_id"], ln["description"], ln["quantity"], ln["rate"], ln["amount"])
+        (
+            ln["item_id"],
+            ln["description"],
+            ln["quantity"],
+            ln["rate"],
+            ln["amount"],
+            ln["is_taxable"],
+        )
         for ln in values["lines"]
     ]
     return ours == theirs
@@ -409,6 +472,7 @@ def _refresh_invoice(db, mapping, source, kind, errors) -> None:
     for key in ("customer_id", "job_id", "date", "due_date", "subtotal"):
         setattr(invoice, key, values[key])
     invoice.tax_amount, invoice.total = values["tax_amount"], values["total"]
+    invoice.tax_rate = values["tax_rate"]
     db.query(InvoiceLine).filter(InvoiceLine.invoice_id == invoice.id).delete()
     db.flush()
     for order, line in enumerate(values["lines"]):
@@ -1154,6 +1218,7 @@ def import_invoices(db: Session) -> dict:
 
             # Process line items — only SalesItemLineDetail
             line_order = 0
+            made = []
             lines = _safe(qbo_inv, "Line") or []
             for qbo_line in lines:
                 detail_type = _safe(qbo_line, "DetailType", "")
@@ -1176,6 +1241,9 @@ def import_invoices(db: Session) -> dict:
                 qty = _safe_decimal(detail, "Qty") or Decimal("1")
                 rate = _safe_decimal(detail, "UnitPrice")
                 amount = _safe_decimal(qbo_line, "Amount")
+                taxable = _tax_code(detail)
+                taxable = True if taxable is None else taxable
+                made.append({"quantity": qty, "rate": rate, "is_taxable": taxable})
 
                 inv_line = InvoiceLine(
                     invoice_id=invoice.id,
@@ -1184,10 +1252,13 @@ def import_invoices(db: Session) -> dict:
                     quantity=qty,
                     rate=rate,
                     amount=amount,
+                    is_taxable=taxable,
                     line_order=line_order,
                 )
                 db.add(inv_line)
                 line_order += 1
+            # QBO's tax as a rate, when one rate gives it (_qbo_rate).
+            invoice.tax_rate = _qbo_rate(qbo_inv, made, tax_amount)
 
             create_mapping(
                 db, "invoice", invoice.id, qbo_id, _safe(qbo_inv, "SyncToken")
@@ -1480,6 +1551,7 @@ def import_sales_receipts(db: Session) -> dict:
 
             # Process line items — only SalesItemLineDetail
             line_order = 0
+            made = []
             lines = _safe(qbo_sr, "Line") or []
             for qbo_line in lines:
                 detail_type = _safe(qbo_line, "DetailType", "")
@@ -1501,6 +1573,9 @@ def import_sales_receipts(db: Session) -> dict:
                 qty = _safe_decimal(detail, "Qty") or Decimal("1")
                 rate = _safe_decimal(detail, "UnitPrice")
                 amount = _safe_decimal(qbo_line, "Amount")
+                taxable = _tax_code(detail)
+                taxable = True if taxable is None else taxable
+                made.append({"quantity": qty, "rate": rate, "is_taxable": taxable})
 
                 inv_line = InvoiceLine(
                     invoice_id=invoice.id,
@@ -1509,10 +1584,13 @@ def import_sales_receipts(db: Session) -> dict:
                     quantity=qty,
                     rate=rate,
                     amount=amount,
+                    is_taxable=taxable,
                     line_order=line_order,
                 )
                 db.add(inv_line)
                 line_order += 1
+            # QBO's tax as a rate, when one rate gives it (_qbo_rate).
+            invoice.tax_rate = _qbo_rate(qbo_sr, made, tax_amount)
 
             # Payment for the full total, deposited where QBO says
             deposit_account_id = None
@@ -1856,9 +1934,9 @@ def import_journal_entries(db: Session) -> dict:
                 ) from exc
             mapping = get_mapping_by_qbo_id(db, "journal_entry", qbo_id)
             legacy = ledger_mappings.get(qbo_id, [])
-            if any(m.qbo_sync_token == CHANGED_HERE for m in [mapping, *legacy] if m):
+            if any(m.qbo_sync_token in HERE for m in [mapping, *legacy] if m):
                 # Voided here: a later import leaves it as it is.
-                qbo_progress.skipped("Changed in SlowBooks; kept as it is here")
+                kept_here(("journal", qbo_id), [mapping, *legacy])
                 continue
             owned = [m for m in [mapping, *legacy] if m]
             if not owned and _non_posting_journal(qbo_entry, client, txn_date):

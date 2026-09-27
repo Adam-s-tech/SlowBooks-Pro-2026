@@ -34,11 +34,19 @@ def journals(db_session, monkeypatch):
     client = QBOClient([_entry()])
     monkeypatch.setattr(qbo_import, "get_qbo_client", lambda db: client)
     kept = []
-    original = qbo_progress.skipped
+    original, keep = qbo_progress.skipped, qbo_progress.kept
     monkeypatch.setattr(
         qbo_progress,
         "skipped",
         lambda message="": (kept.append(message), original(message)),
+    )
+    monkeypatch.setattr(
+        qbo_progress,
+        "kept",
+        lambda key, message=None: (
+            kept.append(message) if message else None,
+            keep(key, message),
+        )[1],
     )
     assert qbo_import.import_journal_entries(db_session)["imported"] == 1
     db_session.commit()
@@ -115,3 +123,14 @@ def test_an_entry_voided_by_its_own_void_is_not_voided_again_as_a_journal(
     r = client.post(f"/api/journal/{entry}/void")
     assert r.status_code == 400
     assert r.json()["detail"] == "This journal entry has already been voided."
+
+
+def test_a_voided_journal_says_so_in_the_list_and_on_its_own(
+    client, db_session, journals
+):
+    journal = db_session.query(Transaction).one()
+    assert client.get(f"/api/journal/{journal.id}").json()["voided"] is False
+    assert client.post(f"/api/journal/{journal.id}/void").status_code == 200
+    listed = {e["id"]: e["voided"] for e in client.get("/api/journal").json()}
+    assert listed == {journal.id: True}  # its reversal is not listed
+    assert client.get(f"/api/journal/{journal.id}").json()["voided"] is True

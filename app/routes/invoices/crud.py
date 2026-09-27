@@ -26,6 +26,7 @@ from app.routes.invoices.helpers import (
     _due_date_from_terms,
     _compute_totals,
     _post_invoice_journal,
+    kept_tax,
     _reverse_and_delete_journal,
 )
 from app.services.donor_documents import document_label
@@ -312,6 +313,9 @@ def update_invoice(invoice_id: int, data: InvoiceUpdate, db: Session = Depends(g
                 )
         tax_rate = data.tax_rate if data.tax_rate is not None else invoice.tax_rate
         subtotal, tax_amount, total = _compute_totals(effective_lines, tax_rate)
+        kept = kept_tax(invoice, tax_rate, effective_lines)
+        if kept is not None:
+            tax_amount, total = kept, _q(subtotal + kept)
         confirm_zero_total(
             total,
             data.allow_zero_total,

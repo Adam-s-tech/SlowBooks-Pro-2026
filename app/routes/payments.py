@@ -426,6 +426,10 @@ def void_payment(payment_id: int, db: Session = Depends(get_db)):
     # ledger import's posting, not one of its own.
     refuse_void_if_deposited(db, payment, qbo_documents.money_in_posting(db, payment))
     qbo_documents.void_payment_import_posting(db, payment)
+    # The QuickBooks Online sales receipt this payment is the payment half
+    # of, if any: it is voided with it (below), as the Sales Receipts page
+    # does, so it is never left open with nothing in A/R.
+    receipt = qbo_documents.sales_receipt_of(db, payment)
 
     # Reverse journal entry
     if payment.transaction_id:
@@ -506,5 +510,9 @@ def void_payment(payment_id: int, db: Session = Depends(get_db)):
 
     payment.is_voided = True
     db.commit()
+    if receipt is not None:
+        from app.routes.invoices.lifecycle import void_invoice
+
+        void_invoice(receipt.id, db)
     db.refresh(payment)
     return _response(payment)
