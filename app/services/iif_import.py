@@ -30,6 +30,7 @@ from app.models.transactions import Transaction
 from app.services.csv_export import strip_formula_guard
 from app.services.iif_common import IIF_TO_ACCOUNT_TYPE, IIF_TO_ITEM_TYPE
 from app.services.jobs_service import resolve_customer_and_job, split_customer_job
+from app.services.name_case import normalize_name
 from app.services.accounting import (
     _q,
     create_journal_entry,
@@ -127,6 +128,20 @@ def parse_iif(content: str) -> dict:
     return result
 
 
+def _unquote_iif(raw: str) -> str:
+    """Drop the double quotes IIF wraps around any field containing a comma.
+
+    QuickBooks quotes such fields on export (``"ACME, Inc."``); the quotes are
+    delimiters, not part of the value, so they must not reach the database.
+    Only a matched surrounding pair is removed, so a name that legitimately
+    ends in a quote character survives.
+    """
+    value = raw.strip()
+    if len(value) >= 2 and value.startswith('"') and value.endswith('"'):
+        return value[1:-1].strip()
+    return value
+
+
 def _fields_to_dict(header: list, fields: list) -> dict:
     """Map positional fields to named dict using header row."""
     d = {}
@@ -134,7 +149,7 @@ def _fields_to_dict(header: list, fields: list) -> dict:
         if name.startswith("!"):
             name = name[1:]  # strip ! from first field if present
         if i < len(fields):
-            d[name] = strip_formula_guard(fields[i].strip())
+            d[name] = strip_formula_guard(_unquote_iif(fields[i]))
         else:
             d[name] = ""
     return d
@@ -324,7 +339,7 @@ def import_accounts(db: Session, rows: list) -> dict:
     for i, row in enumerate(rows):
         sp = db.begin_nested()  # savepoint — isolate per-row failures
         try:
-            full_name = row.get("NAME", "").strip()
+            full_name = normalize_name(row.get("NAME", "").strip()) or ""
             if not full_name:
                 errors.append({"row": i + 1, "message": "Missing account NAME"})
                 sp.rollback()
@@ -518,7 +533,7 @@ def import_customers(db: Session, rows: list) -> dict:
     for i, row in enumerate(rows):
         sp = db.begin_nested()
         try:
-            name = row.get("NAME", "").strip()[:200]
+            name = (normalize_name(row.get("NAME", "").strip()) or "")[:200]
             if not name:
                 errors.append({"row": i + 1, "message": "Missing customer NAME"})
                 sp.rollback()
@@ -581,7 +596,7 @@ def import_vendors(db: Session, rows: list) -> dict:
     for i, row in enumerate(rows):
         sp = db.begin_nested()
         try:
-            name = row.get("NAME", "").strip()[:200]
+            name = (normalize_name(row.get("NAME", "").strip()) or "")[:200]
             if not name:
                 errors.append({"row": i + 1, "message": "Missing vendor NAME"})
                 sp.rollback()
@@ -632,7 +647,7 @@ def import_items(db: Session, rows: list) -> dict:
     for i, row in enumerate(rows):
         sp = db.begin_nested()
         try:
-            name = row.get("NAME", "").strip()
+            name = normalize_name(row.get("NAME", "").strip()) or ""
             if not name:
                 errors.append({"row": i + 1, "message": "Missing item NAME"})
                 sp.rollback()
