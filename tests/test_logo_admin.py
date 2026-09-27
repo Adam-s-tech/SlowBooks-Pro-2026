@@ -43,3 +43,36 @@ def test_settings_offers_remove_logo():
     js = (ROOT / "app/static/js/settings.js").read_text(encoding="utf-8")
     assert 'onclick="SettingsPage.removeLogo()">Remove logo</button>' in js
     assert "await API.del('/uploads/logo');" in js
+
+
+def test_settings_offers_the_logo_picker_to_an_administrator_only():
+    # A bookkeeper was offered the file picker and answered 403 after
+    # choosing a file; the page says who changes the logo instead.
+    import json
+    import subprocess
+
+    out = subprocess.run(
+        ["node", str(ROOT / "tests" / "js" / "settings_logo_role_probe.js")],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=60,
+    )
+    assert out.returncode == 0, out.stdout + out.stderr
+    rows = {r["role"]: r for r in map(json.loads, out.stdout.splitlines())}
+    assert rows["admin"] == {
+        "role": "admin",
+        "picker": True,
+        "remove": True,
+        "adminOnly": False,
+        "preview": True,
+    }
+    for role in ("bookkeeper", "readonly"):
+        assert rows[role] == {
+            "role": role,
+            "picker": False,
+            "remove": False,
+            "adminOnly": True,
+            "preview": True,
+        }, rows[role]

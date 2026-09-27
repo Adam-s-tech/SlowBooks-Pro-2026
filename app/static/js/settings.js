@@ -100,9 +100,10 @@ const SettingsPage = {
                         <div class="form-group">
                             ${s.company_logo_path && !(logo && logo.missing) ? `<img id="company-logo-preview" src="${escapeHtml(s.company_logo_path)}" style="max-width:200px; max-height:80px; margin-bottom:8px; display:block;">` : ''}
                             ${SettingsPage._logoNote(logo)}
-                            <input type="file" id="logo-upload" accept="image/*" onchange="SettingsPage.uploadLogo(this)">
-                            ${s.company_logo_path && SettingsPage._isAdmin() ? `<button type="button" class="btn btn-sm btn-secondary" data-write style="margin-left:6px;" onclick="SettingsPage.removeLogo()">Remove logo</button>` : ''}
-                            <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">PNG, JPG, GIF, WebP, or SVG &middot; max 5 MB &middot; 200&times;80 px recommended.</div>
+                            ${SettingsPage._isAdmin() ? `<input type="file" id="logo-upload" accept="image/*" onchange="SettingsPage.uploadLogo(this)">
+                            ${s.company_logo_path ? `<button type="button" class="btn btn-sm btn-secondary" data-write style="margin-left:6px;" onclick="SettingsPage.removeLogo()">Remove logo</button>` : ''}
+                            <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">PNG, JPG, GIF, WebP, or SVG &middot; max 5 MB &middot; 200&times;80 px recommended.</div>`
+                            : `<div id="logo-admin-only" style="font-size:10px; color:var(--text-muted);">Only an administrator can change the logo.</div>`}
                             ${s.company_logo_path ? `<div style="margin-top:8px;">
                                 <label for="invoice-show-logo" style="font-weight:normal;">
                                     <input type="checkbox" id="invoice-show-logo" name="invoice_show_logo" value="true" style="width:auto; vertical-align:middle; margin-right:6px;" ${s.invoice_show_logo !== 'false' ? 'checked' : ''}>
