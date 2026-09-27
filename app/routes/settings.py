@@ -21,6 +21,7 @@ from app.services.settings_service import (
     get_all_settings,
     redact_secrets,
     set_setting,
+    unreadable_secret_keys,
 )
 
 # Aliases used by upstream Phase 9/10 routes that import from this module
@@ -78,6 +79,17 @@ def get_settings(db: Session = Depends(get_db)):
     above 1.
     """
     return _redact_secrets(get_all_settings(db))
+
+
+@router.get("/unreadable-secrets")
+def get_unreadable_secrets(db: Session = Depends(get_db)):
+    """Settings saved encrypted under a key this install no longer has.
+
+    They read as not set, so what uses them stops (email, a payment
+    provider, a bank feed) instead of every page failing; Settings names
+    them to be entered again. Recreating a Docker container before 2.18
+    lost its settings key this way."""
+    return {"keys": unreadable_secret_keys(db)}
 
 
 def _guard_closing_period(request: Request, db: Session, fields: dict):

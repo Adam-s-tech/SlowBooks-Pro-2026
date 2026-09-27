@@ -12,7 +12,9 @@ from decimal import Decimal, InvalidOperation
 from sqlalchemy.orm import Session
 
 from app.models.settings import Settings, DEFAULT_SETTINGS
-from app.services.crypto import decrypt_value, encrypt_value, is_encrypted
+from cryptography.fernet import InvalidToken
+
+from app.services.crypto import decrypt_value, encrypt_value, is_encrypted, is_readable
 
 _SENSITIVE_KEYS = frozenset(
     {
@@ -69,8 +71,24 @@ def redact_secrets(settings: dict) -> dict:
 
 def _maybe_decrypt(key: str, value):
     if key in ENCRYPTED_SETTINGS_KEYS and value:
-        return decrypt_value(value)
+        try:
+            return decrypt_value(value)
+        except (InvalidToken, ValueError):
+            # Saved under a settings key this install no longer has (a
+            # Docker container recreated without its key did this). Read as
+            # not set: every use of these fails closed (a webhook with no
+            # secret is refused, a closing date with no password refuses
+            # changes), and Settings names it to be entered again. Raising
+            # here failed every page that reads the settings.
+            return ""
     return value
+
+
+def unreadable_secret_keys(db: Session) -> list[str]:
+    """The settings saved encrypted that no key here decrypts: they read as
+    not set until someone enters them again."""
+    rows = db.query(Settings).filter(Settings.value.like("fernet:%")).all()
+    return sorted(r.key for r in rows if not is_readable(r.value))
 
 
 def get_all_settings(db: Session) -> dict:

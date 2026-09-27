@@ -20,6 +20,42 @@ const SettingsPage = {
         return Number.isFinite(n) ? String(+n.toFixed(4)) : '0.0';
     },
 
+    // Where each encrypted setting is entered again, for the notice below.
+    _SECRET_PLACES: {
+        smtp_password: 'the email password, under Email (SMTP)',
+        stripe_secret_key: 'the Stripe secret key, under Online Payments',
+        stripe_webhook_secret: 'the Stripe webhook secret, under Online Payments',
+        paypal_client_secret: 'the PayPal client secret, under Online Payments',
+        square_access_token: 'the Square access token, under Online Payments',
+        square_webhook_signature_key: 'the Square webhook signature key, under Online Payments',
+        qbo_client_secret: 'the QuickBooks Online client secret, under QuickBooks Online',
+        qbo_access_token: 'the QuickBooks Online connection: connect again on the QuickBooks Online page',
+        qbo_refresh_token: 'the QuickBooks Online connection: connect again on the QuickBooks Online page',
+        simplefin_access_url: 'the SimpleFIN bank feed: connect again on Banking',
+        closing_date_password: 'the closing-date password, under Closing Date',
+        ai_api_key: 'the AI Insights API key, under AI Insights',
+    },
+
+    // Passwords and keys saved under a settings key this install no longer
+    // has read as not set (a Docker container recreated before 2.18 lost
+    // its key). Say which, and where each is entered again.
+    async loadUnreadableSecrets() {
+        const el = document.getElementById('settings-unreadable');
+        if (!el || !SettingsPage._isAdmin()) return;
+        let keys = [];
+        try {
+            keys = (await API.get('/settings/unreadable-secrets')).keys || [];
+        } catch (e) {
+            return;
+        }
+        const places = [...new Set(keys.map(k => SettingsPage._SECRET_PLACES[k] || k))];
+        if (!places.length) { el.hidden = true; return; }
+        el.innerHTML = `Some saved passwords and keys can't be read on this install, so what uses them is off until
+            they are entered again: ${places.map(p => `<em>${escapeHtml(p)}</em>`).join('; ')}. They were saved
+            under a settings key this install no longer has.`;
+        el.hidden = false;
+    },
+
     // Said under the logo when the upgrade to 2.18.0 copied it in from the
     // folder every company shared before: that held ONE logo file for all of
     // them, so it may be another company's.
@@ -51,6 +87,7 @@ const SettingsPage = {
             SettingsPage.loadSignInPref();
             SettingsPage.loadOcrStatus();
             SettingsPage.loadOcrEnginePref();
+            SettingsPage.loadUnreadableSecrets();
             SettingsPage.scrollToFocus();
             SettingsPage._installLeaveGuard();
             SettingsPage._markClean();
@@ -59,6 +96,7 @@ const SettingsPage = {
             <div class="page-header">
                 <h2>Company Settings</h2>
             </div>
+            <div id="settings-unreadable" class="hint hint--locked" role="status" style="margin-bottom:12px;" hidden></div>
             <form id="settings-form" onsubmit="SettingsPage.save(event)"
                 oninput="SettingsPage._updateDirty()" onchange="SettingsPage._updateDirty()">
                 <div class="settings-section">
@@ -778,6 +816,7 @@ const SettingsPage = {
                 App.showCompany(saved);
             }
             toast('Settings saved');
+            SettingsPage.loadUnreadableSecrets();
         } catch (err) {
             toast(err.message, 'error');
         } finally {

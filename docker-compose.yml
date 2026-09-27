@@ -70,6 +70,11 @@ services:
       PAYROLL_ENCRYPTION_SECRET: "${PAYROLL_ENCRYPTION_SECRET:?set PAYROLL_ENCRYPTION_SECRET in .env — generate one with openssl rand -base64 32}"
       # Optional previous key, only used during rotation (decrypt fallback).
       PAYROLL_ENCRYPTION_SECRET_PREV: ${PAYROLL_ENCRYPTION_SECRET_PREV:-}
+      # Optional key for saved passwords and API keys (SMTP, payment
+      # providers, QuickBooks Online, the bank feed). Left empty, it is
+      # derived from PAYROLL_ENCRYPTION_SECRET, so it survives the container
+      # being recreated. Set it to keep a key an earlier install used.
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:-}
       # Optional cookie-signing key. If empty the app auto-generates and
       # persists one to .slowbooks-session.key (see app/services/auth.py).
       SESSION_SECRET_KEY: ${SESSION_SECRET_KEY:-}

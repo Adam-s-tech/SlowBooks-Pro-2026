@@ -81,6 +81,10 @@ services:
       # Optional during key rotation
       PAYROLL_ENCRYPTION_SECRET_PREV: ${PAYROLL_ENCRYPTION_SECRET_PREV:-}
 
+      # Optional key for saved passwords and API keys; left empty, it is
+      # derived from PAYROLL_ENCRYPTION_SECRET (survives container recreation).
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:-}
+
       # Browser origin allowlist for the SPA. Comma-separated, no wildcards.
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:?set this to your real origin, e.g. https://books.example.com}
 
