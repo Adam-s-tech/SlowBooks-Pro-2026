@@ -131,7 +131,9 @@ jobs:
           # orders, credit memos, reconciliation reports, tax forms, report footers, the
           # invoice header, emailed statements) that skip where WeasyPrint's native stack
           # is absent, as this image is by design. 74 before them; room for one more guard.
-          MAX_SKIPS: "94"
+          # +1: tests/test_theme_contrast.py skips as one module without playwright, as
+          # tests/test_browser_ui.py does.
+          MAX_SKIPS: "95"
         shell: pwsh
         run: |
           # -v names each test as it starts, so a mid-run death is identified

@@ -33,7 +33,9 @@
     --qb-navy-dark:   #002244;
     --qb-navy-mid:    #004488;
     --qb-blue:        #336699;
-    --qb-blue-light:  #4a7fb5;
+    /* the top of the primary-button and dialog-title gradients, under white
+       text: #4a7fb5 was 4.20:1, this is 4.56 */
+    --qb-blue-light:  #4779ad;
     --qb-blue-accent: #5b9bd5;
     /* Link colour. There was no rule for a bare <a> at all, so the browser
        chose — and its default #0000EE sits at 1.73:1 on the dark panel,
@@ -42,12 +44,17 @@
        Measured: 12.6:1 here, 7.2:1 in dark. (macbase1, 2.10.3 gate) */
     --text-link:      #003366;
     --text-success:   #166534;   /* 7.13:1 on white */
-    --qb-teal:        #669999;
-    --qb-green:       #339966;
+    /* Only the sidebar's section headings use it, on the navy: #669999 was
+       3.95:1 there, this is 4.57 (macOS gate's contrast sweep, 2.18.0) */
+    --qb-teal:        #76a4a4;
+    /* Green and orange are text (report amounts, import results) and the
+       success toast's ground: #339966 was 3.57:1 on white and #cc6633 3.81;
+       these are 4.86 and 4.82, and 4.6 on a table's striped row */
+    --qb-green:       #2b8055;
     --qb-green-dark:  #2d7d56;
     --qb-gold:        #cc9933;
     --qb-red:         #cc3333;
-    --qb-orange:      #cc6633;
+    --qb-orange:      #b2592d;
 
     /* -- Form backgrounds (the famous tinted papers) -- */
     --invoice-bg:     #fffef5;    /* yellow tint — RT_BITMAP 0x012C */
@@ -66,7 +73,9 @@
     /* -- Text -- */
     --text-primary:   #1a1a2e;
     --text-secondary: #4a4a6a;
-    --text-muted:     #7a7a9a;
+    /* #7a7a9a was 4.14:1 on white, 3.65 on the page and 3.25 on a page
+       header's gradient. 4.59 at that gradient's darkest, 5.85 on white */
+    --text-muted:     #626282;
     --text-light:     #9a9ab0;
     --text-on-dark:   #e8ecf0;
     --text-on-navy:   #c8d8e8;
@@ -148,9 +157,13 @@ body {
     user-select: none;
 }
 
+/* The brand's year, the clock and the status bar sit on the toolbar and
+   status bar gradients, which are darker than the page: muted text there
+   read 2.57-2.66:1. They take the secondary text colour, as they already
+   do in dark theme (macOS gate's contrast sweep, 2.18.0). */
 .topbar-brand span {
     font-weight: 400;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     font-size: 10px;
     margin-left: 4px;
 }
@@ -189,7 +202,7 @@ body {
     font-size: 15px;
     line-height: 1;
     padding: 2px 12px;
-    color: #4a6fa8;                                  /* cool blue moon */
+    color: #3b5987;       /* cool blue moon; #4a6fa8 was 3.27:1 on the toolbar */
     text-shadow: 0 0 6px rgba(74, 111, 168, 0.45);
     transition: color 0.15s, text-shadow 0.15s;
 }
@@ -210,7 +223,7 @@ body {
 .topbar-clock {
     font-size: 10px;
     font-family: var(--font-mono);
-    color: var(--text-muted);
+    color: var(--text-secondary);
 }
 
 /* ========================================================================
@@ -408,7 +421,7 @@ body {
     align-items: center;
     padding: 0 12px;
     font-size: 10px;
-    color: var(--text-muted);
+    color: var(--text-secondary);   /* see .topbar-brand span */
     flex-shrink: 0;
     gap: 16px;
 }
@@ -501,7 +514,8 @@ body {
 }
 
 .btn-danger {
-    background: linear-gradient(180deg, #e05555 0%, var(--qb-red) 100%);
+    /* white on the old top stop, #e05555, was 3.75:1 */
+    background: linear-gradient(180deg, #d34242 0%, var(--qb-red) 100%);
     color: white;
     border-color: #992222;
 }
@@ -1774,7 +1788,7 @@ tr.clickable { cursor: pointer; }
     display: flex;
     align-items: center;
     gap: 8px;
-    color: #a855f7;
+    color: #9b3cf6;   /* #a855f7, the card's border, is 3.96:1 as text on white */
 }
 
 .ai-insights-body {

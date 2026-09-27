@@ -18,7 +18,10 @@
     --qb-green:       #4caf7a;
     --qb-green-dark:  #3d9065;
     --qb-gold:        #e0a840;
-    --qb-red:         #e05555;
+    /* red text (overdue counts and days, negative figures, errors) was
+       4.33:1 on the panel, 5.05 now; the void and overdue badges take the
+       same red, 4.86 on their ground */
+    --qb-red:         #e46969;
     --qb-orange:      #e08050;
 
     --invoice-bg:     #1e2028;
@@ -35,7 +38,9 @@
 
     --text-primary:   #e0e4ec;
     --text-secondary: #a0a8b8;
-    --text-muted:     #7a8498;
+    /* #7a8498 was 4.32:1 on the panel and 3.93 on a page header; 5.06 and
+       4.60 now (macOS gate's contrast sweep, 2.18.0) */
+    --text-muted:     #8790a2;
     --text-light:     #606878;
     --text-on-dark:   #c8d0dc;
     --text-on-navy:   #e0e4ec;
@@ -47,12 +52,12 @@
     --gray-200:       #2e3240;
     --gray-300:       #3a3e48;
     --gray-400:       #8b94a6; /* was #606878 — failed AA on the dark ground */
-    --gray-500:       #7a8498;
+    --gray-500:       #8790a2;   /* = --text-muted */
     --gray-600:       #a0a8b8;
 
     --success:        #4caf7a;
     --warning:        #e0a840;
-    --danger:         #e05555;
+    --danger:         #e46969;   /* = --qb-red */
 }
 
 /* Body and main content */
@@ -363,10 +368,10 @@
 [data-theme="dark"] .badge-paid { background: #1a3a2a; color: #4caf7a; border-color: #2a6a4a; }
 [data-theme="dark"] .badge-recorded { background: #1a3a2a; color: #4caf7a; border-color: #2a6a4a; }
 [data-theme="dark"] .badge-partial { background: #3a3010; color: #e0a840; border-color: #5a5020; }
-[data-theme="dark"] .badge-void { background: #3a1a1a; color: #e05555; border-color: #5a2a2a; }
+[data-theme="dark"] .badge-void { background: #3a1a1a; color: #e46969; border-color: #5a2a2a; }  /* #e05555: 4.17:1 */
 [data-theme="dark"] .badge-issued { background: #1a3a5a; color: #6bb3e8; border-color: #2a5a8a; }
 [data-theme="dark"] .badge-applied { background: #1a3a2a; color: #4caf7a; border-color: #2a6a4a; }
-[data-theme="dark"] .badge-overdue { background: #3a1a1a; color: #e05555; border-color: #5a2a2a; }
+[data-theme="dark"] .badge-overdue { background: #3a1a1a; color: #e46969; border-color: #5a2a2a; }
 
 /* Amount columns */
 [data-theme="dark"] .amount { color: var(--text-primary); }
@@ -425,3 +430,31 @@
 [data-theme="dark"] .hint--locked em { color: #e0a840; }
 [data-theme="dark"] .form-group input[disabled],
 [data-theme="dark"] .form-group select[disabled] { background: #23262b; color: #8b9098; }
+
+/* Contrast, from the macOS gate's sweep (2.18.0) and the same sweep over
+   every page (tests/test_theme_contrast.py). */
+
+/* The skip link's --qb-blue is a light blue here: white on it was 4.20:1.
+   The primary button's blue, 7.17. */
+[data-theme="dark"] .skip-link { background: #2a5a8a; }
+
+/* "Click to browse" on the IIF drop zone: --qb-blue as text, 4.30:1 */
+[data-theme="dark"] .iif-dropzone-text strong { color: var(--qb-blue-light); }
+
+/* AI Insights title: #a855f7 was 4.11:1 on the card */
+[data-theme="dark"] .ai-insights-title { color: #ae62f8; }
+
+/* Toasts are white text on a colour, and this theme's green, red and blue
+   are light: white on them read 2.72, 3.75 and 4.20:1. They keep the light
+   theme's colours, 4.86, 5.14 and 6.00. */
+[data-theme="dark"] .toast-success { background: #2b8055; }
+[data-theme="dark"] .toast-error   { background: #cc3333; }
+[data-theme="dark"] .toast-info    { background: #336699; }
+
+/* Notes drawn as a pale box without a text colour of their own (tax forms,
+   reseller permits): here they kept the pale box and took this theme's
+   light text, 1.14:1. They get the dark ink they were drawn with. */
+[data-theme="dark"] div[style*="background:#eaf5ec"],
+[data-theme="dark"] div[style*="background:#fdecea"],
+[data-theme="dark"] div[style*="background:#fffbe6"],
+[data-theme="dark"] div[style*="background:#f4f6f9"] { color: #1a1a2e; }
