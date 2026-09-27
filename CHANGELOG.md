@@ -243,7 +243,13 @@ from the rates and puts the rounding difference on line 7.
   as it is now, and restoring an older backup renames the company list's
   entry at once.
 - An opt-in setting asks for the password each time SlowBooks Pro starts.
-- A refused form says what to fix in a sentence, not validator text.
+- A refused form says what to fix in a sentence, not validator text, and a
+  message stays long enough to read (three seconds for a few words, more
+  for more, at least six for an error; hovering holds it, a click closes
+  it).
+- A read-only sign-in isn't offered what it can't do: Edit, Mark Sent,
+  Void, Duplicate, Upload and every other write action are hidden for it
+  on pages and in dialogs, where the server refused them.
 
 #### Import, export, lists and search
 
@@ -266,7 +272,8 @@ from the rates and puts the rounding difference on line 7.
   named after a customer keeps its accents.
 - The toolbar's Home, Quick Entry and Reports move the address with the
   page, so Back and the sidebar link of the page you left work; a form
-  dialog keeps every field in view beside a very long customer name.
+  dialog keeps every field in view beside a very long customer name, and
+  the Estimate form's line table fits the dialog at 1280 wide.
 - Desktop app: the PDF window has **Open in** your PDF app and **Show in
   folder**; the IIF export and file attachments save instead of failing or
   opening as text; upload and import refusals read as sentences.
@@ -300,7 +307,8 @@ from the rates and puts the rounding difference on line 7.
   document and account it concerns, an Errors filter, elapsed time and
   counts — that survives leaving the page. One import runs per company;
   a restore waits for it; the books stay writable between its steps; and
-  it works when the Docker image runs several worker processes.
+  it works when the Docker image runs several worker processes. An idle
+  page with no import reads as ready, not "Connection interrupted".
 - **Connecting from the desktop app** opens Intuit's sign-in in your
   browser. **When the redirect can't reach SlowBooks,** an administrator
   can complete the connection by pasting Intuit's callback address (or the
