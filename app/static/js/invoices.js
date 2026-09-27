@@ -37,11 +37,11 @@ const SalesLines = {
             rate.value = item.rate;
             // A Discount item's price is entered negative (-10.00); any other
             // item gets back the floor its box had.
-            if (item.is_discount) {
+            if (item.is_discount && rate.dataset) {
                 if (rate.dataset.floor === undefined) rate.dataset.floor = rate.getAttribute('min') || '';
                 rate.removeAttribute('min');
                 rate.placeholder = '-10.00';
-            } else if (rate.dataset.floor !== undefined) {
+            } else if (rate.dataset && rate.dataset.floor !== undefined) {
                 if (rate.dataset.floor) rate.setAttribute('min', rate.dataset.floor);
                 delete rate.dataset.floor;
                 rate.placeholder = '';

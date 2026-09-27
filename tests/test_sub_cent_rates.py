@@ -131,7 +131,8 @@ def test_the_sales_forms_take_four_places():
         # a QuickBooks Online invoice came with (2.18.0); every other stays
         # at zero or more.
         floor = (
-            "${Number(line.rate) < 0 ? '' : 'min=\"0\" '}"
+            "${Number(line.rate) < 0 || items.some(i => i.is_discount && "
+            "i.id == line.item_id) ? '' : 'min=\"0\" '}"
             if page == "invoices.js"
             else 'min="0"'
         )
@@ -146,6 +147,7 @@ def test_the_form_rounds_each_line_to_the_cent():
         cwd=ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     assert out.returncode == 0, out.stderr
