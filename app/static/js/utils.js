@@ -34,13 +34,27 @@ function todayISO() {
     return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
+// How long a toast stays: long enough to read. Three seconds for a few
+// words, more for a longer message, at least six for an error, never more
+// than fifteen. Every toast went after three seconds, so a two-line
+// refusal (the closing-date lock) was gone before it was read (2.18.0
+// gate, macbase1 NEW-13). Hovering holds a toast; a click dismisses it.
+function toastMs(message, type) {
+    const length = String(message == null ? '' : message).length;
+    const ms = 3000 + Math.max(0, length - 40) * 60;
+    return Math.min(15000, Math.max(type === 'error' ? 6000 : 3000, ms));
+}
+
 function toast(message, type = 'success') {
     const container = $('#toast-container');
     const el = document.createElement('div');
     el.className = `toast toast-${type}`;
     el.textContent = message;
     container.appendChild(el);
-    setTimeout(() => el.remove(), 3000);
+    let timer = setTimeout(() => el.remove(), toastMs(message, type));
+    el.addEventListener('mouseenter', () => clearTimeout(timer));
+    el.addEventListener('mouseleave', () => { timer = setTimeout(() => el.remove(), 2000); });
+    el.addEventListener('click', () => el.remove());
 }
 
 // A toast that carries one action (e.g. "Saved to … [Show in folder]").
