@@ -337,6 +337,16 @@ from the rates and puts the rounding difference on line 7.
 - The update notice stays on for desktop installs; `SLOWBOOKS_UPDATE_CHECK=0`
   in `.env` turns it off. Stripe's own SDK telemetry is off.
 
+#### Accessibility
+
+- Text meets WCAG AA contrast in both themes everywhere it is drawn: every
+  page, 142 dialogs, the sign-in and setup screens, pop-up messages and the
+  PDF window. Muted text, the status bar, buttons, badges, notes and the
+  colours pages wrote in by hand now come from theme colours that pass;
+  the look is the same, a shade darker or lighter only as far as AA needs.
+  This clears the contrast list the macOS release gate had carried for
+  several releases.
+
 #### For API clients and agents
 
 - `POST /api/bills`, `POST /api/vendor-credits` and PO convert-to-bill: a
