@@ -299,6 +299,18 @@ in the file's free space).
   without being asked to save.
 - The company logo is the administrator's to change, like every other
   setting, and Settings can remove it.
+- A bookkeeper isn't offered the administrator's controls either, which
+  the server refused after the form was filled in: Settings shows the
+  company settings locked, with "Company settings are changed by an
+  administrator."; backups, new company files, and connecting to,
+  importing from and disconnecting from QuickBooks Online say they are the
+  administrator's; Migrate Data says so from the sidebar on. The AI
+  Insights settings are the administrator's now too: the key is a
+  company-wide credential, and the endpoint receives the dashboard's
+  figures.
+- Opening an email template in Settings no longer saves the whole page:
+  its Edit button submitted the Settings form, saving an administrator's
+  unfinished edits behind the editor.
 - **Docker: saved passwords survive an upgrade.** With no settings key
   configured, the key for saved passwords and API keys lived inside the
   container, so recreating it for an upgrade made a new one: every saved
@@ -458,16 +470,18 @@ in the file's free space).
   answers with the logo's address (`/api/uploads/logo/<id>`).
   `/static/uploads/` is a 404. The generic attachment routes answer 404 for
   an employee document and refuse a record type that takes no attachments.
-- Administrator-only (403 otherwise): downloading a backup, and uploading or
-  removing the logo. `GET /api/payments/payment-link/{id}` from a read-only
-  sign-in is a 403 for an invoice with no payment link yet.
+- Administrator-only (403 otherwise): downloading a backup, uploading or
+  removing the logo, `PUT /api/analytics/ai-config` and its `/test`, and
+  `POST /api/qbo/disconnect`. `GET /api/payments/payment-link/{id}` from a
+  read-only sign-in is a 403 for an invoice with no payment link yet.
 - New: `GET /api/settings/unreadable-secrets` names the saved secrets no
   key on the install decrypts. `GET /api/uploads/legacy` (administrators)
   says what the folder earlier versions shared still holds and which
   companies still need it; `DELETE /api/uploads/legacy` removes its files,
-  or answers 409 naming those companies. `GET /api/employees/{id}/portal-token`
-  answers `portal_token: null` with a `note` when the link's stored copy
-  can't be decrypted (the link still works).
+  or answers 409 naming those companies. `GET
+  /api/employees/{id}/portal-token` answers `portal_token: null` with a
+  `note` when the link's stored copy can't be decrypted (the link still
+  works).
 - Income by Customer `total_sales` excludes tax (new `total_tax`);
   `/api/checks/print` takes `bill_payment_id` only.
 - A document `tax_rate` is a fraction kept to six places (8.875% is
@@ -519,7 +533,8 @@ in the file's free space).
   (`docker compose exec slowbooks cat /app/.slowbooks-master.key`) and put
   it in `.env` as `SETTINGS_ENCRYPTION_KEY=...`; otherwise Settings asks for
   them again after the upgrade.
-- A bookkeeper can no longer change the logo or download a backup.
+- A bookkeeper can no longer change the logo or the AI Insights settings,
+  disconnect QuickBooks Online, or download a backup.
 
 #### For developers
 
