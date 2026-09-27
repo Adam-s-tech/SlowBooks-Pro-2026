@@ -379,7 +379,12 @@ def export_invoices(db: Session) -> dict:
 
     for inv in invoices:
         try:
-            if get_mapping_by_slowbooks_id(db, "invoice", inv.id):
+            # In QBO already: it went before, or it came from there (a sales
+            # receipt the import brought in is mapped as one, not as an
+            # invoice, and went back as a new invoice).
+            if get_mapping_by_slowbooks_id(
+                db, "invoice", inv.id
+            ) or get_mapping_by_slowbooks_id(db, "sales_receipt", inv.id):
                 continue
 
             # Customer must be mapped
@@ -488,6 +493,13 @@ def export_payments(db: Session) -> dict:
     for pmt in payments:
         try:
             if get_mapping_by_slowbooks_id(db, "payment", pmt.id):
+                continue
+            # The payment half of a sales receipt the import brought in from
+            # QBO is in QBO with its receipt (the import maps the receipt).
+            if any(
+                get_mapping_by_slowbooks_id(db, "sales_receipt", alloc.invoice_id)
+                for alloc in pmt.allocations
+            ):
                 continue
 
             # Customer must be mapped
