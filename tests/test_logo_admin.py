@@ -4,7 +4,10 @@ administrator's; a bookkeeper could still upload or remove it. Settings
 also had no way to remove a logo once uploaded."""
 
 import io
+import shutil
 from pathlib import Path
+
+import pytest
 
 from fastapi.testclient import TestClient
 
@@ -45,6 +48,7 @@ def test_settings_offers_remove_logo():
     assert "await API.del('/uploads/logo');" in js
 
 
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
 def test_settings_offers_the_logo_picker_to_an_administrator_only():
     # A bookkeeper was offered the file picker and answered 403 after
     # choosing a file; the page says who changes the logo instead.

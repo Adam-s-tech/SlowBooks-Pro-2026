@@ -273,14 +273,35 @@ def _connection_needs_folder(conn) -> bool:
     return _needs_folder(tables, revisions)
 
 
+def _wal_mode(path: Path) -> bool:
+    """Whether a SQLite file is in WAL mode, from its header (bytes 18 and
+    19 are 2 for WAL, 1 for a rollback journal)."""
+    try:
+        with open(path, "rb") as fh:
+            header = fh.read(20)
+    except OSError:
+        return False
+    return header.startswith(b"SQLite format 3\x00") and header[18:20] == b"\x02\x02"
+
+
 def _company_file_needs_folder(path: Path) -> bool:
     """A desktop company file, opened read-only. A file that is missing or
     is not a database can't copy anything; one that can't be read right now
     (another program is writing it) may still need the folder."""
     if not path.is_file():
         return False
+    # Reading a WAL-mode company read-only made SQLite create empty -wal and
+    # -shm files beside it, next to companies nobody had opened (macbase1
+    # NEW-17), so their absence no longer meant "never opened". A WAL-mode
+    # file with no -wal beside it is one nobody has open: read it as it lies
+    # (immutable), which leaves nothing beside it. Any other file is read the
+    # ordinary way, with its locks: a rollback-journal file makes no
+    # sidecars, and one in use waits, then counts as needing the folder.
+    idle_wal = _wal_mode(path) and not path.with_name(path.name + "-wal").exists()
     try:
-        uri = path.resolve().as_uri() + "?mode=ro"
+        uri = path.resolve().as_uri() + (
+            "?mode=ro&immutable=1" if idle_wal else "?mode=ro"
+        )
         with closing(sqlite3.connect(uri, uri=True, timeout=BUSY_SECONDS)) as conn:
             tables = {
                 row[0]

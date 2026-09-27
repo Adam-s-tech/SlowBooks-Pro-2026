@@ -493,6 +493,7 @@ def test_no_folder_holds_nothing(client, tmp_path, monkeypatch):
     assert client.delete("/api/uploads/legacy").json() == {"removed": 0, "bytes": 0}
 
 
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
 def test_settings_offers_the_folder_to_an_administrator_while_it_holds_files():
     out = subprocess.run(
         ["node", str(ROOT / "tests" / "js" / "settings_legacy_files_probe.js")],
@@ -536,3 +537,37 @@ def test_settings_offers_the_folder_to_an_administrator_while_it_holds_files():
     assert "3 files" in remove["confirm"]
     assert remove["calls"] == ["DELETE /uploads/legacy", "GET /uploads/legacy"]
     assert remove["hiddenAfter"] is True
+
+
+def _wal_books(path: Path, revision: str) -> sqlite3.Connection:
+    con = sqlite3.connect(path)
+    con.execute("PRAGMA journal_mode=WAL")
+    con.execute("PRAGMA wal_autocheckpoint=0")
+    con.execute("CREATE TABLE settings (key TEXT, value TEXT)")
+    con.execute("CREATE TABLE alembic_version (version_num TEXT)")
+    con.execute("INSERT INTO alembic_version VALUES (?)", (revision,))
+    con.commit()
+    return con
+
+
+def test_looking_at_a_company_nobody_has_open_leaves_nothing_beside_it(tmp_path):
+    # macbase1 NEW-17: a read-only open made SQLite create empty -wal and
+    # -shm files beside companies nobody had opened
+    db = tmp_path / "closed.db"
+    _wal_books(db, "d3d40d716684").close()
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["closed.db"]
+    assert legacy_uploads._company_file_needs_folder(db) is True
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["closed.db"]
+
+
+def test_a_company_in_use_is_read_through_its_wal(tmp_path):
+    # its upgrade is still only in the -wal: the check must see it there
+    db = tmp_path / "open.db"
+    con = _wal_books(db, "d3d40d716684")
+    try:
+        con.execute("UPDATE alembic_version SET version_num = 'c5e1f7a9b3d2'")
+        con.commit()
+        assert (tmp_path / "open.db-wal").exists()
+        assert legacy_uploads._company_file_needs_folder(db) is False
+    finally:
+        con.close()
