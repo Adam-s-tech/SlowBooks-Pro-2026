@@ -159,11 +159,19 @@ def probe():
 def test_the_shell_saves_every_file_that_is_not_a_page_or_a_pdf(probe):
     shim = probe["shim"]
     assert shim["headers_sent"] is True
+    # an attachment is a document someone gave you, not a report: it goes
+    # to .../Documents whatever its own name (macbase1, 2.18.0 round 6)
     assert shim["/api/attachments/download/1"] == [
-        ["save_document_file", "receipt.jpg", "JPEGDATA"]
+        ["save_document_file", "receipt.jpg", "JPEGDATA", "Documents"]
     ]
     assert shim["/api/attachments/download/2"] == [
-        ["save_document_file", "mileage log.xlsx", "PK.."]
+        ["save_document_file", "mileage log.xlsx", "PK..", "Documents"]
+    ]
+    assert shim["/api/attachments/download/3"] == [
+        ["open_document_pdf", "W-9.pdf", "Documents"]
+    ]
+    assert shim["/api/employees/1/documents/7"] == [
+        ["open_document_pdf", "W-4.pdf", "Documents"]
     ]
     assert shim["/api/iif/export/all"] == [
         ["save_document_file", "slowbooks_export.iif", "!ACCNT\tNAME"]

@@ -257,3 +257,28 @@ def test_the_toolbar_works(tmp_path):
         "open_in_default_app",
         "open_in_default_app",
     ]
+
+
+def test_an_attachment_is_saved_with_the_documents(home, windows):
+    """A file someone attached (a W-4, a receipt) is a document, whatever its
+    own name: it went to .../Reports beside the P&L (macbase1, 2.18.0 round
+    6) while invoices go to .../Documents."""
+    pdf = base64.b64encode(b"%PDF-1.7 w4").decode()
+    got = dl.PickerApi(3001).open_document_pdf("W-4.pdf", pdf, "Documents")
+    assert (
+        Path(got["path"]).parent == home / "Documents" / "SlowBooks Pro" / "Documents"
+    )
+    saved = dl.PickerApi(3001).save_document_file(
+        "receipt.jpg", base64.b64encode(b"JPEG").decode(), "Documents"
+    )
+    assert (
+        Path(saved["path"]).parent == home / "Documents" / "SlowBooks Pro" / "Documents"
+    )
+    # anything else is sorted as before, and a folder the app doesn't save
+    # into is not taken from the page
+    report = dl.PickerApi(3001).open_document_pdf("Profit_and_Loss.pdf", pdf)
+    assert Path(report["path"]).parent.name == "Reports"
+    export = dl.PickerApi(3001).save_document_file(
+        "customers.csv", base64.b64encode(b"Name").decode(), "../../elsewhere"
+    )
+    assert Path(export["path"]).parent.name == "Reports"

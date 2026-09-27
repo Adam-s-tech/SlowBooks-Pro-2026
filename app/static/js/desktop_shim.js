@@ -122,11 +122,13 @@
     // in folder. Resolves false when there is no bridge (a browser), so the
     // caller downloads the file itself. Pages that fetch a file themselves
     // (the IIF export) use it as window.SlowbooksDesktop.saveFile.
-    async function saveFile(blob, name) {
+    async function saveFile(blob, name, folder) {
         const api = window.pywebview && window.pywebview.api;
         if (!api || !api.save_document_file) return false;
         const buffer = await blob.arrayBuffer();
-        const result = await api.save_document_file(name, arrayBufferToBase64(buffer));
+        const result = folder
+            ? await api.save_document_file(name, arrayBufferToBase64(buffer), folder)
+            : await api.save_document_file(name, arrayBufferToBase64(buffer));
         if (result && result.success && result.path) {
             const message = result.note || ('Saved to ' + result.path);
             if (typeof toastAction === 'function') {
@@ -146,6 +148,14 @@
     // Backups download URLs are handled by save_backup_file() instead of a
     // fetch (see module docstring) -- matched here so the click handler can
     // route them differently before falling into the generic fetch path.
+    // A file someone attached (a receipt, a W-4) is a document, not a report:
+    // it goes to Documents/SlowBooks Pro/Documents, with invoices, whatever
+    // its own name (it went to .../Reports: macbase1, 2.18.0 round 6).
+    function attachmentFolder(url) {
+        return /\/api\/(attachments\/download|employees\/\d+\/documents)\//.test(url)
+            ? 'Documents' : '';
+    }
+
     function backupFilenameFromUrl(url) {
         const m = /\/api\/backups\/download\/([^/?#]+)/.exec(url);
         return m ? decodeURIComponent(m[1]) : null;
@@ -191,7 +201,7 @@
             // Prefer the bridge: it writes to Documents/SlowBooks Pro/Reports
             // and says where, exactly like Save PDF. A blob <a download> is
             // the fallback for a shell without the bridge.
-            if (!(await saveFile(blob, name))) saveBlob(blob, name);
+            if (!(await saveFile(blob, name, attachmentFolder(url)))) saveBlob(blob, name);
             return;
         }
 
@@ -200,7 +210,10 @@
             const base64 = arrayBufferToBase64(buffer);
             const title = filenameFromDisposition(disposition, fallbackName);
             if (window.pywebview && window.pywebview.api && window.pywebview.api.open_document_pdf) {
-                const result = await window.pywebview.api.open_document_pdf(title, base64);
+                const folder = attachmentFolder(url);
+                const result = folder
+                    ? await window.pywebview.api.open_document_pdf(title, base64, folder)
+                    : await window.pywebview.api.open_document_pdf(title, base64);
                 if (result && result.success && result.path) {
                     // The viewer window has no address bar; tell the user where
                     // the file actually is and offer to open that folder. A

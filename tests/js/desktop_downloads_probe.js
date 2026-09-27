@@ -9,6 +9,8 @@ const ORIGIN = 'http://127.0.0.1:3001';
 const answers = {
   '/api/attachments/download/1': { type: 'image/jpeg', disposition: 'inline; filename="receipt.jpg"', body: 'JPEGDATA' },
   '/api/attachments/download/2': { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', disposition: "inline; filename*=utf-8''mileage%20log.xlsx", body: 'PK..' },
+  '/api/attachments/download/3': { type: 'application/pdf', disposition: 'inline; filename="W-9.pdf"', body: '%PDF-1.4' },
+  '/api/employees/1/documents/7': { type: 'application/pdf', disposition: 'inline; filename="W-4.pdf"', body: '%PDF-1.4' },
   '/api/iif/export/all': { type: 'text/plain; charset=windows-1252', disposition: 'inline; filename="slowbooks_export.iif"', body: '!ACCNT\tNAME' },
   '/api/csv/export/customers': { type: 'text/csv; charset=utf-8', disposition: 'inline; filename=customers.csv', body: 'Name\nAcme' },
   '/api/invoices/1/pdf': { type: 'application/pdf', disposition: 'inline; filename=Invoice_1001.pdf', body: '%PDF-1.7' },
@@ -35,8 +37,8 @@ async function shim() {
   const fetched = [];
   let clickHandler = null;
   const api = {
-    save_document_file: async (name, b64) => { bridge.push(['save_document_file', name, Buffer.from(b64, 'base64').toString()]); return { success: true, path: '/Documents/SlowBooks Pro/Reports/' + name }; },
-    open_document_pdf: async (name) => { bridge.push(['open_document_pdf', name]); return { success: true, path: '/Documents/SlowBooks Pro/Documents/' + name }; },
+    save_document_file: async (name, b64, folder) => { bridge.push(['save_document_file', name, Buffer.from(b64, 'base64').toString(), ...(folder ? [folder] : [])]); return { success: true, path: '/Documents/SlowBooks Pro/Reports/' + name }; },
+    open_document_pdf: async (name, b64, folder) => { bridge.push(['open_document_pdf', name, ...(folder ? [folder] : [])]); return { success: true, path: '/Documents/SlowBooks Pro/Documents/' + name }; },
     open_document_html: async (title, html) => { bridge.push(['open_document_html', html]); return { success: true }; },
     reveal_path: async () => ({ success: true }),
   };

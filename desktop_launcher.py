@@ -689,6 +689,13 @@ _DOCUMENT_KINDS = frozenset(
 )
 
 
+def _given_folder(folder: str) -> str:
+    """The folder a page asked for, when it is one of the two the app
+    saves into: an attachment (a receipt, a W-4) is a document, whatever
+    its own name."""
+    return folder if folder in ("Documents", "Reports") else ""
+
+
 def _folder_for(filename: str) -> str:
     """The folder for a PDF: Documents for a document someone is sent,
     Reports for everything else."""
@@ -1070,7 +1077,7 @@ class PickerApi:
             return {"success": False, "error": str(exc)}
         return {"success": True}
 
-    def open_document_pdf(self, title: str, base64_data: str) -> dict:
+    def open_document_pdf(self, title: str, base64_data: str, folder: str = "") -> dict:
         """Save an already-fetched PDF (base64-encoded by the caller) under
         Documents/SlowBooks Pro/Reports — or .../Documents for an invoice,
         estimate, statement or other document someone is sent — and show it
@@ -1105,7 +1112,11 @@ class PickerApi:
             # became a dash and the file was "Invoice_1002-pdf.pdf" (F24).
             stem = re.sub(r"\.pdf$", "", str(title or ""), flags=re.IGNORECASE)
             name = _safe_temp_filename(stem, ".pdf")
-            dest, note = _save_report(name, data, _folder_for(name))
+            # an attachment says it is a document (the page knows); anything
+            # else is sorted by the name the server gave it
+            dest, note = _save_report(
+                name, data, _given_folder(folder) or _folder_for(name)
+            )
             # The PDF under a toolbar (Open in the PDF app, Show in folder);
             # the bare PDF if the page can't be written.
             try:
@@ -1120,7 +1131,9 @@ class PickerApi:
             result["note"] = note
         return result
 
-    def save_document_file(self, title: str, base64_data: str) -> dict:
+    def save_document_file(
+        self, title: str, base64_data: str, folder: str = ""
+    ) -> dict:
         """Save an already-fetched export (a CSV, or anything the page would
         otherwise hand to a download link) under Documents/SlowBooks Pro/
         Reports, with the same fallback and "note" contract as
@@ -1135,7 +1148,11 @@ class PickerApi:
             data = base64.b64decode(base64_data)
             given = Path(str(title or ""))
             suffix = given.suffix if given.suffix else ".txt"
-            dest, note = _save_report(_safe_temp_filename(given.stem, suffix), data)
+            dest, note = _save_report(
+                _safe_temp_filename(given.stem, suffix),
+                data,
+                _given_folder(folder) or "Reports",
+            )
         except Exception as exc:
             return {"success": False, "error": str(exc)}
         result = {"success": True, "path": str(dest)}
