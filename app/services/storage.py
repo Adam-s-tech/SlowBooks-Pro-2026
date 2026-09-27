@@ -12,9 +12,9 @@
 # documents, scanned receipts) are kept in its own database —
 # app/services/file_store.py. files_root()/uploads_root() name the folder
 # earlier releases wrote EVERY company's uploads to (app/static/uploads on
-# a server, <data dir>/uploads on a desktop). Nothing writes there any more;
-# the upgrade migration (c5e1f7a9b3d2) reads it, once per company, to copy in
-# the files that company's rows point at.
+# a server, <data dir>/uploads on a desktop). Nothing writes there any more
+# and it is not served; the upgrade migration (c5e1f7a9b3d2) reads it, once
+# per company, to copy in the files that company's rows point at.
 # ============================================================================
 
 import os

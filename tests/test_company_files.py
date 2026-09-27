@@ -608,3 +608,26 @@ def test_employee_documents_stay_behind_the_hr_rule(client, db_session):
     from app.models.attachments import Attachment
 
     assert db_session.get(Attachment, doc["id"]) is not None
+
+
+def test_the_old_uploads_folder_is_not_served(client, unauthed_client):
+    """/static/ needs no sign-in, and the shared uploads folder was served
+    under it: a W-4 was one guessable URL away from anyone who could reach
+    the server. Nothing is served from that folder any more."""
+    emp = _employee(client, "Marisol")
+    _w4(client, emp["id"], b"%PDF-1.4 W-4 Marisol 123-45-6789")
+    legacy = storage.uploads_root() / "attachments" / "employee" / "1"
+    legacy.mkdir(parents=True, exist_ok=True)
+    (legacy / "old-W-4.pdf").write_bytes(b"%PDF-1.4 an older release's W-4")
+    try:
+        for path in (
+            f"/static/uploads/attachments/employee/{emp['id']}/W-4.pdf",
+            "/static/uploads/attachments/employee/1/old-W-4.pdf",
+            "/static/uploads/company_logo.png",
+        ):
+            r = unauthed_client.get(path)
+            assert r.status_code == 404, (path, r.status_code)
+            assert b"W-4" not in r.content
+        assert unauthed_client.get("/static/js/app.js").status_code == 200
+    finally:
+        (legacy / "old-W-4.pdf").unlink()
