@@ -187,7 +187,8 @@ from the rates and puts the rounding difference on line 7.
 - Registering a fixed asset posts its purchase (paid from an account, on a
   bill already entered, or owned before the books began); salvage above cost
   is refused.
-- An unbalanced journal entry says by how much, in dollars.
+- An unbalanced journal entry says by how much, in dollars, and a journal
+  entry can no longer be voided twice.
 
 #### Payroll and tax forms
 
@@ -264,7 +265,15 @@ from the rates and puts the rounding difference on line 7.
   SlowBooks document is not posted again. A foreign-currency journal
   balances in its own currency and converts the way the rest of the books
   do. Imported journals are listed on Journal Entries and linked from the
-  bank registers; they are voided in QuickBooks Online, not here.
+  bank registers. Sales receipts keep each line's item, quantity and rate
+  (they arrived as one amount at rate 0.00, in 2.17 too).
+- **Changes on either side.** Anything the import brought in voids and
+  edits here like any other document: SlowBooks reverses the import's
+  entry, an edited invoice posts its own, and a later import leaves it as
+  it is here. A transaction edited or voided in QuickBooks Online (or a
+  journal deleted there) is brought up to date on the next import; one
+  that can't be — a closed period, a reconciled line — is named in the log
+  and skipped, and never stops the rest.
 - **A live import log.** An import runs in the background with a log under
   the controls — every query, check, posting, skip and error, with the
   document and account it concerns, an Errors filter, elapsed time and
