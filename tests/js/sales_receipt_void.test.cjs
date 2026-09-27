@@ -32,6 +32,8 @@ function page({ voidedWithPayment }) {
             },
         },
     };
+    // utils.js's fetchAllPages: every page of a list (one page here)
+    context.fetchAllPages = url => context.API.get(url);
     vm.createContext(context);
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../../app/static/js/sales_receipts.js'), 'utf8') + '\nthis.SalesReceiptsPage = SalesReceiptsPage;', context);
     return { page: context.SalesReceiptsPage, calls, toasts };
