@@ -321,13 +321,14 @@ def _discount_account(db: Session, item_id, discount) -> tuple[str, str]:
     return account, f"{name} (QBO #{account})" if account else name
 
 
-def _discount_line(db: Session, parts, number, notes) -> dict:
+def _discount_line(db: Session, parts, document, notes) -> dict:
     """An invoice's lines on Discount items (qbo_common.discount_mapping) as
     QBO's own discount, not negative sales lines with no item: ONE
     DiscountLineDetail, as QBO takes one discount on a transaction, for
     their total, on the discount account of the item with the most of it.
     A note names any other discount account whose amount went into it.
-    `parts` is [(invoice line, its item's mapping)], in order."""
+    `parts` is [(invoice line, its item's mapping)], in order; `document`
+    names the invoice as it prints ("Invoice 2004")."""
     by_item = {}
     for inv_line, discount in parts:
         amount = -Decimal(str(inv_line.amount or 0))
@@ -349,7 +350,7 @@ def _discount_line(db: Session, parts, number, notes) -> dict:
                 "entity": "invoice",
                 "id": first.invoice_id,
                 "message": (
-                    f"Invoice {number} went to QuickBooks Online with one discount "
+                    f"{document} went to QuickBooks Online with one discount "
                     f"of {total:,.2f} on {words}, as QuickBooks Online takes one "
                     f"discount on a transaction. It includes {named}."
                 ),
@@ -459,7 +460,13 @@ def export_invoices(db: Session) -> dict:
                 lines.append(line)
 
             if discounts:
-                line = _discount_line(db, discounts, inv.invoice_number, notes)
+                from app.services.donor_documents import document_label
+                from app.services.terminology import terms_from_db
+
+                face = document_label(inv, terms_from_db(db))
+                line = _discount_line(
+                    db, discounts, f"{face} {inv.invoice_number}", notes
+                )
                 lines[lines.index(None)] = line
             qbo_inv.Line = lines
 
