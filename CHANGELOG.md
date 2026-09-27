@@ -161,7 +161,9 @@ from the rates and puts the rounding difference on line 7.
   8.875% became 8.88% ($88.80 on $1,000 instead of $88.75). The forms now
   work tax out to the cent exactly as the server saves it (a purchase
   order at 8.25% on $102.00 showed $8.41 and saved $8.42), and a purchase
-  order whose only change is its rate re-totals.
+  order whose only change is its rate re-totals. A default saved earlier
+  with more decimals shows rounded to four instead of holding back Save
+  Settings.
 
 #### Customers, payments and statements
 
@@ -177,8 +179,10 @@ from the rates and puts the rounding difference on line 7.
 - Batch Payments, Receive Payment, Pay Bills, the credit screens and the
   credit-limit check see every open invoice and bill; they read only the
   newest 500, so once a company had more, an older unpaid one never
-  appeared (#191). The Invoices and Bills lists show the newest 500, say
-  so, and offer Show all.
+  appeared (#191). Every list page that shows only the newest (Invoices,
+  Bills, Estimates, Sales Receipts, Credit Memos, Purchase Orders,
+  Payments, Vendor Credits, Payroll) says so and offers Show all, and a
+  bank account's review queue shows every line waiting.
 - Receive Payment and Apply Credit name an Apply amount that is more than
   its invoice's balance, instead of reading "Fully allocated" while the
   save is refused.
@@ -304,7 +308,8 @@ from the rates and puts the rounding difference on line 7.
   sales receipt as a line on a Discount item that posts to QBO's discount
   account, with tax worked out before or after it as QBO had it; a bundle
   comes across as the lines of its items. Exporting such a document back
-  sends QBO a discount, not a negative sale.
+  sends QBO a discount, not a negative sale, and a Discount item's line
+  takes a negative price on the invoice form.
 - **Paging and inactive accounts.** Every entity imports all its pages;
   inactive QBO accounts come in inactive; QBO bank and card accounts get a
   Banking identity; a subcustomer mapped to a job resolves through its
@@ -355,7 +360,8 @@ from the rates and puts the rounding difference on line 7.
   0.08875) and comes back that way; a NaN or Infinity anywhere in a request
   is a 422, not a 500.
 - `GET /api/invoices` and `GET /api/bills` take `open_only=true` (what can
-  still be paid or credited, filtered on the server; page with `skip`).
+  still be paid or credited, filtered on the server; page with `skip`);
+  items carry `is_discount`.
 - `GET /api/auth/status` has `desktop`; `GET /api/system` has
   `update_check_enabled`; CSV money columns are written to the cent;
   tax-form, pay-stub and New-Hire Report PDFs have descriptive file names.
