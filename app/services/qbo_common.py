@@ -20,7 +20,6 @@ from app.models.accounts import AccountType
 from app.models.items import ItemType
 from app.models.qbo_mapping import QBOMapping
 from app.services import qbo_progress
-from app.services.safe_errors import DataProblem
 
 QBO_TO_ACCOUNT_TYPE = {
     "Bank": AccountType.ASSET,
@@ -139,41 +138,6 @@ def journal_posting_matches(txn, txn_date, lines) -> bool:
     )
 
 
-class PostingMismatch(DataProblem):
-    error_code = "IMPORT_POSTING_MISMATCH"
-
-
-def posting_mismatch(txn, local_id, txn_date, lines, accounts):
-    """Describe observed differences without claiming the source changed."""
-    if txn is None:
-        return PostingMismatch(f"Mapped local transaction #{local_id} does not exist")
-    differences = []
-    if txn.date != txn_date:
-        differences.append(f"date differs: local {txn.date}, QBO {txn_date}")
-    local = _posting_totals(
-        (line.account_id, line.debit, line.credit) for line in txn.lines
-    )
-    source = _posting_totals(
-        (line["account_id"], line["debit"], line["credit"]) for line in lines
-    )
-    by_id = {
-        account.id: (qbo_id, account) for qbo_id, account in accounts.items() if account
-    }
-    for account_id in sorted(local.keys() | source.keys()):
-        if local.get(account_id, Decimal(0)) == source.get(account_id, Decimal(0)):
-            continue
-        qbo_id, account = by_id.get(account_id, ("unmapped", None))
-        differences.append(
-            f"account QBO #{qbo_id} / local #{account_id} ({account.name if account else 'unknown'}): "
-            f"local debit-minus-credit {local.get(account_id, Decimal(0)):.2f}, "
-            f"QBO {source.get(account_id, Decimal(0)):.2f}"
-        )
-    return PostingMismatch(
-        f"Local transaction #{local_id} does not match the source posting; "
-        + "; ".join(differences)
-    )
-
-
 def legacy_rollup_repair(txn, txn_date, lines, accounts):
     """Recognize the old report walker assigning child rows to parent accounts.
 
@@ -258,56 +222,13 @@ def rebase_account_balances(db: Session, accounts) -> None:
     db.flush()
 
 
-# ---------------------------------------------------------------------------
-# Documents the QBO import created
-# ---------------------------------------------------------------------------
-
-
-def _mapped_from_qbo(db: Session, kinds, slowbooks_id) -> bool:
-    return (
-        db.query(QBOMapping.id)
-        .filter(
-            QBOMapping.entity_type.in_(kinds),
-            QBOMapping.slowbooks_id == slowbooks_id,
-        )
-        .first()
-        is not None
-    )
-
-
-def qbo_managed_invoice(db: Session, invoice) -> bool:
-    """An invoice or sales receipt the QBO import created. It has no posting
-    of its own: its A/R, income and tax reach the books through the QBO
-    ledger import. A local invoice exported to QBO, or matched to a QBO one
-    by its number, is mapped too but keeps its own posting."""
-    return invoice.transaction_id is None and _mapped_from_qbo(
-        db, ("invoice", "sales_receipt"), invoice.id
-    )
-
-
-def qbo_managed_payment(db: Session, payment) -> bool:
-    """A payment the QBO import created: a QBO payment, or the payment half
-    of a QBO sales receipt (which has no mapping of its own). Like the
-    invoices, it has no posting of its own."""
-    if payment.transaction_id is not None:
-        return False
-    if _mapped_from_qbo(db, ("payment",), payment.id):
-        return True
-    return any(
-        alloc.invoice is not None
-        and alloc.invoice.transaction_id is None
-        and _mapped_from_qbo(db, ("sales_receipt",), alloc.invoice_id)
-        for alloc in payment.allocations
-    )
-
-
-def qbo_managed_refusal(what: str) -> str:
-    """Why a document the QBO import created is not voided here."""
-    return (
-        f"This {what} came from QuickBooks Online: its amounts reach the books "
-        "through the QuickBooks Online import, not a posting of its own, so "
-        "voiding it here would not take them out. Void it in QuickBooks Online."
-    )
+# QBOMapping.qbo_sync_token of an import posting (a "ledger" or
+# "journal_entry" mapping) that the import no longer owns. Otherwise it
+# holds QBO's SyncToken (journals) or the posting's fingerprint (ledger).
+CHANGED_HERE = "changed-in-slowbooks"  # voided or replaced here: kept as is
+VOIDED_IN_QBO = "voided-in-qbo"  # reversed by the import: QBO voided it
+DELETED_IN_QBO = "deleted-in-qbo"  # reversed by the import: QBO deleted it
+NOT_OWNED = (CHANGED_HERE, VOIDED_IN_QBO, DELETED_IN_QBO)
 
 
 def ledger_posting(db: Session, txn_type: str, qbo_id) -> QBOMapping | None:

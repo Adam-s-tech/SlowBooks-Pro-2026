@@ -26,13 +26,20 @@ const JournalPage = {
                     <td class="amount">${formatCurrency(e.total_credit)}</td>
                     <td class="actions">
                         <button class="btn btn-sm btn-secondary" onclick="JournalPage.view(${e.id})">View</button>
-                        ${!e.source_type.endsWith('_void') && !['qbo_journal', 'qbo_ledger'].includes(e.source_type) ? `<button class="btn btn-sm btn-danger" onclick="JournalPage.void(${e.id})">Void</button>` : ''}
+                        ${JournalPage.canVoid(e) ? `<button class="btn btn-sm btn-danger" onclick="JournalPage.void(${e.id})">Void</button>` : ''}
                     </td>
                 </tr>`;
             }
             html += '</tbody></table></div>';
         }
         return html;
+    },
+
+    // A journal entry, or a posting the QuickBooks Online import made, voids
+    // here with a reversing entry; a document's own posting (a bill payment,
+    // a deposit...) voids from its document, so its view offers no Void.
+    canVoid(e) {
+        return ['manual', 'qbo_journal', 'qbo_ledger'].includes(e.source_type || '');
     },
 
     async view(id) {
@@ -60,6 +67,7 @@ const JournalPage = {
                 <div class="total-row"><span class="label">Total Credit</span><span class="value">${formatCurrency(entry.total_credit)}</span></div>
             </div>
             <div class="form-actions">
+                ${JournalPage.canVoid(entry) ? `<button class="btn btn-danger" onclick="JournalPage.void(${entry.id})">Void</button>` : ''}
                 <button class="btn btn-secondary" onclick="closeModal()">Close</button>
             </div>`);
     },
@@ -232,6 +240,7 @@ const JournalPage = {
         try {
             await API.post(`/journal/${id}/void`);
             toast('Journal entry voided');
+            closeModal();
             App.navigate('#/journal');
         } catch (err) { toast(err.message, 'error'); }
     },

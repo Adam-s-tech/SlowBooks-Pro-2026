@@ -40,7 +40,14 @@ ZERO = Decimal("0")
 # A reversal whose source_id is the id of the TRANSACTION it reverses (the
 # house void_document() convention and the journal's own void). A payment's
 # reversal points at the payment instead; Payment.is_voided says it.
-_VOIDS_KEYED_BY_TRANSACTION = ("manual_void", "bank_entry_void", "deposit_void")
+_VOIDS_KEYED_BY_TRANSACTION = (
+    "manual_void",
+    "bank_entry_void",
+    "deposit_void",
+    # a QuickBooks Online import posting reversed (services/qbo_documents.py)
+    "qbo_ledger_void",
+    "qbo_journal_void",
+)
 
 
 def uf_account_id(db: Session) -> Optional[int]:
@@ -146,14 +153,21 @@ def describe_deposit(db: Session, txn: Transaction) -> str:
     return f"the deposit of {txn.date.isoformat()}{where} ({extra})"
 
 
-def _where_is(db: Session, payment: Payment):
+def _where_is(db: Session, payment: Payment, money_in=None):
     """Where a payment's money is: ("bank_reconciled", None) received
     straight into a bank account and on a reconciled statement;
     ("deposit", txn) in a deposit that named it; ("deposited", None) used up
     by a deposit that named no payments; (None, None) still waiting, or in
-    a bank account not yet reconciled."""
-    txn = payment.transaction or (
-        db.get(Transaction, payment.transaction_id) if payment.transaction_id else None
+    a bank account not yet reconciled. `money_in` is the posting it came in
+    by when that is not its own (a QuickBooks Online import posting)."""
+    txn = (
+        money_in
+        or payment.transaction
+        or (
+            db.get(Transaction, payment.transaction_id)
+            if payment.transaction_id
+            else None
+        )
     )
     if txn is None:
         return None, None
@@ -190,11 +204,11 @@ def deposit_holding(db: Session, payment: Payment) -> Optional[str]:
     return None
 
 
-def refuse_void_if_deposited(db: Session, payment: Payment) -> None:
+def refuse_void_if_deposited(db: Session, payment: Payment, money_in=None) -> None:
     """A payment whose money has gone to the bank can't simply be voided:
     the reversal would take it out of Undeposited Funds a second time.
     Raise a 400 that says what to do instead; return when it may go."""
-    kind, dep = _where_is(db, payment)
+    kind, dep = _where_is(db, payment, money_in)
     if kind == "bank_reconciled":
         # Received straight into the bank, and that line is on a closed
         # bank statement.
@@ -231,7 +245,9 @@ def refuse_void_if_deposited(db: Session, payment: Payment) -> None:
             status_code=400,
             detail=(
                 "This payment has already been deposited: it is no longer on "
-                "the Make Deposits list. Void the deposit that took it (Make "
-                "Deposits, Recent deposits) first, then void this payment."
+                "the Make Deposits list. Void the deposit that took it first "
+                "(Make Deposits, Recent deposits; or, for one brought in from "
+                "QuickBooks Online, open it from the bank register), then void "
+                "this payment."
             ),
         )

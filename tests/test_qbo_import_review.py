@@ -302,7 +302,8 @@ def test_the_repair_leaves_a_line_in_a_completed_reconciliation(
     result = qbo_ledger_import.import_ledger(db_session, start=day, end=day)
     assert result["imported"] == 0
     assert result["errors"]
-    assert result["errors"][0]["code"] == "IMPORT_POSTING_MISMATCH"
+    assert result["errors"][0]["code"] == "IMPORT_QBO_CHANGE_NOT_APPLIED"
+    assert "reconciled bank statement" in result["errors"][0]["message"]
     assert bank_line.account_id == checking.id
 
 

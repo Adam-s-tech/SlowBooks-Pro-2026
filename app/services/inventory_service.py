@@ -357,8 +357,13 @@ def reverse_sale(
     original_source_type: Optional[str] = None,
     original_source_id: Optional[int] = None,
     txn_date=None,
+    post_journal: bool = True,
 ) -> Optional[InventoryMovement]:
     """Reverse a previous sale (invoice void).
+
+    `post_journal=False` returns the stock without the cost entry, for a
+    sale whose cost was carried by a posting being reversed with it (a
+    QuickBooks Online sale's import posting).
 
     CRITICAL: we must reverse at the ORIGINAL sale's unit_cost, not the
     current avg_cost. If cost moved between sale and void, using the
@@ -402,7 +407,7 @@ def reverse_sale(
     amount = _q(quantity * unit_cost)
 
     txn_id = None
-    if amount > 0:
+    if amount > 0 and post_journal:
         asset_id = get_inventory_asset_account_id(db, item)
         cogs_id = get_cogs_account_id(db)
         if asset_id and cogs_id:

@@ -129,7 +129,9 @@ def test_unbalanced_posting_blocks_all_postings(db_session, monkeypatch):
     assert db_session.query(Transaction).count() == 0
 
 
-def test_changed_posting_is_reported_without_duplicate(db_session, monkeypatch):
+def test_a_posting_changed_in_qbo_is_posted_again_once(db_session, monkeypatch):
+    """2.18.0 (owner): the imported posting is reversed and the new version
+    posted; #192 reported a blocking mismatch."""
     postings = {
         "1": [_posting("10", "Purchase", "-50")],
         "2": [_posting("10", "Purchase", "50")],
@@ -138,11 +140,12 @@ def test_changed_posting_is_reported_without_duplicate(db_session, monkeypatch):
     assert _import(db_session)["imported"] == 1
     postings["1"][0]["ColData"][6]["value"] = "-60"
     postings["2"][0]["ColData"][6]["value"] = "60"
-    result = _import(db_session)
-    assert result["imported"] == 0
-    assert "local debit-minus-credit 50.00, QBO 60.00" in result["errors"][0]["message"]
-    assert result["errors"][0]["qbo_id"] == "Purchase:10"
-    assert db_session.query(Transaction).count() == 1
+    for _ in range(2):  # and once only
+        result = _import(db_session)
+        assert result == {"imported": 0, "errors": []}
+    assert db_session.query(Transaction).count() == 3
+    expenses = db_session.query(Account).filter_by(name="Expenses").one()
+    assert expenses.balance == Decimal("60.00")
 
 
 def test_failed_posting_rolls_back_entire_batch(db_session, monkeypatch):

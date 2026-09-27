@@ -168,11 +168,41 @@ def void_journal_entry(entry_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Journal entry not found")
     if txn.source_type and txn.source_type.endswith("_void"):
         raise HTTPException(status_code=400, detail="Cannot void a reversal entry")
-    if txn.source_type in {"qbo_ledger", "qbo_journal"}:
+    from app.models.qbo_mapping import QBOMapping
+    from app.services import qbo_documents
+
+    if qbo_documents.reversed_already(db, txn):
         raise HTTPException(
-            status_code=400,
-            detail="QBO ledger entries are managed by the QBO import",
+            status_code=400, detail="This journal entry has already been voided."
         )
+    from_qbo = txn.source_type in {"qbo_ledger", "qbo_journal"}
+    if from_qbo:
+        # The QuickBooks Online import's posting of an invoice, sales receipt
+        # or payment: voiding it voids the document, as voiding the document
+        # would (its posting is reversed with it), so the two stay together.
+        found = qbo_documents.document_of_posting(db, txn)
+        if found is not None:
+            from app.routes.invoices.lifecycle import void_invoice
+            from app.routes.payments import void_payment
+
+            kind, document = found
+            if kind == "payment":
+                void_payment(document.id, db)
+            else:
+                if kind == "sales_receipt":
+                    for alloc in list(document.payment_allocations):
+                        if alloc.payment is not None and not alloc.payment.is_voided:
+                            void_payment(alloc.payment_id, db)
+                void_invoice(document.id, db)
+            reversal = (
+                db.query(Transaction)
+                .filter(
+                    Transaction.source_type == f"{txn.source_type}_void",
+                    Transaction.source_id == txn.id,
+                )
+                .first()
+            )
+            return get_journal_entry(reversal.id if reversal else txn.id, db)
 
     assert_not_reconciled(txn)
     check_closing_date(db, txn.date)
@@ -184,13 +214,23 @@ def void_journal_entry(entry_id: int, db: Session = Depends(get_db)):
             txn.date,
             f"VOID: {txn.description or ''}",
             reverse_lines,
-            source_type="manual_void",
+            # A QuickBooks Online import posting is reversed under its own
+            # name, so a later import knows it was voided here.
+            source_type=f"{txn.source_type}_void" if from_qbo else "manual_void",
             source_id=txn.id,
             reference=txn.reference,
             class_id=txn.class_id,
             job_id=txn.job_id,
         )
         release_statement_links(db, txn)
+        if from_qbo:
+            qbo_documents.mark_changed_here(
+                db,
+                *db.query(QBOMapping).filter(
+                    QBOMapping.entity_type.in_(("ledger", "journal_entry")),
+                    QBOMapping.slowbooks_id == txn.id,
+                ),
+            )
         db.commit()
         db.refresh(void_txn)
         return get_journal_entry(void_txn.id, db)
