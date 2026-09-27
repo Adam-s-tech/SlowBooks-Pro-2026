@@ -34,8 +34,17 @@ Two kinds of page are the exceptions, each checked for what it says
 instead: Payroll and HR, which are the administrator's; and the audit log,
 which the server refuses to a read-only sign-in.
 
+A bookkeeper is swept the same way against the administrator, with a second
+judgment of each control: is it the administrator's (marked data-admin where
+it is built, a backup download, a handler that sends a request the server
+keeps for the administrator, or what a form only the administrator saves
+sends)? None of those may be offered to a bookkeeper, and every other control
+the administrator is offered, reads and writes alike, must be. Payroll, HR and
+Migrate Data say they are the administrator's.
+
 Skipped, as one module, where playwright or its Chromium is not installed
-(tests/test_readonly_ui.py checks the same marks without a browser).
+(tests/test_readonly_ui.py checks the same marks without a browser, and
+tests/test_bookkeeper_ui.py a bookkeeper's pages).
 """
 
 import json
@@ -62,7 +71,7 @@ from tests.test_theme_contrast import (  # noqa: E402,F401  (the fixtures)
 )
 
 JS = Path(__file__).resolve().parents[1] / "app" / "static" / "js"
-READER_PW = "long-enough-pw"
+USER_PW = "long-enough-pw"
 
 # The page objects the scripts declare (const InvoicesPage = { ... }). They
 # are global bindings but not window properties, and the page's CSP allows
@@ -86,6 +95,18 @@ SWEEP = r"""(root) => {
   const OBJ = __OBJECTS__;
   // A request the read-only role is refused
   const WRITE = /\bAPI\s*\.\s*(?:post|put|del|patch)\s*\(|\bAPI\s*\.\s*request\s*\(\s*['"`](?:POST|PUT|PATCH|DELETE)\b|\bmethod\s*:\s*['"`](?:POST|PUT|PATCH|DELETE)['"`]/;
+  // A request the server keeps for the administrator (app.main's
+  // _ADMIN_WRITE_PREFIXES and _ADMIN_ONLY_PREFIXES, and the routes that
+  // call require_admin): refused to a bookkeeper too
+  const ADMIN = new RegExp([
+    /\bAPI\s*\.\s*(?:post|put|del|patch)\s*\(\s*['"`]\/(?:settings|backups|companies|users|tokens|employees|migration)\b/,
+    /\bAPI\s*\.\s*(?:get|post|put|del|patch)\s*\(\s*['"`]\/(?:payroll|tax-forms|benefits|deductions|onboarding|users|tokens)\b/,
+    /\bAPI\s*\.\s*get\s*\(\s*['"`]\/qbo\/auth-url\b/,
+    /\bAPI\s*\.\s*(?:post|del)\s*\(\s*['"`]\/(?:qbo\/connect-manual|qbo\/import|uploads\/logo)\b/,
+    // fetch: an import from another program, starting a QBO import (not
+    // reading its log), the logo
+    /['"`]\/api\/(?:migration\/|qbo\/import-runs['"`]|uploads\/logo)/,
+  ].map(r => r.source).join('|'));
   const CALL = /\b(this|[A-Z][\w$]*)\s*\.\s*([A-Za-z_$][\w$]*)\s*\(/g;
   // A function's own code: not its comments, nor the handlers it writes
   // into the HTML it builds (onsubmit="InvoicesPage.save(event)" is the
@@ -94,26 +115,31 @@ SWEEP = r"""(root) => {
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/(^|[^:'"`\\])\/\/[^\n]*/g, '$1')
     .replace(/\bon[a-z]+\s*=\s*(\\?["'])[\s\S]*?\1/g, '');
-  const memo = new Map();
-  // Does Obj.method send a write itself, or through a method it calls?
-  const writes = (o, m, depth) => {
-    const key = `${o}.${m}/${depth}`;
-    if (memo.has(key)) return memo.get(key);
-    memo.set(key, false);
-    const fn = OBJ[o] && OBJ[o][m];
-    let yes = false;
-    if (typeof fn === 'function') {
-      const c = code(fn.toString());
-      yes = WRITE.test(c);
-      if (!yes && depth > 0) {
-        for (const [, o2, m2] of c.matchAll(CALL)) {
-          if (writes(o2 === 'this' ? o : o2, m2, depth - 1)) { yes = true; break; }
+  // Does Obj.method send such a request itself, or through a method it calls?
+  const sender = (re) => {
+    const memo = new Map();
+    const sends = (o, m, depth) => {
+      const key = `${o}.${m}/${depth}`;
+      if (memo.has(key)) return memo.get(key);
+      memo.set(key, false);
+      const fn = OBJ[o] && OBJ[o][m];
+      let yes = false;
+      if (typeof fn === 'function') {
+        const c = code(fn.toString());
+        yes = re.test(c);
+        if (!yes && depth > 0) {
+          for (const [, o2, m2] of c.matchAll(CALL)) {
+            if (sends(o2 === 'this' ? o : o2, m2, depth - 1)) { yes = true; break; }
+          }
         }
       }
-    }
-    memo.set(key, yes);
-    return yes;
+      memo.set(key, yes);
+      return yes;
+    };
+    return sends;
   };
+  const writes = sender(WRITE);
+  const keeps = sender(ADMIN);
   // The source of every method that sends a write: a field whose id or
   // class one of them reads is sent by a save.
   if (!window.__writerSources) {
@@ -171,6 +197,26 @@ SWEEP = r"""(root) => {
     if (el.matches('input, select, textarea') && readBySave(el)) return 'a field a save sends';
     return null;
   };
+  // Is it the administrator's? The server refuses what it sends to a
+  // bookkeeper as well.
+  const adminWhy = (el) => {
+    if (el.closest('[data-admin]')) return 'marked data-admin';
+    if ((el.getAttribute('href') || '').includes('/api/backups/download/')) return 'downloads a backup';
+    for (const attr of HANDLERS) {
+      for (const [, o, m] of (el.getAttribute(attr) || '').matchAll(CALL)) {
+        if (o !== 'this' && keeps(o, m, 1)) return `calls ${o}.${m}, which is the administrator's`;
+      }
+    }
+    // what a form the administrator saves sends: its named fields, and a
+    // button that submits it (one with no type does)
+    const form = el.matches('input, select, textarea, button') && el.closest('form');
+    const saves = form && [...(form.getAttribute('onsubmit') || '').matchAll(CALL)]
+      .some(([, o, m]) => o !== 'this' && keeps(o, m, 1));
+    if (saves && (el.name || (el.matches('button') && el.type === 'submit'))) {
+      return 'sent by a form only an administrator saves';
+    }
+    return null;
+  };
   const label = (el) => {
     let t;
     if (el.matches('select')) {
@@ -202,6 +248,7 @@ SWEEP = r"""(root) => {
       key: `${tag} "${text}" ${handler || el.getAttribute('href') || ''}`.trim(),
       text,
       why: why(el),
+      admin_why: adminWhy(el),
       // the invoice row's Edit, hidden where View shows the record
       beside_view: text === 'Edit' && siblings.some(b => b.textContent.trim() === 'View'),
     });
@@ -295,27 +342,37 @@ JOB_TABS = ("costs", "budget", "transactions", "time")
 REFUSED_READS = {"#/audit": "Your role doesn't allow this action"}
 
 
-def _reader(company, db_session):
-    """A read-only user, made in Settings -> Users, signed in on a client of
-    its own (the admin's client stays signed in). The dashboard's cards are
-    remembered per login and a read-only user cannot save a layout, so it is
-    given the admin's: every card, as seed_books left it."""
-    rita = _ok(
+def _user(company, db_session, username, role):
+    """A user made in Settings -> Users, signed in on a client of its own
+    (the admin's client stays signed in). The dashboard's cards are
+    remembered per login and a read-only user cannot save a layout, so each
+    is given the admin's: every card, as seed_books left it."""
+    user = _ok(
         company.post(
             "/api/users",
-            json={"username": "rita", "password": READER_PW, "role": "readonly"},
+            json={"username": username, "password": USER_PW, "role": role},
         )
     )
     layout = _ok(company.get("/api/preferences/dashboard"))["value"]
     assert layout and layout["order"]
     db_session.add(
-        UserPreference(user_id=rita["id"], key="dashboard", value=json.dumps(layout))
+        UserPreference(user_id=user["id"], key="dashboard", value=json.dumps(layout))
     )
     db_session.commit()
-    reader = TestClient(app)
-    r = reader.post("/api/auth/login", json={"username": "rita", "password": READER_PW})
+    signed_in = TestClient(app)
+    r = signed_in.post(
+        "/api/auth/login", json={"username": username, "password": USER_PW}
+    )
     assert r.status_code == 200, r.text
-    return reader
+    return signed_in
+
+
+def _reader(company, db_session):
+    return _user(company, db_session, "rita", "readonly")
+
+
+def _keeper(company, db_session):
+    return _user(company, db_session, "kim", "bookkeeper")
 
 
 def _signed_in(browser, client, role):
@@ -328,7 +385,7 @@ def _signed_in(browser, client, role):
 
 def _sweep_pages(browser, client, role, books):
     page, handled = _signed_in(browser, client, role)
-    swept, headings, texts = {}, {}, {}
+    swept, headings, texts, admin_notes = {}, {}, {}, {}
     try:
         paths = page.evaluate(
             "() => Object.keys(App.routes).filter(k => !k.includes('/:'))"
@@ -342,12 +399,22 @@ def _sweep_pages(browser, client, role, books):
         }
         for route in routes:
             _visit(page, handled, route)
+            if route == "#/analytics":
+                # its list of AI analyses arrives after the charts are drawn,
+                # which can outlast the quiet settle waits for
+                page.wait_for_function("() => AnalyticsPage.state.aiActions !== null")
+                settle(page, handled)
             swept[route] = page.evaluate(SWEEP, "#page-content")
             headings[route] = page.evaluate(
                 "() => (document.querySelector('#page-content h2, #page-content h3')"
                 " || {}).textContent || ''"
             ).strip()
             texts[route] = page.inner_text("#page-content")
+            # the sentences that say a control is the administrator's
+            admin_notes[route] = page.evaluate(
+                "() => [...document.querySelectorAll('#page-content [data-admin-note]')]"
+                ".filter(n => n.getClientRects().length).map(n => n.textContent.trim())"
+            )
         # a job's other tabs re-render in place
         for tab in JOB_TABS:
             page.evaluate("async (t) => { await JobsPage.setTab(t); }", tab)
@@ -373,6 +440,7 @@ def _sweep_pages(browser, client, role, books):
         "swept": swept,
         "headings": headings,
         "texts": texts,
+        "admin_notes": admin_notes,
         "admin_only": admin_only,
         "sidebar": sidebar,
         "notes": notes,
@@ -401,11 +469,12 @@ def _sweep_dialogs(browser, client, role, books):
     return swept
 
 
-def _offered_writes(swept):
-    """{where: ["<control> — why", ...]} for every write on offer."""
+def _offered_writes(swept, judge="why"):
+    """{where: ["<control> — why", ...]} for every write on offer (judge
+    "admin_why": every control of the administrator's)."""
     out = {}
     for where, controls in swept.items():
-        seen = sorted({f"{c['key']} — {c['why']}" for c in controls if c["why"]})
+        seen = sorted({f"{c['key']} — {c[judge]}" for c in controls if c[judge]})
         if seen:
             out[where] = seen
     return out
@@ -435,18 +504,30 @@ def _lost_reads(admin, reader):
     return out
 
 
-def _unseen(admin, found):
+def _unseen(admin, found, judge="why"):
     """The gate's findings the sweep did not see as writes on the admin's
-    page."""
+    page (judge "admin_why": as the administrator's)."""
     out = {}
     for where, labels in found.items():
-        writes = {c["text"] for c in admin.get(where, []) if c["why"]}
+        writes = {c["text"] for c in admin.get(where, []) if c[judge]}
         writes |= {
             "file" for c in admin.get(where, []) if c["key"].startswith("input[file]")
         }
         missing = sorted(labels - writes)
         if missing:
             out[where] = missing
+    return out
+
+
+def _lost_to_keeper(admin, keeper):
+    """What the admin is offered, and is not the administrator's, that a
+    bookkeeper is not: reads and writes alike."""
+    out = {}
+    for where, controls in admin.items():
+        shown = {c["key"] for c in keeper.get(where, [])}
+        lost = sorted({c["key"] for c in controls if not c["admin_why"]} - shown)
+        if lost:
+            out[where] = lost
     return out
 
 
@@ -525,14 +606,146 @@ def test_a_read_only_sign_in_leaves_settings_unasked(
     page.on("dialog", lambda d: (asked.append(d.message), d.dismiss()))
     try:
         # the order of a first page: Settings is in before the role is known
-        page.evaluate("""() => { App._roObserver.disconnect(); App._roObserver = null;
-            App.role = 'admin'; document.body.classList.remove('role-readonly'); }""")
+        page.evaluate(
+            """() => { App._roleObserver.disconnect(); App._roleObserver = null;
+            App.role = 'admin'; document.body.classList.remove('role-readonly'); }"""
+        )
         _visit(page, handled, "#/settings")
         page.evaluate("() => App.setRole('readonly')")
         settle(page, handled)
         assert page.evaluate(
             "() => document.querySelector('#settings-form [name=company_name]').disabled"
         )
+        _visit(page, handled, "#/reports")
+        assert (page.evaluate("location.hash"), asked) == ("#/reports", [])
+    finally:
+        page.close()
+
+
+# ---- a bookkeeper ------------------------------------------------------------
+# A bookkeeper keeps the daily books, but the administrator's writes are
+# refused to it: company settings, backups, new company files, the logo,
+# connecting and importing from QuickBooks Online, Migrate Data. The pages
+# offered them all the same (2.18.0). The controls the owner and the gate
+# named, as the sweep labels them: the admin's pages must show each as the
+# administrator's, or the sweep is not looking.
+ADMIN_ON_PAGES = {
+    "#/settings": {
+        "Save Settings",
+        "Send Test Email",
+        "Create Backup",
+        "Restore…",
+        "Download",
+        "company_name",
+        "logo-upload",
+        "ocr-engine-pref",
+    },
+    "#/qbo": {"Start connection with Intuit", "Finish QBO connection"},
+    "#/companies": {"+ New Company"},
+}
+KEEPER_NOTES = {
+    "#/settings": [
+        "Company settings are changed by an administrator.",
+        "Backups are made, downloaded and restored by an administrator.",
+    ],
+    "#/qbo": [
+        "Connecting to QuickBooks Online is done by an administrator.",
+        "Importing from QuickBooks Online is done by an administrator.",
+    ],
+    "#/companies": ["New company files are created by an administrator."],
+}
+
+
+def test_no_page_offers_a_bookkeeper_an_administrators_control(
+    browser, company, books, db_session
+):
+    keeper = _keeper(company, db_session)
+    admin_run = _sweep_pages(browser, company, "admin", books)
+    keeper_run = _sweep_pages(browser, keeper, "bookkeeper", books)
+    admin, kept = admin_run["swept"], keeper_run["swept"]
+
+    assert len(admin) >= 50 and set(admin) == set(kept), sorted(set(admin) ^ set(kept))
+    # the sweep sees the administrator's controls on the admin's pages
+    assert _unseen(admin, ADMIN_ON_PAGES, "admin_why") == {}
+    # none is offered to the bookkeeper, on any page
+    assert _offered_writes(kept, "admin_why") == {}
+    # Payroll, HR and Migrate Data say whose they are, rather than half loading
+    only = keeper_run["admin_only"]
+    assert {"#/payroll", "#/employees", "#/migrate"} <= only
+    assert {
+        route: keeper_run["headings"][route]
+        for route in only
+        if not keeper_run["headings"][route].endswith("is for administrators")
+    } == {}
+    # everything else stays: Settings' lists, QBO's export, every other
+    # page's reads and writes
+    assert (
+        _lost_to_keeper({r: c for r, c in admin.items() if r not in only}, kept) == {}
+    )
+    # a sentence says why, where the controls were
+    assert {r: keeper_run["admin_notes"][r] for r in KEEPER_NOTES} == KEEPER_NOTES
+    assert {r: n for r, n in admin_run["admin_notes"].items() if n} == {}
+    # the sidebar leaves out Migrate Data, and keeps the pages a bookkeeper uses
+    assert "migrate" in admin_run["sidebar"]
+    assert "migrate" not in keeper_run["sidebar"]
+    assert {
+        "batch-payments",
+        "opening-balances",
+        "settings",
+        "companies",
+        "qbo",
+    } <= set(keeper_run["sidebar"])
+
+
+def test_a_bookkeeper_on_a_first_page_of_settings(browser, company, books, db_session):
+    """Settings drawn before the role is known (a bookmarked #/settings): once
+    it arrives, the company settings are locked with the sentence and the
+    lists stay the bookkeeper's; opening an email template sends only its own
+    requests (its Edit button used to submit the whole Settings form); and
+    leaving does not ask about unsaved changes."""
+    keeper = _keeper(company, db_session)
+    page, handled = _signed_in(browser, keeper, "bookkeeper")
+    asked = []
+    page.on("dialog", lambda d: (asked.append(d.message), d.dismiss()))
+    try:
+        # the order of a first page: Settings is in before the role is known
+        page.evaluate("""() => { if (App._roleObserver) App._roleObserver.disconnect();
+            App._roleObserver = null; App.role = 'admin'; }""")
+        _visit(page, handled, "#/settings")
+        assert page.evaluate("() => !!document.getElementById('logo-upload')")
+        page.evaluate("() => App.setRole('bookkeeper')")
+        settle(page, handled)
+        got = page.evaluate("""() => {
+            const shown = el => !!el && el.getClientRects().length > 0;
+            const form = document.getElementById('settings-form');
+            const named = [...form.querySelectorAll('[name]')];
+            const add = document.getElementById('new-class-name');
+            return {
+                fields: named.length,
+                open: named.filter(f => !f.disabled).map(f => f.name),
+                save: shown(document.getElementById('settings-save-btn')),
+                picker: shown(document.getElementById('logo-upload')),
+                notes: [...form.querySelectorAll('[data-admin-note]')].filter(shown)
+                    .map(n => n.textContent.trim()),
+                add_class: shown(add) && !add.disabled,
+            };
+        }""")
+        assert got["fields"] >= 50 and got["open"] == []
+        assert (got["save"], got["picker"], got["add_class"]) == (False, False, True)
+        assert got["notes"] == KEEPER_NOTES["#/settings"]
+        # opening a template asks for the template, and sends no settings
+        before = len(handled)
+        page.evaluate(
+            "() => document.querySelector('#email-template-list button').click()"
+        )
+        page.wait_for_function(OPEN)
+        settle(page, handled)
+        sent = handled[before:]
+        assert sent and all(
+            p.startswith(("/api/email-templates/", "/api/invoices?")) for p in sent
+        ), sent
+        assert page.evaluate("() => document.querySelectorAll('.toast').length") == 0
+        page.evaluate("() => closeModal()")
         _visit(page, handled, "#/reports")
         assert (page.evaluate("location.hash"), asked) == ("#/reports", [])
     finally:

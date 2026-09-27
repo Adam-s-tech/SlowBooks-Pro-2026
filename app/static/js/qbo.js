@@ -61,8 +61,9 @@ const QBOPage = {
                     </div>
                     ${status.connected
                         ? `<button class="btn btn-secondary" onclick="QBOPage.disconnect()">Disconnect from QuickBooks</button>`
-                        : `<button class="btn btn-primary" onclick="QBOPage.connect()">Start connection with Intuit</button>
-                           <form id="qbo-manual-connect" data-write autocomplete="off" onsubmit="QBOPage.connectManual(event)" style="margin-top:12px;">
+                        : `<div class="hidden" data-admin-note style="font-size:11px; color:var(--text-muted);">Connecting to QuickBooks Online is done by an administrator.</div>
+                           <button class="btn btn-primary" data-admin onclick="QBOPage.connect()">Start connection with Intuit</button>
+                           <form id="qbo-manual-connect" data-write data-admin autocomplete="off" onsubmit="QBOPage.connectManual(event)" style="margin-top:12px;">
                                <div class="form-grid">
                                    <div class="form-group">
                                        <label for="qbo-authorization-code">Authorization Code</label>
@@ -87,8 +88,11 @@ const QBOPage = {
                         Pull data from your connected QuickBooks Online company into Slowbooks.
                         Existing records are detected by name/number and skipped.
                     </p>
+                    <!-- Starting an import is the administrator's (require_admin);
+                         its log below is anyone's to read. -->
+                    <div class="hidden" data-admin-note style="font-size:11px; color:var(--text-muted); margin-bottom:10px;">Importing from QuickBooks Online is done by an administrator.</div>
 
-                    <div style="margin-bottom:10px;">
+                    <div style="margin-bottom:10px;" data-admin>
                         <button class="btn btn-primary qbo-import-button" style="width:100%;" onclick="QBOPage.importAll()"
                             disabled aria-describedby="qbo-import-why">
                             Import All Data
@@ -96,13 +100,13 @@ const QBOPage = {
                         <div id="qbo-import-why" class="hint" style="margin-top:4px; font-size:11px;" role="status"></div>
                     </div>
 
-                    <div style="font-size:10px; font-weight:700; color:var(--text-secondary); text-transform:uppercase; margin-bottom:6px;" data-write>
+                    <div style="font-size:10px; font-weight:700; color:var(--text-secondary); text-transform:uppercase; margin-bottom:6px;" data-write data-admin>
                         Import Individual Entity Types
                     </div>
-                    <div id="qbo-import-checkboxes" data-write style="margin-bottom:8px; font-size:11px;">
+                    <div id="qbo-import-checkboxes" data-write data-admin style="margin-bottom:8px; font-size:11px;">
                         ${importCheckboxes}
                     </div>
-                    <button class="btn btn-secondary qbo-import-button" onclick="QBOPage.importSelected()"
+                    <button class="btn btn-secondary qbo-import-button" data-admin onclick="QBOPage.importSelected()"
                         disabled>
                         Import Selected
                     </button>

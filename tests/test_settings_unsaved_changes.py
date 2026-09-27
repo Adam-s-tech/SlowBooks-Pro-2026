@@ -9,6 +9,7 @@ page (a link, a toolbar button, a shortcut, a reload) asks first.
 """
 
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -75,6 +76,15 @@ def test_the_save_bar_stays_in_reach_and_is_the_forms_own_submit():
     assert 'id="settings-dirty-note"' in bar
     # and AI Insights' own button no longer reads as the page's "Save"
     assert 'id="ai-settings-save">Save AI settings</button>' in JS
+
+
+def test_no_other_button_submits_the_settings_form():
+    # A button with no type submits the form it is in. The email templates'
+    # Edit had none: opening a template saved every setting on the page
+    # behind the editor (and told a bookkeeper "Your role doesn't allow this
+    # action"). Every button this page builds says what it is.
+    untyped = [b for b in re.findall(r"<button\b[^>]*>", JS) if "type=" not in b]
+    assert untyped == []
 
 
 def test_saving_marks_the_page_clean_and_the_page_is_watched():

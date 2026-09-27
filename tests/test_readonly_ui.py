@@ -38,8 +38,10 @@ def test_create_buttons_are_hidden_for_a_read_only_sign_in():
     assert "el.classList.contains('btn-primary') && el.closest('.page-header')" in body
     assert "el.classList.add('hidden')" in body
     # pages that re-render in place stay clean, and so do dialogs that fill
-    # in after they open (2.18.0 round 4: AR Aging's Apply Late Fees)
-    assert "new MutationObserver(() => roots.forEach(App.readOnlyPass))" in app
+    # in after they open (2.18.0 round 4: AR Aging's Apply Late Fees); the
+    # pass for any role but admin includes the read-only one
+    assert "new MutationObserver(() => roots.forEach(App.rolePass))" in app
+    assert "App.readOnlyPass(root);" in app[app.index("rolePass(root) {") :][:200]
     assert "[page, document.getElementById('modal-body')]" in app
     # the toolbar's New Customer / Create Invoice / Receive Payment / Quick Entry
     assert (
