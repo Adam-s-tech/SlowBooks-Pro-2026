@@ -76,6 +76,7 @@ const SettingsPage = {
         SettingsPage._savedClosingDate = s.closing_date || '';
         setTimeout(() => {
             SettingsPage.loadBackups();
+            SettingsPage.loadLegacyFiles();
             SettingsPage.loadEmailTemplates();
             SettingsPage.loadAiConfig();
             SettingsPage.loadClasses();
@@ -506,6 +507,8 @@ const SettingsPage = {
                     </div>
                     <div id="backup-list"></div>
                 </div>
+
+                ${SettingsPage._isAdmin() ? '<div class="settings-section" id="settings-legacy-files" hidden></div>' : ''}
 
                 <div class="settings-section" id="settings-users" style="display:none;">
                     <h3>Users &mdash; Server Edition</h3>
@@ -1057,6 +1060,69 @@ const SettingsPage = {
                 </tr>`).join('')}</tbody>
             </table></div>`;
         } catch (e) { /* ignore */ }
+    },
+
+    // ------------------------------------------------------------------
+    // Files from earlier versions. Before 2.18 every company on an install
+    // kept its logo, attachments and employee documents in one shared
+    // folder; each company has its own copies now, but the old ones (W-4s
+    // and I-9s among them) are still there. Shown to an administrator only
+    // while the folder holds files. Removing them waits until every company
+    // has been opened since the update: that is when each copies its own in.
+    // ------------------------------------------------------------------
+    _andList(names) {
+        return names.length <= 2 ? names.join(' and ')
+            : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+    },
+
+    async loadLegacyFiles() {
+        const section = $('#settings-legacy-files');
+        if (!section || !SettingsPage._isAdmin()) return;
+        let state;
+        try {
+            state = await API.get('/uploads/legacy');
+        } catch (e) { return; }  // an older server, or one that refuses this role: stays hidden
+        SettingsPage._legacyFiles = state;
+        if (!state || !(state.files > 0)) {
+            section.hidden = true;
+            section.innerHTML = '';
+            return;
+        }
+        const pending = state.pending_companies || [];
+        const count = `${state.files} ${state.files === 1 ? 'file' : 'files'} (${formatFileSize(state.bytes)})`;
+        let wait = '';
+        if (pending.length === 1) {
+            wait = `${pending[0]} hasn't been opened since SlowBooks Pro was updated, and still needs to copy its files`
+                + ' from this folder. Open it once, then come back here to remove them.';
+        } else if (pending.length) {
+            wait = `${SettingsPage._andList(pending)} haven't been opened since SlowBooks Pro was updated, and still need`
+                + ' to copy their files from this folder. Open each of them once, then come back here to remove them.';
+        }
+        section.innerHTML = `
+            <h3>Files from earlier versions</h3>
+            <div style="font-size:10px; color:var(--text-muted); margin-bottom:8px;">
+                Before version 2.18, every company here kept its logo, attachments and employee documents in one
+                shared folder. Each company now keeps its own copies inside its company file, so nothing uses that
+                folder any more, but it still holds ${escapeHtml(count)}. A document deleted since then still has
+                its old copy there.
+            </div>
+            ${wait ? `<div id="legacy-files-pending" style="font-size:11px; margin-bottom:8px;">${escapeHtml(wait)}</div>` : ''}
+            <button type="button" class="btn btn-sm btn-secondary" id="legacy-files-remove" data-write
+                ${pending.length ? 'disabled' : ''} onclick="SettingsPage.removeLegacyFiles()">Remove them</button>`;
+        section.hidden = false;
+    },
+
+    async removeLegacyFiles() {
+        const n = (SettingsPage._legacyFiles && SettingsPage._legacyFiles.files) || 0;
+        if (!confirm(`Delete the ${n} ${n === 1 ? 'file' : 'files'} in the folder earlier versions shared between companies? `
+            + 'Each company keeps its own copies inside its company file, so nothing in your books changes. '
+            + 'This cannot be undone: a backup made before version 2.18, restored later, would come back '
+            + 'without its logo, attachments and employee documents.')) return;
+        try {
+            const result = await API.del('/uploads/legacy');
+            toast(`Removed ${result.removed} ${result.removed === 1 ? 'file' : 'files'} from the shared folder`);
+        } catch (err) { toast(err.message, 'error'); }
+        await SettingsPage.loadLegacyFiles();
     },
 
     // Date and time: a company often has several backups on one day.

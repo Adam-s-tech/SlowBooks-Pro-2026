@@ -1,21 +1,28 @@
 # ============================================================================
-# File Uploads — the company logo
+# File Uploads — the company logo, and the folder earlier versions shared
 # Feature 15: Infrastructure D (UploadFile pattern)
 #
 # The logo is kept in the company's own database (app/services/file_store.py),
 # not in the uploads folder every company on a desktop install shared: there
 # it was one file, company_logo.<ext>, so one company's upload became every
 # company's logo (2.18.0 gate, macbase1 NEW-14 and skytech).
+#
+# /legacy is that shared folder: an administrator sees what it still holds
+# and removes it once every company has copied its files in
+# (app/services/legacy_uploads.py).
 # ============================================================================
+
+import logging
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.routes._roles import require_admin
-from app.services import file_store
+from app.services import file_store, legacy_uploads
 
 router = APIRouter(prefix="/api/uploads", tags=["uploads"])
+logger = logging.getLogger(__name__)
 
 # Map of allowed content-type -> filename extension. Deriving the extension
 # from the verified content-type instead of from the user-supplied filename
@@ -78,3 +85,41 @@ def remove_logo(request: Request, db: Session = Depends(get_db)):
 def logo_image(file_id: int, db: Session = Depends(get_db)):
     """The logo image, from this company's own database."""
     return file_store.logo_response(db, file_store.logo_row(db, file_id))
+
+
+@router.get("/legacy")
+def legacy_folder(request: Request, db: Session = Depends(get_db)):
+    """What the folder releases before 2.18.0 kept every company's uploads
+    in still holds, and which companies still have to copy their files
+    from it: {"files", "bytes", "pending_companies", "can_remove"}."""
+    require_admin(request)
+    return legacy_uploads.folder_state(db)
+
+
+@router.delete("/legacy")
+def remove_legacy_folder(request: Request, db: Session = Depends(get_db)):
+    """Delete the files in that folder, once no company still needs them.
+    Each company keeps its own copies in its own database."""
+    require_admin(request)
+    try:
+        result = legacy_uploads.remove_files(db)
+    except legacy_uploads.StillNeeded as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if result["removed"]:
+        # Who cleared it and when: the files were W-4s, I-9s and the rest.
+        from app.services.audit import log_event
+
+        try:
+            log_event(
+                db,
+                table_name="shared_uploads",
+                record_id=0,
+                action="DELETE",
+                new_values=result,
+                source="admin",
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("Could not record the shared folder's removal")
+    return result
