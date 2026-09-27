@@ -5,6 +5,17 @@
  * ============================================================================ */
 
 [data-theme="dark"] {
+    /* the bright chart colours: every one clears 3:1 on the dark card */
+    --chart-green: #00c48f;
+    --chart-red: #ff6b6b;
+    --chart-orange: #ffa94d;
+    --chart-amber: #ff922b;
+    --chart-crimson: #ff4757;
+    --chart-blue: #5b7fff;
+    --chart-purple: #a855f7;
+    --chart-pink: #e879f9;
+    --chart-sky: #38bdf8;
+    --chart-yellow: #facc15;
     /* Navy becomes a bright readable blue in dark mode — used for headings, card values */
     --qb-navy:        #8ab4e0;
     --qb-navy-dark:   #6a9cc8;

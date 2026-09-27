@@ -282,8 +282,8 @@ const DashboardPage = {
             const chip = c => `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${c};vertical-align:middle"></span>`;
             return `<div style="display:flex;gap:16px;font-size:11px;margin-bottom:4px;flex-wrap:wrap">
                     <span>${chip('var(--qb-blue)')} Assets ${formatCurrency(last.assets)}</span>
-                    <span>${chip('#ff6b6b')} Liabilities ${formatCurrency(last.liabilities)}</span>
-                    <span>${chip('#00c48f')} ${T('Equity')} ${formatCurrency(last.equity)}</span>
+                    <span>${chip('var(--chart-red)')} Liabilities ${formatCurrency(last.liabilities)}</span>
+                    <span>${chip('var(--chart-green)')} ${T('Equity')} ${formatCurrency(last.equity)}</span>
                 </div>
                 <div style="position:relative;height:150px"><canvas id="chart-bs-trend"></canvas></div>
                 <div style="font-size:10px;color:var(--gray-500);margin-top:2px">Month-end balances, last 12 months (this month to date) · <a href="#/reports">Full ${T('Balance Sheet')}</a></div>`;
@@ -314,8 +314,8 @@ const DashboardPage = {
                 labels,
                 datasets: [
                     { label: 'Assets', data: d.months.map(m => m.assets), borderColor: blue, backgroundColor: 'transparent', tension: 0.3, pointRadius: 2, borderWidth: 2 },
-                    { label: 'Liabilities', data: d.months.map(m => m.liabilities), borderColor: '#ff6b6b', backgroundColor: 'transparent', tension: 0.3, pointRadius: 2, borderWidth: 2 },
-                    { label: T('Equity'), data: d.months.map(m => m.equity), borderColor: '#00c48f', backgroundColor: 'transparent', tension: 0.3, pointRadius: 2, borderWidth: 2 },
+                    { label: 'Liabilities', data: d.months.map(m => m.liabilities), borderColor: chartColor('red'), backgroundColor: 'transparent', tension: 0.3, pointRadius: 2, borderWidth: 2 },
+                    { label: T('Equity'), data: d.months.map(m => m.equity), borderColor: chartColor('green'), backgroundColor: 'transparent', tension: 0.3, pointRadius: 2, borderWidth: 2 },
                 ],
             },
             options: {

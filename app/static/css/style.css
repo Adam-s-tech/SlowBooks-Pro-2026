@@ -44,6 +44,18 @@
        Measured: 12.6:1 here, 7.2:1 in dark. (macbase1, 2.10.3 gate) */
     --text-link:      #003366;
     --text-success:   #166534;   /* 7.13:1 on white */
+    /* Chart colours: a chart's lines, bars and keys are graphics, 3:1 on the
+       card (WCAG 1.4.11); every one here clears it on white. */
+    --chart-green: #0a9a6c;
+    --chart-red: #e5484d;
+    --chart-orange: #d9730d;
+    --chart-amber: #cc6a0a;
+    --chart-crimson: #d63240;
+    --chart-blue: #4c6ef5;
+    --chart-purple: #8b5cf6;
+    --chart-pink: #c026d3;
+    --chart-sky: #0b8bc4;
+    --chart-yellow: #b08900;
     /* The A/R aging bands, for the bar and the key beside each label, so
        the two stay matched. A key is a graphic: 3:1 on the card (WCAG
        1.4.11). Gold #cc9933 was 2.57 and orange #f97316 2.80 (macbase1
@@ -2005,7 +2017,7 @@ tr.clickable { cursor: pointer; }
 }
 
 .ai-key-saved {
-    color: #00c48f;
+    color: var(--text-success);   /* #00c48f was 2.26:1 as text on white */
     font-style: normal;
     font-weight: 600;
     margin-left: 4px;
@@ -2027,8 +2039,8 @@ tr.clickable { cursor: pointer; }
     color: var(--text-muted);
 }
 
-.ai-test-ok { color: #00c48f; }
-.ai-test-fail { color: var(--qb-red); }
+.ai-test-ok { color: var(--text-success); }   /* #00c48f was 2.26:1 on white */
+.ai-test-fail { color: var(--text-danger); }
 
 /* ----------------------------------------------------------------
  * Cloudflare Worker Gateway section (appears when provider is
@@ -2070,7 +2082,7 @@ tr.clickable { cursor: pointer; }
 }
 
 .ai-worker-security {
-    color: #00c48f;  /* green — safety callout */
+    color: var(--text-success);  /* green — safety callout (#00c48f was 2.26:1 on white) */
     border-top: 1px dashed rgba(243, 128, 32, 0.3);
     padding-top: 6px;
     margin-top: 6px;

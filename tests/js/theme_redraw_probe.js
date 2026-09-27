@@ -12,6 +12,8 @@ const ctx = {
   getComputedStyle: () => ({ getPropertyValue: () => (theme === 'dark' ? ' #4a7fb5' : ' #336699') }),
   Chart: function (c, cfg) { made.push(cfg); this.destroy = () => { destroyed++; }; },
   window: {}, T: (s) => s, formatCurrency: (n) => String(n), escapeHtml: (s) => s, App: {}, API: {}, $: () => null,
+  // utils.js's chartColor: the theme's --chart-* colour
+  chartColor: (name) => (theme === 'dark' ? 'dark-' : 'light-') + name,
 };
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync('app/static/js/dashboard.js', 'utf8') + '\nthis.DashboardPage = DashboardPage;', ctx);

@@ -352,8 +352,9 @@ from the rates and puts the rounding difference on line 7.
   PDF window. Muted text, the status bar, buttons, badges, notes and the
   colours pages wrote in by hand now come from theme colours that pass;
   the look is the same, a shade darker or lighter only as far as AA needs.
-  Semi-transparent text is measured as it is painted, and the A/R aging
-  chart's colour keys meet 3:1. This clears the contrast list the macOS
+  Semi-transparent text is measured as it is painted, and charts' lines,
+  bars and colour keys meet 3:1 in both themes (the light theme had the
+  dark theme's bright colours, as faint as 1.5:1). This clears the contrast list the macOS
   release gate had carried for several releases.
 
 #### For API clients and agents

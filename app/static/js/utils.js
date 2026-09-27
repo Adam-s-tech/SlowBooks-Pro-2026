@@ -57,6 +57,25 @@ function toast(message, type = 'success') {
     el.addEventListener('click', () => el.remove());
 }
 
+// Chart colours for the current theme, from the --chart-* colours the
+// stylesheets set per theme. A chart's lines, bars and legend keys are
+// graphics, which need 3:1 on the card (WCAG 1.4.11): the bright colours
+// read well on the dark card but were too faint on the light one (#00c48f
+// was 2.26:1, #facc15 1.53). A legend key in HTML uses var(--chart-*)
+// itself, so it follows a theme switch at once; a canvas reads this when
+// it draws, and the pages redraw on slowbooks:themechange.
+const CHART_FALLBACK = {
+    green: '#0a9a6c', red: '#e5484d', orange: '#d9730d', amber: '#cc6a0a', crimson: '#d63240',
+    blue: '#4c6ef5', purple: '#8b5cf6', pink: '#c026d3', sky: '#0b8bc4', yellow: '#b08900',
+};
+function chartColor(name) {
+    let value = '';
+    try {
+        value = getComputedStyle(document.documentElement).getPropertyValue('--chart-' + name).trim();
+    } catch (e) { /* no stylesheet (a probe) */ }
+    return value || CHART_FALLBACK[name] || name;
+}
+
 // A toast that carries one action (e.g. "Saved to … [Show in folder]").
 // Stays longer than a plain toast because the user has to read a path.
 function toastAction(message, actionLabel, onClick, ms = 8000) {

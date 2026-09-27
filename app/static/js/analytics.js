@@ -376,13 +376,13 @@ const AnalyticsPage = {
         "chart-ar-aging",
         this.state.data.ar_aging,
         T("A/R Aging").replace(/ Aging$/, ""),
-        "#00c48f",
+        chartColor("green"),
       );
       this._renderAgingChart(
         "chart-ap-aging",
         this.state.data.ap_aging,
         "A/P",
-        "#ff6b6b",
+        chartColor("red"),
       );
       this._renderCashForecastChart();
     }
@@ -448,7 +448,7 @@ const AnalyticsPage = {
           {
             label: "Monthly Paid Revenue",
             data: values,
-            borderColor: "#00c48f",
+            borderColor: chartColor("green"),
             backgroundColor: "rgba(0,196,143,0.15)",
             fill: true,
             tension: 0.3,
@@ -492,14 +492,14 @@ const AnalyticsPage = {
     const theme = this._chartDefaults();
 
     const palette = [
-      "#ff6b6b",
-      "#5b7fff",
-      "#ffa94d",
-      "#a855f7",
-      "#00c48f",
-      "#e879f9",
-      "#38bdf8",
-      "#facc15",
+      chartColor("red"),
+      chartColor("blue"),
+      chartColor("orange"),
+      chartColor("purple"),
+      chartColor("green"),
+      chartColor("pink"),
+      chartColor("sky"),
+      chartColor("yellow"),
     ];
 
     this.state.charts.expenses = new Chart(ctx, {
@@ -541,10 +541,10 @@ const AnalyticsPage = {
 
     const theme = this._chartDefaults();
     const bucketColors = {
-      current: "#00c48f",
-      30: "#ffa94d",
-      60: "#ff922b",
-      90: "#ff4757",
+      current: chartColor("green"),
+      30: chartColor("orange"),
+      60: chartColor("amber"),
+      90: chartColor("crimson"),
     };
     const bucketLabels = {
       current: "Current",
@@ -617,7 +617,7 @@ const AnalyticsPage = {
             type: "line",
             label: "Collections (cumulative)",
             data: collections,
-            borderColor: "#00c48f",
+            borderColor: chartColor("green"),
             backgroundColor: "rgba(0,196,143,0.15)",
             fill: false,
             tension: 0.3,
@@ -627,7 +627,7 @@ const AnalyticsPage = {
             type: "line",
             label: "Payments (cumulative)",
             data: payments,
-            borderColor: "#ff6b6b",
+            borderColor: chartColor("red"),
             backgroundColor: "rgba(255,107,107,0.15)",
             fill: false,
             tension: 0.3,
