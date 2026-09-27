@@ -237,3 +237,41 @@ test('a non-JSON error response still logs its HTTP status', async () => {
     assert.match(f.element('#qbo-log-rows').innerHTML, /HTTP_<wbr>502/);
     assert.match(f.element('#qbo-run-activity').textContent, /Server responded HTTP 502/);
 });
+
+// macbase1 NEW-10 (2.18.0 gate): an idle page, with no import to watch,
+// said "Connection interrupted — reconnecting…" after 15 s beside a Ready
+// badge. With nothing to watch the monitor stops asking, by design; that
+// silence is not an interruption.
+test('an idle page with no import to watch reads as ready however long it sits', async () => {
+    let requests = 0;
+    const f = fixture(async () => { requests++; return response(200, snapshot()); });
+    await f.page._pollLog();
+    assert.equal(f.timers.size, 0); // nothing to watch: it asks no more
+    f.page._lastContact -= 60000; // a minute later
+    f.page._updateActivity();
+    assert.equal(f.element('#qbo-run-status').textContent, 'Ready');
+    assert.equal(f.element('#qbo-run-activity').textContent, 'Ready for an import.');
+    assert.doesNotMatch(f.element('#qbo-run-activity').textContent, /interrupted|reconnecting/i);
+    assert.equal(requests, 1);
+});
+
+test('a finished import sits idle without an interruption message', async () => {
+    const done = { ...running(), status: 'completed', finished_at: new Date().toISOString(), result: { errors: [] } };
+    const f = fixture(async () => response(200, snapshot(done)));
+    await f.page._pollLog();
+    assert.equal(f.timers.size, 0);
+    f.page._lastContact -= 60000;
+    f.page._updateActivity();
+    assert.equal(f.element('#qbo-run-status').textContent, 'Completed');
+    assert.doesNotMatch(f.element('#qbo-run-activity').textContent, /interrupted|reconnecting/i);
+});
+
+test('a live import still shows a real interruption', async () => {
+    const f = fixture(async () => response(200, snapshot(running())));
+    await f.page._pollLog();
+    assert.ok([...f.timers.values()].some(timer => timer.ms === 2000)); // watching it
+    f.page._lastContact -= 20000; // no answer for 20 s
+    f.page._updateActivity();
+    assert.equal(f.element('#qbo-run-status').textContent, 'Connection interrupted');
+    assert.equal(f.element('#qbo-run-activity').textContent, 'Connection interrupted — retaining log and reconnecting…');
+});

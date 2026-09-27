@@ -587,8 +587,12 @@ const QBOPage = {
             badge.textContent = stale && (active || !QBOPage._lastContact) ? 'Connection interrupted' : waiting ? 'Waiting' : QBOPage._statusLabel(run?.status);
             badge.className = `qbo-run-status ${stale && active || waiting || run?.status === 'completed_with_errors' ? 'qbo-status-warning' : run?.status === 'failed' || run?.status === 'interrupted' ? 'qbo-status-error' : active ? 'qbo-status-running' : run ? 'qbo-status-complete' : ''}`;
             if (!run) {
+                // No import to watch: the monitor stops asking once it has
+                // an answer, so the silence since is not an interruption
+                // (macbase1 NEW-10: "Connection interrupted" beside Ready).
+                // A live run keeps asking, and shows a real one below.
                 $('#qbo-run-detail').textContent = 'The latest import will appear here.';
-                $('#qbo-run-activity').textContent = stale ? 'Connection interrupted — reconnecting…' : QBOPage._lastContact ? 'Ready for an import.' : 'Loading latest import…';
+                $('#qbo-run-activity').textContent = QBOPage._lastContact ? 'Ready for an import.' : 'Loading latest import…';
                 return;
             }
             const end = run.finished_at ? Date.parse(run.finished_at) : serverNow;
