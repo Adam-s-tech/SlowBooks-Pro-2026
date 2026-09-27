@@ -5,7 +5,12 @@ from typing import Annotated, Optional
 from pydantic import BaseModel, Field, PlainSerializer, field_validator, model_validator
 
 from app.models.invoices import InvoiceStatus
-from app.schemas.common import StrictModel, TaxRate, validate_non_negative_line
+from app.schemas.common import (
+    StrictModel,
+    TaxRate,
+    TaxRateOut,
+    validate_non_negative_line,
+)
 
 
 def _rate_json(value) -> str:
@@ -148,7 +153,7 @@ class InvoiceResponse(BaseModel):
     ship_state: Optional[str]
     ship_zip: Optional[str]
     subtotal: Decimal
-    tax_rate: Decimal
+    tax_rate: TaxRateOut
     tax_amount: Decimal
     total: Decimal
     amount_paid: Decimal

@@ -8,6 +8,7 @@ from pydantic import (
     BeforeValidator,
     ConfigDict,
     Field,
+    PlainSerializer,
     StringConstraints,
 )
 
@@ -106,6 +107,10 @@ def _as_percent(value) -> str:
     return format(pct, "f")
 
 
+# The places a document's tax rate keeps (Numeric(7, 6) on every document).
+TAX_RATE_PLACES = Decimal("0.000001")
+
+
 def _check_tax_rate(value):
     """A document tax rate is a FRACTION of the subtotal (0.089 = 8.9%).
     The company default in Settings (``default_tax_rate``) is a PERCENT
@@ -120,7 +125,12 @@ def _check_tax_rate(value):
     and says where a bad default lives; the unit note for API callers
     follows (explore 2.17.3: "tax_rate: Value error, tax_rate cannot be
     negative" under a field labelled "Tax Rate (%)")."""
-    if value is not None and value > 1:
+    if value is None:
+        return value
+    rate = Decimal(str(value))
+    if not rate.is_finite():
+        raise ValueError("Tax rate must be a number from 0 to 100%.")
+    if value > 1:
         raise ValueError(
             f"Tax rate {_as_percent(value)}% is more than 100%. Use a rate "
             "from 0 to 100%; if it came from the company default, correct "
@@ -128,7 +138,7 @@ def _check_tax_rate(value):
             f"the subtotal, 0.089 = 8.9%, so {value} looks like a percent; "
             "divide by 100.)"
         )
-    if value is not None and value < 0:
+    if value < 0:
         raise ValueError(
             f"Tax rate {_as_percent(value)}% is negative. Use a rate from 0 "
             "to 100%; if it came from the company default, correct Default "
@@ -136,20 +146,21 @@ def _check_tax_rate(value):
         )
     # A rate typed as a percent reaches us divided by 100 in floating point:
     # 7.25% arrives as 0.07249999999999999, which put a half-cent tax a
-    # cent low. Eight places keep every real rate (8.875% is 0.08875) and
-    # drop the noise.
-    if isinstance(value, Decimal):
-        return value.quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)
-    if value is not None:
-        return round(value, 8)
-    return value
+    # cent low. A document keeps its rate to six places, a percent to four
+    # (New York City's 8.875% is 0.08875), so it is cut to six here and tax
+    # is worked out from exactly the rate that is stored. A finer rate
+    # rounds half up, a float by the digits it shows (0.0000005 is 0.000001).
+    rate = rate.quantize(TAX_RATE_PLACES, rounding=ROUND_HALF_UP)
+    return rate if isinstance(value, Decimal) else float(rate)
 
 
 _TAX_RATE_DOC = dict(
     description=(
         "Tax rate as a FRACTION of the taxable subtotal: 0.089 means 8.9%. "
         "Not a percent — Settings.default_tax_rate is the percent form "
-        "('8.9'); divide it by 100 before sending. Values above 1 are rejected."
+        "('8.9'); divide it by 100 before sending. Values above 1 are rejected. "
+        "Kept to six places, a percent to four (0.08875 means 8.875%); a finer "
+        "rate is rounded half up."
     ),
     examples=[0.089],
     json_schema_extra={"minimum": 0, "maximum": 1},
@@ -158,3 +169,19 @@ _TAX_RATE_DOC = dict(
 # Reusable annotated types: `tax_rate: TaxRate = Decimal("0")`.
 TaxRate = Annotated[Decimal, AfterValidator(_check_tax_rate), Field(**_TAX_RATE_DOC)]
 TaxRateFloat = Annotated[float, AfterValidator(_check_tax_rate), Field(**_TAX_RATE_DOC)]
+
+
+def _tax_rate_json(value) -> str:
+    """A document's tax rate as the API writes it: four places as before
+    ("0.0825"), up to six when it has them ("0.08875"). Rates are stored to
+    six places now, and "0.082500" on every document would be noise."""
+    rate = Decimal(str(value))
+    if rate == rate.quantize(Decimal("0.0001")):
+        return f"{rate:.4f}"
+    return format(rate.normalize(), "f")
+
+
+# A document's tax rate in a response.
+TaxRateOut = Annotated[
+    Decimal, PlainSerializer(_tax_rate_json, return_type=str, when_used="json")
+]

@@ -122,9 +122,10 @@ def test_tax_falls_on_the_lines_an_invoice_would_tax(
 def test_the_form_starts_from_the_company_rate_and_follows_the_invoice():
     src = (JS / "credit_memos.js").read_text(encoding="utf-8")
     assert (
-        "const defaultPct = parseFloat(settings.default_tax_rate || '0') || 0;" in src
+        "const defaultPct = +(parseFloat(settings.default_tax_rate || '0') || 0)"
+        ".toFixed(4);" in src
     )
-    assert 'name="tax_rate" type="number" step="0.01" value="${defaultPct}"' in src
+    assert 'name="tax_rate" type="number" step="0.0001" value="${defaultPct}"' in src
     assert (
         'id="cm-invoice-select" onchange="CreditMemosPage.invoiceSelected(this.value)"'
         in src

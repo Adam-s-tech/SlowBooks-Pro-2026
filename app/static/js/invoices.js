@@ -86,6 +86,13 @@ const SalesLines = {
     // A unit price: two places, or up to four when it has them ($0.045).
     rate(value, currency) { return SalesLines.money(value, currency, 4); },
 
+    // A document's tax rate (a fraction) as the percent it prints: at least
+    // two places, up to the four a rate keeps ("8.875", "8.25", "7.00"), as
+    // the PDFs print it (pdf_service's tax_percent filter).
+    taxPercent(fraction) {
+        return ((parseFloat(fraction) || 0) * 100).toFixed(4).replace(/0{1,2}$/, '');
+    },
+
     // Send a sales document. One that adds up to $0.00 comes back refused
     // (409, code "zero_total") unless the person says it is meant to be:
     // no-charge warranty work is a real invoice, a form that filled in no
@@ -592,7 +599,7 @@ const InvoicesPage = {
                     ${classGroup}${jobGroup}${pledgeGroup}
                     ${currencyFormGroupsHtml(inv.currency, inv.exchange_rate)}
                     <div class="form-group"><label>Tax Rate (%)</label>
-                        <input name="tax_rate" type="number" step="0.01" value="${+((inv.tax_rate || 0) * 100).toFixed(4)}"
+                        <input name="tax_rate" type="number" step="0.0001" value="${+((inv.tax_rate || 0) * 100).toFixed(4)}"
                             oninput="InvoicesPage.recalc()">
                         ${InvoicesPage._keptTax != null ? `<div class="hint" id="inv-kept-tax">Tax stays at ${formatCurrency(InvoicesPage._keptTax)}, the amount it came in with. Enter a rate to work it out instead, or untick Tax on the lines for none.</div>` : ''}</div>
                 </div>

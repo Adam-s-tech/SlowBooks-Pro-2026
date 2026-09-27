@@ -172,7 +172,9 @@ const ScanHelper = {
      * the rate is amount / subtotal — refused when the amount is as big as
      * the subtotal (the box caught the total, or several numbers) or the
      * rate lands past 50%, so one wrong drag can't write 1204.17% into the
-     * form (VH308 lap, 2026-09-02).
+     * form (VH308 lap, 2026-09-02). The percent keeps four places, as a
+     * rate does: $88.75 on $1,000.00 is 8.875%, where 8.88% would save
+     * $88.80 against the receipt's $88.75.
      * Returns { pct } or { error }.
      */
     taxPercent(value, subtotal, raw) {
@@ -181,7 +183,7 @@ const ScanHelper = {
         if (!(num > 0)) return { error: `Tax read "${value}" isn't a number — not applied.` };
         if (text.includes('%') || String(value).includes('%')) {
             if (num > 50) return { error: `Tax rate ${num}% is not plausible — not applied.` };
-            return { pct: num };
+            return { pct: +num.toFixed(4) };
         }
         const sub = parseFloat(subtotal);
         if (!(sub > 0)) return { error: `Tax ${num.toFixed(2)} read, but there's no subtotal yet — read the Total or Subtotal first.` };
@@ -190,6 +192,6 @@ const ScanHelper = {
         }
         const pct = (num / sub) * 100;
         if (pct > 50) return { error: `Tax ${num.toFixed(2)} on ${sub.toFixed(2)} would be ${pct.toFixed(2)}% — not applied. Draw the box around just the tax amount.` };
-        return { pct: Math.round(pct * 100) / 100 };
+        return { pct: +pct.toFixed(4) };
     },
 };

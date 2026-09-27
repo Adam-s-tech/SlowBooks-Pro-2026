@@ -104,7 +104,7 @@
         <table>
             <tr><td class="label">Subtotal</td><td class="r">{{ cm.subtotal | currency }}</td></tr>
             {% if cm.tax_amount and cm.tax_amount != 0 %}
-            <tr><td class="label">Tax ({{ "%.2f" | format(cm.tax_rate * 100) }}%)</td><td class="r">{{ cm.tax_amount | currency }}</td></tr>
+            <tr><td class="label">Tax ({{ cm.tax_rate | tax_percent }}%)</td><td class="r">{{ cm.tax_amount | currency }}</td></tr>
             {% endif %}
             <tr><td class="label grand">Total Credit</td><td class="r grand">{{ cm.total | currency }}</td></tr>
             {% if cm.amount_applied and cm.amount_applied != 0 %}

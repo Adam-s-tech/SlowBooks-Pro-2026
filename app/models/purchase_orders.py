@@ -43,7 +43,7 @@ class PurchaseOrder(Base):
     ship_to = Column(Text, nullable=True)
 
     subtotal = Column(Numeric(15, 2), default=0)
-    tax_rate = Column(Numeric(5, 4), default=0)
+    tax_rate = Column(Numeric(7, 6), default=0)  # a fraction: 8.875% is 0.08875
     tax_amount = Column(Numeric(15, 2), default=0)
     total = Column(Numeric(15, 2), default=0)
 

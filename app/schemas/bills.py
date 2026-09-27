@@ -3,7 +3,12 @@ from decimal import Decimal
 from typing import Optional
 from pydantic import BaseModel, field_validator, model_validator
 
-from app.schemas.common import StrictModel, TaxRateFloat, validate_non_negative_line
+from app.schemas.common import (
+    StrictModel,
+    TaxRateFloat,
+    TaxRateOut,
+    validate_non_negative_line,
+)
 from app.schemas.invoices import RateOut
 
 
@@ -95,7 +100,7 @@ class BillResponse(BaseModel):
     terms: Optional[str] = None
     ref_number: Optional[str] = None
     subtotal: Decimal = Decimal("0")
-    tax_rate: Decimal = Decimal("0")
+    tax_rate: TaxRateOut = Decimal("0")
     tax_amount: Decimal = Decimal("0")
     total: Decimal = Decimal("0")
     amount_paid: Decimal = Decimal("0")

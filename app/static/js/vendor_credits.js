@@ -90,7 +90,7 @@ const VendorCreditsPage = {
                     <div class="form-group"><label>Their credit note #</label>
                         <input name="ref_number" placeholder="optional"></div>
                     <div class="form-group"><label>Tax Rate (%)</label>
-                        <input name="tax_rate" type="number" step="0.01" min="0" value="0" oninput="VendorCreditsPage.recalc()"></div>
+                        <input name="tax_rate" type="number" step="0.0001" min="0" value="0" oninput="VendorCreditsPage.recalc()"></div>
                     ${classGroup}
                 </div>
                 <h3 style="margin:12px 0 8px;font-size:14px;">Credit Lines</h3>

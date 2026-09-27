@@ -91,8 +91,8 @@ const SettingsPage = {
                                     `<option ${s.default_terms===t?'selected':''}>${t}</option>`).join('')}
                             </select></div>
                         <div class="form-group"><label>Default Tax Rate (%)</label>
-                            <input name="default_tax_rate" type="number" min="0" max="100" step="0.01"
-                                title="A percent from 0 to 100: 8.25 means 8.25%"
+                            <input name="default_tax_rate" type="number" min="0" max="100" step="0.0001"
+                                title="A percent from 0 to 100, up to four decimal places: 8.875 means 8.875%"
                                 value="${escapeHtml(s.default_tax_rate || '0.0')}"></div>
                         <div class="form-group"><label>${`${T('Invoice')} Prefix`}</label>
                             <input name="invoice_prefix" value="${escapeHtml(s.invoice_prefix || '')}" placeholder="e.g. INV-"></div>

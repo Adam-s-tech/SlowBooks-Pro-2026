@@ -100,7 +100,8 @@ const CreditMemosPage = {
         // The company's rate, as on a new invoice; picking the invoice being
         // credited switches to that invoice's rate. It defaulted to 0%, so
         // returned taxable goods were credited without their tax (W-L14, F14).
-        const defaultPct = parseFloat(settings.default_tax_rate || '0') || 0;
+        // A rate keeps four places of a percent (8.875).
+        const defaultPct = +(parseFloat(settings.default_tax_rate || '0') || 0).toFixed(4);
 
         const custOpts = customers.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
 
@@ -114,7 +115,7 @@ const CreditMemosPage = {
                     <div class="form-group"><label>For ${T('Invoice')}</label>
                         <select name="original_invoice_id" id="cm-invoice-select" onchange="CreditMemosPage.invoiceSelected(this.value)"><option value="">None</option></select></div>
                     <div class="form-group"><label>Tax Rate (%)</label>
-                        <input name="tax_rate" type="number" step="0.01" value="${defaultPct}" oninput="CreditMemosPage.recalc()"></div>
+                        <input name="tax_rate" type="number" step="0.0001" value="${defaultPct}" oninput="CreditMemosPage.recalc()"></div>
                     ${classGroup}
                 </div>
                 <h3 style="margin:12px 0 8px;font-size:14px;">Credit Lines</h3>
@@ -185,11 +186,12 @@ const CreditMemosPage = {
             `<option value="${i.id}">#${escapeHtml(i.invoice_number)} · ${formatDate(i.date)} · ${SalesLines.money(i.total, i.currency)}</option>`).join('');
     },
 
-    // Crediting a particular invoice puts its tax back at the rate it was charged.
+    // Crediting a particular invoice puts its tax back at the rate it was
+    // charged, as the invoice shows it (8.875, not 8.88).
     invoiceSelected(invoiceId) {
         const inv = CreditMemosPage._invoices.find(i => String(i.id) === String(invoiceId));
         const rate = $('#cm-form [name="tax_rate"]');
-        if (inv && rate) rate.value = SalesLines.cents(parseFloat(inv.tax_rate || 0) * 10000) / 100;
+        if (inv && rate) rate.value = +((inv.tax_rate || 0) * 100).toFixed(4);
         CreditMemosPage.recalc();
     },
 

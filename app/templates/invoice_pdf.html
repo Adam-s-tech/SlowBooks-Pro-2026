@@ -132,7 +132,7 @@
         <table>
             <tr><td class="label">Subtotal</td><td class="r">{{ inv.subtotal | currency(cur) }}</td></tr>
             {% if inv.tax_amount and inv.tax_amount != 0 %}
-            <tr><td class="label">Tax ({{ "%.2f" | format(inv.tax_rate * 100) }}%)</td><td class="r">{{ inv.tax_amount | currency(cur) }}</td></tr>
+            <tr><td class="label">Tax ({{ inv.tax_rate | tax_percent }}%)</td><td class="r">{{ inv.tax_amount | currency(cur) }}</td></tr>
             {% endif %}
             <tr><td class="label grand">{% if kind == 'DonationReceipt' %}Contribution{% elif kind == 'Pledge' %}Pledge Amount{% else %}Total{% endif %}</td><td class="r grand">{{ inv.total | currency(cur) }}</td></tr>
             {% if inv.is_sales_receipt %}
