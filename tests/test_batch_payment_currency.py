@@ -139,6 +139,7 @@ def test_the_batch_page_leaves_foreign_invoices_out():
         cwd=ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     assert out.returncode == 0, out.stderr

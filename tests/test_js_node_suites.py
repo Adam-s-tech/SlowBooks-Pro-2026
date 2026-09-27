@@ -33,6 +33,7 @@ def test_node_suite_passes(suite):
         ["node", "--test", str(suite)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=120,
         cwd=ROOT,
     )

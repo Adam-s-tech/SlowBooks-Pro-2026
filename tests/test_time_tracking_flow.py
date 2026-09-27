@@ -164,6 +164,7 @@ def test_the_page_shows_hours_and_works_out_clock_times():
         cwd=ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     assert out.returncode == 0, out.stderr

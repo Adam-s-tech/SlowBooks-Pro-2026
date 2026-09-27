@@ -41,6 +41,7 @@ def test_a_check_payment_on_the_bills_view_prints_its_check():
         cwd=ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     assert out.returncode == 0, out.stderr

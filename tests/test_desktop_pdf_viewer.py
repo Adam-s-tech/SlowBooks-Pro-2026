@@ -241,6 +241,7 @@ def test_the_toolbar_works(tmp_path):
         cwd=root,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     assert out.returncode == 0, out.stderr

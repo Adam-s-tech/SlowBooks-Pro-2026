@@ -384,6 +384,7 @@ def test_the_forms_take_and_show_four_places(
         input=json.dumps(given),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     assert out.returncode == 0, out.stderr
@@ -526,6 +527,7 @@ def test_an_old_default_with_more_places_does_not_hold_back_settings():
         cwd=Path(__file__).resolve().parents[1],
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     assert out.returncode == 0, out.stderr

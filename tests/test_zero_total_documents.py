@@ -252,6 +252,7 @@ def test_the_forms_add_up_the_way_the_ledger_does():
         cwd=ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     assert out.returncode == 0, out.stderr

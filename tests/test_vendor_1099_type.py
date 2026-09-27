@@ -26,6 +26,7 @@ def test_the_1099_type_follows_the_1099_vendor_answer():
         cwd=ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     assert out.returncode == 0, out.stderr

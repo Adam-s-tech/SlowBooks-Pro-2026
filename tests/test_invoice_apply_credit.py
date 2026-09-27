@@ -59,6 +59,7 @@ def test_the_invoice_view_offers_and_applies_the_customers_credit():
         cwd=ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     assert out.returncode == 0, out.stderr

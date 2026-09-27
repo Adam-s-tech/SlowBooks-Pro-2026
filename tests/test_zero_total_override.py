@@ -189,6 +189,7 @@ def test_the_page_asks_and_sends_again_with_the_flag():
         cwd=ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     assert out.returncode == 0, out.stderr

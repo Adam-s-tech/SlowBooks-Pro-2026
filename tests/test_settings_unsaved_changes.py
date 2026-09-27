@@ -26,6 +26,7 @@ def test_unsaved_changes_are_tracked_and_leaving_asks_first():
         cwd=ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     assert out.returncode == 0, out.stderr

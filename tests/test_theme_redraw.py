@@ -37,6 +37,7 @@ def test_the_trend_is_redrawn_in_the_new_themes_ink():
         cwd=ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=60,
     )
     assert out.returncode == 0, out.stderr

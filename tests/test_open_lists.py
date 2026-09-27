@@ -147,7 +147,12 @@ vm.runInContext(fs.readFileSync('app/static/js/utils.js', 'utf8')
 })();
 """
     out = subprocess.run(
-        ["node", "-e", probe], cwd=ROOT, capture_output=True, text=True, timeout=60
+        ["node", "-e", probe],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=60,
     )
     assert out.returncode == 0, out.stderr
     got = json.loads(out.stdout)
@@ -211,7 +216,12 @@ vm.runInContext(fs.readFileSync('app/static/js/utils.js', 'utf8')
 })();
 """
     out = subprocess.run(
-        ["node", "-e", probe], cwd=ROOT, capture_output=True, text=True, timeout=60
+        ["node", "-e", probe],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=60,
     )
     assert out.returncode == 0, out.stderr
     got = json.loads(out.stdout)
