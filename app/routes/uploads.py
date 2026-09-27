@@ -8,10 +8,11 @@
 # company's logo (2.18.0 gate, macbase1 NEW-14 and skytech).
 # ============================================================================
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.routes._roles import require_admin
 from app.services import file_store
 
 router = APIRouter(prefix="/api/uploads", tags=["uploads"])
@@ -30,7 +31,11 @@ _LOGO_MAX_BYTES = 5 * 1024 * 1024  # 5 MB — generous for a logo, blocks abuse
 
 
 @router.post("/logo")
-async def upload_logo(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_logo(
+    request: Request, file: UploadFile = File(...), db: Session = Depends(get_db)
+):
+    # the logo is a company setting, and settings are the administrator's
+    require_admin(request)
     content_type = (file.content_type or "").lower()
     if content_type not in _LOGO_EXT_BY_TYPE:
         raise HTTPException(
@@ -62,7 +67,8 @@ def logo_info(db: Session = Depends(get_db)):
 
 
 @router.delete("/logo")
-def remove_logo(db: Session = Depends(get_db)):
+def remove_logo(request: Request, db: Session = Depends(get_db)):
+    require_admin(request)
     file_store.remove_logo(db)
     db.commit()
     return {"status": "deleted"}

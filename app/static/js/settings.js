@@ -101,6 +101,7 @@ const SettingsPage = {
                             ${s.company_logo_path && !(logo && logo.missing) ? `<img id="company-logo-preview" src="${escapeHtml(s.company_logo_path)}" style="max-width:200px; max-height:80px; margin-bottom:8px; display:block;">` : ''}
                             ${SettingsPage._logoNote(logo)}
                             <input type="file" id="logo-upload" accept="image/*" onchange="SettingsPage.uploadLogo(this)">
+                            ${s.company_logo_path && SettingsPage._isAdmin() ? `<button type="button" class="btn btn-sm btn-secondary" data-write style="margin-left:6px;" onclick="SettingsPage.removeLogo()">Remove logo</button>` : ''}
                             <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">PNG, JPG, GIF, WebP, or SVG &middot; max 5 MB &middot; 200&times;80 px recommended.</div>
                             ${s.company_logo_path ? `<div style="margin-top:8px;">
                                 <label for="invoice-show-logo" style="font-weight:normal;">
@@ -878,6 +879,17 @@ const SettingsPage = {
                 input.parentElement.insertBefore(img, input);
             }
             img.src = `${(data && data.path) || ''}?t=${Date.now()}`;
+        } catch (err) { toast(err.message, 'error'); }
+    },
+
+    async removeLogo() {
+        if (!confirm('Remove the company logo? Documents print without one until you upload another.')) return;
+        try {
+            await API.del('/uploads/logo');
+            toast('Logo removed');
+            if (!SettingsPage.isDirty()) { App.navigate('#/settings'); return; }
+            document.getElementById('company-logo-preview')?.remove();
+            document.getElementById('company-logo-note')?.remove();
         } catch (err) { toast(err.message, 'error'); }
     },
 
