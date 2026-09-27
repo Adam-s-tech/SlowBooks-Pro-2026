@@ -253,7 +253,13 @@ const App = {
             const label = (el.textContent || '').trim();
             const headerAction = el.classList.contains('btn-primary') && el.closest('.page-header');
             const call = /^\s*(\w+Page\.\w+)\(/.exec(el.getAttribute('onclick') || '');
-            if (label.startsWith('+') || headerAction || (call && App.WRITE_ACTIONS.has(call[1]))) {
+            // Edit beside View (an invoice's row): View shows the record, and
+            // Edit would only open it locked
+            const editBesideView = label === 'Edit' && !!el.parentElement
+                && [...el.parentElement.querySelectorAll('button, a.btn')]
+                    .some(b => (b.textContent || '').trim() === 'View');
+            if (label.startsWith('+') || headerAction || editBesideView
+                || (call && App.WRITE_ACTIONS.has(call[1]))) {
                 el.classList.add('hidden');
             }
         });

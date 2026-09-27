@@ -45,6 +45,12 @@ const buttons = [
   ['Edit', 'InvoicesPage.showForm(7)'], ['Close', 'closeModal()'], ['View', 'InvoicesPage.view(7)'],
   ['Export All', 'IIFPage.exportAll()'], ['Export to QBO', 'QBOPage.exportAll()'],
 ].map(([l, o]) => button(l, o));
+// an invoice row: View and Edit side by side; a vendor row: Edit alone
+const row = { querySelectorAll: () => [buttons[8], buttons[6]] };
+buttons[6].parentElement = row;
+const lone = button('Edit', 'VendorsPage.showForm(3)');
+lone.parentElement = { querySelectorAll: () => [lone] };
+buttons.push(lone);
 const root = { querySelectorAll: () => buttons };
 const ctx = { console, window: {}, document: { addEventListener: () => {}, body: { classList: { toggle() {} } },
   getElementById: () => null, querySelectorAll: () => [] } };
@@ -73,5 +79,7 @@ def test_a_read_only_sign_in_sees_only_what_it_can_do():
     )
     assert out.returncode == 0, out.stderr
     got = json.loads(out.stdout)
-    assert got["shown"] == ["Save PDF", "Print", "Edit", "Close", "View", "Export All"]
+    # Edit beside View is hidden (View shows it); a lone Edit opens the
+    # record's form locked, and stays
+    assert got["shown"] == ["Save PDF", "Print", "Close", "View", "Export All", "Edit"]
     assert got["adminHidden"] == 0
