@@ -292,8 +292,9 @@ from the rates and puts the rounding difference on line 7.
   edited invoice posts its own (and brings its imported payments with it),
   and a later import leaves it as it is here. A transaction edited or voided
   in QuickBooks Online (or a journal deleted there) is brought up to date on
-  the next import; one that can't be — a closed period, a reconciled line —
-  is named in the log and skipped, and never stops the rest.
+  the next import; one that can't be — a closed period, a reconciled line,
+  an invoice paid here past QBO's new total — is named in the log and
+  skipped, and never stops the rest.
 - **A live import log.** An import runs in the background with a log under
   the controls — every query, check, posting, skip and error, with the
   document and account it concerns, an Errors filter, elapsed time and
@@ -311,6 +312,14 @@ from the rates and puts the rounding difference on line 7.
   comes across as the lines of its items. Exporting such a document back
   sends QBO a discount, not a negative sale, and a Discount item's line
   takes a negative price on the invoice form.
+- **Exporting keeps QuickBooks Online up to date.** A document sent from
+  here that changes here is updated in QBO on the next export, and one
+  voided here is voided there; sales receipts go as QBO sales receipts;
+  each line carries its tax code, and several discounts go as QBO's one
+  discount with a note. Export no longer sends back QBO's own documents
+  (after an import it sent QBO's sales receipts back as new invoices and
+  payments, counting each sale twice) or anything voided here before it
+  went. Records an earlier release sent are left as they went.
 - **Paging and inactive accounts.** Every entity imports all its pages;
   inactive QBO accounts come in inactive; QBO bank and card accounts get a
   Banking identity; a subcustomer mapped to a job resolves through its
