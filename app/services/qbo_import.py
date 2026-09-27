@@ -48,14 +48,23 @@ from app.services.safe_errors import DataProblem
 from app.services import qbo_progress
 
 
+def _field(obj, attr, default=None):
+    """A QBO object's field. The SDK types most of what it reads, but not
+    everything: a SalesReceipt's lines keep their SalesItemLineDetail (and
+    its ItemRef) as plain dicts, so an attribute read found nothing there."""
+    if isinstance(obj, dict):
+        return obj.get(attr, default)
+    return getattr(obj, attr, default)
+
+
 def _safe(obj, attr, default=None):
     """Safe attribute access for QBO objects."""
-    return getattr(obj, attr, default) or default
+    return _field(obj, attr, default) or default
 
 
 def _safe_decimal(obj, attr) -> Decimal:
     """Safe decimal extraction from QBO object."""
-    val = getattr(obj, attr, None)
+    val = _field(obj, attr)
     if val is None:
         return Decimal("0")
     try:
