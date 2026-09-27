@@ -41,7 +41,7 @@ const ScanHelper = {
 
     scanRowHtml() {
         return `
-        <div id="scan-row" style="display:flex; align-items:center; gap:10px; margin-bottom:14px;
+        <div id="scan-row" data-write style="display:flex; align-items:center; gap:10px; margin-bottom:14px;
              padding:10px 12px; border:1px dashed var(--gray-300); border-radius:6px; background:var(--primary-light);">
             <button type="button" id="scan-btn" class="btn btn-secondary" onclick="ScanHelper.pick()">📄 Scan Receipt</button>
             <input type="file" id="scan-file" accept="image/png,image/jpeg,image/webp,application/pdf" style="display:none;">

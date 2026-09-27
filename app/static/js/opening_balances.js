@@ -28,7 +28,7 @@ const OpeningBalancesPage = {
             rows += `<tr><td colspan="2" style="font-weight:700; background:var(--gray-50);">${label}</td></tr>`;
             rows += accts.map(a => `<tr>
                 <td>${escapeHtml(a.account_number || '')} ${escapeHtml(a.name)}</td>
-                <td class="amount"><input type="number" step="0.01" class="ob-amount" data-account="${a.id}"
+                <td class="amount"><input type="number" step="0.01" class="ob-amount" data-write data-account="${a.id}"
                     style="width:120px; text-align:right;" oninput="OpeningBalancesPage.recalc()"></td>
             </tr>`).join('');
         }
@@ -39,9 +39,9 @@ const OpeningBalancesPage = {
             <div class="card" style="max-width:720px;">
                 <div class="form-grid">
                     <div class="form-group"><label>As of Date *</label>
-                        <input type="date" id="ob-date" value="${todayISO()}"></div>
+                        <input type="date" id="ob-date" data-write value="${todayISO()}"></div>
                     <div class="form-group"><label>Reference</label>
-                        <input type="text" id="ob-reference" placeholder="e.g. OB-2026"></div>
+                        <input type="text" id="ob-reference" data-write placeholder="e.g. OB-2026"></div>
                 </div>
                 <div class="table-container" style="margin-top:8px;"><table>
                     <thead><tr><th scope="col">Account</th><th scope="col" class="amount">Opening Balance</th></tr></thead>
@@ -50,11 +50,11 @@ const OpeningBalancesPage = {
                 <div style="margin-top:12px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
                     <div id="ob-difference" style="font-weight:700;">Difference: $0.00</div>
                     <label style="font-size:11px;">
-                        <input type="checkbox" id="ob-auto-balance"> Auto-balance to
+                        <input type="checkbox" id="ob-auto-balance" data-write> Auto-balance to
                     </label>
-                    <select id="ob-equity-account">${equityOpts}</select>
+                    <select id="ob-equity-account" data-write>${equityOpts}</select>
                 </div>
-                <div class="form-actions" style="margin-top:12px;">
+                <div class="form-actions" style="margin-top:12px;" data-write>
                     <button class="btn btn-primary" onclick="OpeningBalancesPage.save()">Post Opening Balances</button>
                 </div>
             </div>`;

@@ -113,7 +113,7 @@ const BankingPage = {
                     then paste the <strong>setup token</strong> it gives you below.
                     Your credential stays on this machine; SlowBooks has no middleman server.
                 </p>
-                <form onsubmit="BankingPage.connectSimpleFIN(event)">
+                <form onsubmit="BankingPage.connectSimpleFIN(event)" data-write>
                     <div class="form-group">
                         <label>SimpleFIN setup token</label>
                         <input type="password" id="simplefin-token" required autocomplete="off"
@@ -134,7 +134,7 @@ const BankingPage = {
             const rows = feed.accounts.map(a => `<tr>
                     <td>${escapeHtml(a.name)}<div style="font-size:10px; color:var(--gray-400);">${escapeHtml(a.org || '')}</div></td>
                     <td class="amount">${escapeHtml(a.balance)} ${escapeHtml(a.currency)}</td>
-                    <td><select data-sfid="${escapeHtml(a.id)}" class="simplefin-map">${options(a.id)}</select></td>
+                    <td><select data-sfid="${escapeHtml(a.id)}" class="simplefin-map" data-write>${options(a.id)}</select></td>
                 </tr>`).join('');
             body = `
                 <p style="font-size:12px; margin-bottom:8px;">
@@ -445,8 +445,8 @@ const BankingPage = {
                 <td>${formatDate(t.date)}</td>
                 <td>${escapeHtml(t.payee || '')}<div style="font-size:10px; color:var(--gray-400);">${escapeHtml(t.description || '')}</div></td>
                 <td class="amount" style="${t.amount >= 0 ? 'color:var(--text-success)' : 'color:var(--text-danger)'}">${formatCurrency(t.amount)}</td>
-                <td><select id="cat-${t.id}" class="review-cat" data-current="${t.category_account_id || ''}" aria-label="Category" onchange="BankingPage.setCategory(${t.id}, this)"><option value="">${t.category_name ? escapeHtml(t.category_name) : 'Pick a category…'}</option></select></td>
-                <td style="white-space:nowrap;">
+                <td><select id="cat-${t.id}" class="review-cat" data-write data-current="${t.category_account_id || ''}" aria-label="Category" onchange="BankingPage.setCategory(${t.id}, this)"><option value="">${t.category_name ? escapeHtml(t.category_name) : 'Pick a category…'}</option></select></td>
+                <td style="white-space:nowrap;" data-write>
                     <button class="btn btn-sm btn-primary" onclick="BankingPage.addLine(${t.id}, ${accountId})">Add</button>
                     <button class="btn btn-sm btn-secondary" onclick="BankingPage.showMatch(${t.id}, ${accountId})">Match</button>
                     <button class="btn btn-sm btn-secondary" onclick="BankingPage.excludeLine(${t.id}, ${accountId})">Exclude</button>

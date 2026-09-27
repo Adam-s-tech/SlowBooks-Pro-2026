@@ -57,6 +57,13 @@ def test_unsaved_changes_are_tracked_and_leaving_asks_first():
     assert steps["unload-when-leaving-on-purpose"]["prevented"] is False
     assert steps["installed-twice"]["wrapped_once"] is True
 
+    # a read-only sign-in's locked page holds no edits: it leaves unasked
+    # (2.18.0 round 4, W-L17 leftovers: Settings is locked for it now)
+    locked = steps["read-only"]
+    assert locked["dirty"] is False and locked["note"] == ""
+    assert locked["confirms"] == 0 and locked["left_to"] == "#/reports"
+    assert locked["prevented"] is False
+
 
 def test_the_save_bar_stays_in_reach_and_is_the_forms_own_submit():
     bar = JS[JS.index('id="settings-savebar"') - 40 : JS.index("</form>`;")]

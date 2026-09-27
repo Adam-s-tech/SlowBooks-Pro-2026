@@ -68,7 +68,7 @@ const IIFPage = {
                 </div>
 
                 <!-- Import Section -->
-                <div class="iif-section">
+                <div class="iif-section" data-write>
                     <h3>&#9650; Import from IIF</h3>
                     <p style="font-size:11px; color:var(--text-secondary); margin-bottom:12px;">
                         Upload .iif files exported from QuickBooks 2003 Pro
@@ -101,7 +101,7 @@ const IIFPage = {
                 </div>
 
                 <!-- QuickBooks Report CSV import -->
-                <div class="iif-section">
+                <div class="iif-section" data-write>
                     <h3>&#9635; Import from Report CSV</h3>
                     <p style="font-size:11px; color:var(--text-secondary); margin-bottom:12px;">
                         QuickBooks Desktop can't export transactions to IIF — export a detail

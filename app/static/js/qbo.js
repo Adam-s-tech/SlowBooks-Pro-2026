@@ -62,7 +62,7 @@ const QBOPage = {
                     ${status.connected
                         ? `<button class="btn btn-secondary" onclick="QBOPage.disconnect()">Disconnect from QuickBooks</button>`
                         : `<button class="btn btn-primary" onclick="QBOPage.connect()">Start connection with Intuit</button>
-                           <form id="qbo-manual-connect" autocomplete="off" onsubmit="QBOPage.connectManual(event)" style="margin-top:12px;">
+                           <form id="qbo-manual-connect" data-write autocomplete="off" onsubmit="QBOPage.connectManual(event)" style="margin-top:12px;">
                                <div class="form-grid">
                                    <div class="form-group">
                                        <label for="qbo-authorization-code">Authorization Code</label>
@@ -96,10 +96,10 @@ const QBOPage = {
                         <div id="qbo-import-why" class="hint" style="margin-top:4px; font-size:11px;" role="status"></div>
                     </div>
 
-                    <div style="font-size:10px; font-weight:700; color:var(--text-secondary); text-transform:uppercase; margin-bottom:6px;">
+                    <div style="font-size:10px; font-weight:700; color:var(--text-secondary); text-transform:uppercase; margin-bottom:6px;" data-write>
                         Import Individual Entity Types
                     </div>
-                    <div id="qbo-import-checkboxes" style="margin-bottom:8px; font-size:11px;">
+                    <div id="qbo-import-checkboxes" data-write style="margin-bottom:8px; font-size:11px;">
                         ${importCheckboxes}
                     </div>
                     <button class="btn btn-secondary qbo-import-button" onclick="QBOPage.importSelected()"
@@ -125,7 +125,7 @@ const QBOPage = {
                 </div>
 
                 <!-- Export Section -->
-                <div class="iif-section">
+                <div class="iif-section" data-write>
                     <h3>&#9660; Export to QuickBooks Online</h3>
                     <p style="font-size:11px; color:var(--text-secondary); margin-bottom:12px;">
                         Push Slowbooks data to your connected QuickBooks Online company.

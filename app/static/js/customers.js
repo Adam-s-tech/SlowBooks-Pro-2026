@@ -144,9 +144,9 @@ const CustomersPage = {
                         ${formatCurrency(Math.abs(balance))}
                     </div>
                     <div style="margin-top:8px">
-                        <button class="btn btn-sm btn-primary" onclick="closeModal();InvoicesPage.showForm(null,${id})">${T('New Invoice')}</button>
-                        <button class="btn btn-sm btn-secondary" onclick="closeModal();PaymentsPage.showForm(null,${id})">Receive Payment</button>
-                        <button class="btn btn-sm btn-secondary" onclick="closeModal();JobsPage.showForm(null,${id})">New ${T('Job')}</button>
+                        <button class="btn btn-sm btn-primary" data-write onclick="closeModal();InvoicesPage.showForm(null,${id})">${T('New Invoice')}</button>
+                        <button class="btn btn-sm btn-secondary" data-write onclick="closeModal();PaymentsPage.showForm(null,${id})">Receive Payment</button>
+                        <button class="btn btn-sm btn-secondary" data-write onclick="closeModal();JobsPage.showForm(null,${id})">New ${T('Job')}</button>
                         <button class="btn btn-sm btn-secondary" onclick="CustomersPage.showForm(${id})">Edit</button>
                         ${Terms.isNonprofit() ? `<button class="btn btn-sm btn-secondary" onclick="window.open('/api/donors/${id}/giving-statement/pdf?year=' + (new Date().getFullYear() - 1), '_blank')">Giving Statement (last year)</button>` : ''}
                     </div>
@@ -181,7 +181,7 @@ const CustomersPage = {
                     <span>Notes</span>
                     <span id="cust-note-status-${id}" style="font-size:10px;color:var(--text-muted);text-transform:none;letter-spacing:0;font-weight:normal"></span>
                 </h4>
-                <textarea id="cust-notes-${id}" rows="3" style="width:100%;font-size:13px;font-family:inherit"
+                <textarea id="cust-notes-${id}" rows="3" data-write style="width:100%;font-size:13px;font-family:inherit"
                     placeholder="Internal notes about this customer — visible to everyone with admin access."
                     onblur="CustomersPage._saveNotes(${id}, this.value)">${escapeHtml(customer.notes || '')}</textarea>
             </div>

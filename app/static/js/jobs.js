@@ -178,8 +178,8 @@ const JobsPage = {
                     </h2>
                 </div>
                 <div>
-                    <button class="btn btn-secondary" onclick="InvoicesPage.showForm(null,${job.customer_id})">${T('New Invoice')}</button>
-                    <button class="btn btn-secondary" onclick="JobCostsPage.showForm(null, ${job.id})">${T('Job')} Cost Entry</button>
+                    <button class="btn btn-secondary" data-write onclick="InvoicesPage.showForm(null,${job.customer_id})">${T('New Invoice')}</button>
+                    <button class="btn btn-secondary" data-write onclick="JobCostsPage.showForm(null, ${job.id})">${T('Job')} Cost Entry</button>
                     <button class="btn btn-secondary" onclick="JobsPage.showForm(${job.id})">Edit</button>
                 </div>
             </div>
@@ -452,8 +452,8 @@ const JobsPage = {
             const r = byCode[c.id] || {};
             return `<tr data-budget-code="${c.id}">
                 <td style="padding-left:${8 + (c.depth || 0) * 18}px"><code>${escapeHtml(c.code)}</code> ${escapeHtml(c.name)} <span style="font-size:10px;color:var(--text-muted)">${escapeHtml(c.cost_type)}</span></td>
-                <td><input type="number" step="0.01" class="bud-cost" value="${r.amount ?? ''}" style="width:110px;text-align:right"></td>
-                <td><input type="number" step="0.01" class="bud-rev" value="${r.revenue_amount ?? ''}" style="width:110px;text-align:right"></td>
+                <td><input type="number" step="0.01" class="bud-cost" data-write value="${r.amount ?? ''}" style="width:110px;text-align:right"></td>
+                <td><input type="number" step="0.01" class="bud-rev" data-write value="${r.revenue_amount ?? ''}" style="width:110px;text-align:right"></td>
                 <td style="font-size:10px;color:var(--text-muted)">${r.source ? escapeHtml(r.source) : ''}</td>
             </tr>`;
         }).join('');
@@ -461,15 +461,15 @@ const JobsPage = {
             const r = byType[t.code] || {};
             return `<tr data-budget-type="${t.code}">
                 <td>${escapeHtml(t.name)} <span style="font-size:10px;color:var(--text-muted)">(whole type, not by code)</span></td>
-                <td><input type="number" step="0.01" class="bud-cost" value="${r.amount ?? ''}" style="width:110px;text-align:right"></td>
-                <td><input type="number" step="0.01" class="bud-rev" value="${r.revenue_amount ?? ''}" style="width:110px;text-align:right"></td>
+                <td><input type="number" step="0.01" class="bud-cost" data-write value="${r.amount ?? ''}" style="width:110px;text-align:right"></td>
+                <td><input type="number" step="0.01" class="bud-rev" data-write value="${r.revenue_amount ?? ''}" style="width:110px;text-align:right"></td>
                 <td style="font-size:10px;color:var(--text-muted)">${r.source ? escapeHtml(r.source) : ''}</td>
             </tr>`;
         }).join('');
         const estOpts = (estimates || []).filter(e => e.job_id === job.id || !e.job_id)
             .map(e => `<option value="${e.id}">${escapeHtml(e.estimate_number || ('#' + e.id))} · ${escapeHtml(e.date || '')} · ${formatCurrency(e.total)}${e.job_id === job.id ? ' (this job)' : ''}</option>`).join('');
         return `
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;font-size:12px">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;font-size:12px" data-write>
                 <span>Seed from an estimate:</span>
                 <select id="budget-estimate"><option value="">Pick an estimate…</option>${estOpts}</select>
                 <button class="btn btn-sm btn-secondary" onclick="JobsPage.seedBudget()">Load estimate lines as budget</button>
@@ -482,12 +482,12 @@ const JobsPage = {
                     <tr><td colspan="4" style="background:var(--gray-50);font-weight:600;font-size:11px">By cost type</td></tr>
                     ${typeRows}
                     <tr data-budget-whole="1"><td><em>Whole job (not by code or type)</em></td>
-                        <td><input type="number" step="0.01" class="bud-cost" value="${whole?.amount ?? ''}" style="width:110px;text-align:right"></td>
-                        <td><input type="number" step="0.01" class="bud-rev" value="${whole?.revenue_amount ?? ''}" style="width:110px;text-align:right"></td>
+                        <td><input type="number" step="0.01" class="bud-cost" data-write value="${whole?.amount ?? ''}" style="width:110px;text-align:right"></td>
+                        <td><input type="number" step="0.01" class="bud-rev" data-write value="${whole?.revenue_amount ?? ''}" style="width:110px;text-align:right"></td>
                         <td style="font-size:10px;color:var(--text-muted)">${whole?.source ? escapeHtml(whole.source) : ''}</td></tr>
                 </tbody>
             </table></div>
-            <div class="form-actions"><button class="btn btn-primary" onclick="JobsPage.saveBudget()">Save Budget</button></div>`;
+            <div class="form-actions" data-write><button class="btn btn-primary" onclick="JobsPage.saveBudget()">Save Budget</button></div>`;
     },
 
     async saveBudget() {

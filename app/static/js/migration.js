@@ -26,7 +26,7 @@ const MigrationPage = {
             <div class="card" style="max-width:640px;">
                 <div class="form-group" style="max-width:260px;">
                     <label>Coming from</label>
-                    <select id="migration-source" onchange="MigrationPage.reset()">${opts}</select>
+                    <select id="migration-source" data-write onchange="MigrationPage.reset()">${opts}</select>
                 </div>
                 <p style="font-size:12px; margin:8px 0;">
                     Export and upload together: the <strong>chart of accounts</strong>
@@ -36,7 +36,7 @@ const MigrationPage = {
                     recognized by name; CSV and tab-separated exports both work.
                 </p>
                 <input type="file" id="migration-files" multiple accept=".csv,.txt" onchange="MigrationPage.reset()">
-                <div class="form-actions" style="margin-top:12px;">
+                <div class="form-actions" style="margin-top:12px;" data-write>
                     <button class="btn btn-primary" onclick="MigrationPage.dryRun()">Dry Run</button>
                     <button class="btn btn-danger" id="migration-import-btn" disabled onclick="MigrationPage.doImport()">Import</button>
                 </div>

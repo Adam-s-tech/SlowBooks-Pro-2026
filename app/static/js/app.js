@@ -141,13 +141,27 @@ const App = {
             App.setStatus(`${route.label} — nonprofit companies only`);
             return;
         }
+        // Payroll and HR are the administrator's: the server refuses them to
+        // every other role, reads included, and the sidebar leaves them out.
+        // A bookmark or a typed address still opened them half loaded, on
+        // buttons that answered 403; a read-only user's View Checklist even
+        // tried to set up a checklist (2.18.0 gate, W-L17 leftovers). The
+        // role can arrive while the first page loads: asked again after.
+        const adminOnly = () => App.ADMIN_ONLY_PAGES.includes(route.page) && App.role !== 'admin';
+        const showAdminOnly = () => {
+            $('#page-content').innerHTML = App._adminOnlyHtml(route.label);
+            App.setStatus(`${route.label} — administrators only`);
+        };
+        if (adminOnly()) return showAdminOnly();
 
         try {
             const html = await route.render(param);
+            if (adminOnly()) return showAdminOnly();
             $('#page-content').innerHTML = html;
             App.setStatus(`${route.label} — Ready`);
             if (route.mount) App._pageCleanup = route.mount();
         } catch (err) {
+            if (adminOnly()) return showAdminOnly();
             // Server-side detail (err.message and stack) goes to console
             // for devs; the DOM gets a clean user-facing error with a
             // recovery action. Avoid leaking framework internals into
@@ -176,13 +190,24 @@ const App = {
         </div>`;
     },
 
+    _adminOnlyHtml(label) {
+        return `<div class="empty-state">
+            <h3>${escapeHtml(label)} is for administrators</h3>
+            <p>Payroll and staff records open to an administrator's sign-in only.
+               An administrator can change your role under Settings → Users.</p>
+            <p style="margin-top:12px;">
+                <a href="#/" class="btn btn-secondary">Return to Dashboard</a>
+            </p>
+        </div>`;
+    },
+
     // ---- Read-only sign-ins (Server Edition) -------------------------------
     // The server refuses every write from the readonly role with a 403 —
     // that stays the enforcement. But every page offered "+ New", and a
     // whole form could be filled in before the refusal arrived (2.17.3
     // exploratory test, W-L17). Once /api/auth/status names the role, the
-    // create buttons are hidden and every form a dialog opens is shown
-    // locked, with a sentence saying why.
+    // create buttons are hidden and every form, a dialog's or a page's, is
+    // shown locked, with a sentence saying why.
     role: 'admin',
     READ_ONLY_MESSAGE: 'Your sign-in is read-only: you can look, but not save changes. '
         + 'An administrator can change your role under Settings → Users.',
@@ -192,16 +217,27 @@ const App = {
     setRole(role) {
         App.role = role || 'admin';
         document.body.classList.toggle('role-readonly', App.isReadOnly());
+        // the first page can open before the role is known
+        const open = document.querySelector('#sidebar .nav-link.active');
+        if (App.role !== 'admin' && open && App.ADMIN_ONLY_PAGES.includes(open.dataset.page)) {
+            App.navigate(location.hash);
+        }
         const page = document.getElementById('page-content');
         if (!App.isReadOnly() || !page) return;
         // the toolbar's shortcuts to new documents, and batch entry
         document.querySelectorAll('#topbar .tb-btn[data-action], #topbar .tb-btn[data-nav="#/quick-entry"]')
             .forEach(b => b.classList.add('hidden'));
-        App.hideWriteControls(page);
+        // the sidebar's pages that only enter things (Batch Payments...)
+        App.hideWriteControls(document.getElementById('sidebar'));
+        const roots = [page, document.getElementById('modal-body')].filter(Boolean);
+        roots.forEach(App.readOnlyPass);
         if (!App._roObserver) {
-            // pages re-render in place (tabs, filters): keep them clean
-            App._roObserver = new MutationObserver(() => App.hideWriteControls(page));
-            App._roObserver.observe(page, { childList: true, subtree: true });
+            // Pages re-render in place (tabs, filters), and pages and dialogs
+            // fill in after they open (Settings' lists, a report's figures):
+            // keep them clean. The skytech sweep at 2.18.0 still found AR
+            // Aging's Apply Late Fees on offer, drawn after the dialog opened.
+            App._roObserver = new MutationObserver(() => roots.forEach(App.readOnlyPass));
+            roots.forEach(r => App._roObserver.observe(r, { childList: true, subtree: true }));
         }
     },
 
@@ -247,9 +283,26 @@ const App = {
     // "+ New Invoice", "+ Record Payment", "New Account": a create button is
     // labelled "+ …", or is the page header's primary action; and every
     // button that calls one of WRITE_ACTIONS.
+    //
+    // The rest is marked where it is built, with data-write: a control only
+    // an edit can use (Deactivate on an account, Create Backup, a bank
+    // line's Add, the panel that imports a file). It is hidden; a field
+    // marked so shows a value (a budget, a stored category), so it stays in
+    // sight, locked. A file chooser is only ever an upload: hidden (macbase1,
+    // 2.18.0 round 4: the Attachments "Choose File" in an invoice's view).
     hideWriteControls(root) {
         if (!root || !App.isReadOnly()) return;
-        root.querySelectorAll('button, a.btn').forEach(el => {
+        root.querySelectorAll('button, a.btn, [data-write], input[type="file"]').forEach(el => {
+            if (el.getAttribute('data-write') !== null) {
+                if (/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) el.disabled = true;
+                else el.classList.add('hidden');
+                return;
+            }
+            if (el.tagName === 'INPUT') {  // the file choosers
+                el.disabled = true;
+                el.classList.add('hidden');
+                return;
+            }
             const label = (el.textContent || '').trim();
             const headerAction = el.classList.contains('btn-primary') && el.closest('.page-header');
             const call = /^\s*(\w+Page\.\w+)\(/.exec(el.getAttribute('onclick') || '');
@@ -265,14 +318,19 @@ const App = {
         });
     },
 
-    // Called by openModal(). A form that only opens a document (the
-    // customer statement) carries data-readonly-ok and stays usable.
+    // Called by openModal(), and for the page by readOnlyPass: Settings,
+    // Quick Entry and Batch Payments are forms on the page itself, and were
+    // left open to a read-only sign-in until Save (skytech, 2.18.0 round 4).
+    // A form that only opens a document (the customer statement) carries
+    // data-readonly-ok and stays usable; so does a button that only opens a
+    // record inside a locked form (an email template, shown locked in turn).
     lockForms(root) {
         if (!root || !App.isReadOnly()) return;
         root.querySelectorAll('form:not([data-readonly-ok])').forEach(form => {
             form.querySelectorAll('input, select, textarea').forEach(el => { el.disabled = true; });
             form.querySelectorAll('button').forEach(b => {
                 if (/closeModal\(/.test(b.getAttribute('onclick') || '')) return;
+                if (b.hasAttribute('data-readonly-ok')) return;
                 b.disabled = true;
                 b.style.opacity = '0.5';
                 b.style.cursor = 'not-allowed';
@@ -283,6 +341,13 @@ const App = {
                     `<div class="hint hint--locked readonly-note" style="margin-bottom:10px;">${escapeHtml(App.READ_ONLY_MESSAGE)}</div>`);
             }
         });
+    },
+
+    // What a read-only sign-in gets of a page or a dialog: its forms locked,
+    // and nothing offered that only an edit could use.
+    readOnlyPass(root) {
+        App.lockForms(root);
+        App.hideWriteControls(root);
     },
 
     setStatus(text) {
@@ -357,7 +422,7 @@ const App = {
                 <h2>Chart of Accounts</h2>
                 <div>
                     ${inactiveCount ? `<button class="btn btn-sm btn-secondary" onclick="App.toggleInactiveAccounts()">${App._showInactiveAccounts ? 'Hide' : 'Show'} ${inactiveCount} inactive</button> ` : ''}
-                    <button class="btn btn-secondary" onclick="App.showChartImport()">Import…</button>
+                    <button class="btn btn-secondary" data-write onclick="App.showChartImport()">Import…</button>
                     <button class="btn btn-primary" onclick="App.showAccountForm()">New Account</button>
                 </div>
             </div>
@@ -379,9 +444,9 @@ const App = {
                     <td class="actions">
                         <button class="btn btn-sm btn-secondary" onclick="App.showAccountForm(${a.id})">Edit</button>
                         ${inactive
-                            ? `<button class="btn btn-sm btn-secondary" onclick="App.setAccountActive(${a.id}, true)">Reactivate</button>`
-                            : `<button class="btn btn-sm btn-secondary" onclick="App.setAccountActive(${a.id}, false)">Deactivate</button>`}
-                        ${a.is_control ? '' : `<button class="btn btn-sm btn-secondary" onclick="App.deleteAccount(${a.id})">Delete</button>`}
+                            ? `<button class="btn btn-sm btn-secondary" data-write onclick="App.setAccountActive(${a.id}, true)">Reactivate</button>`
+                            : `<button class="btn btn-sm btn-secondary" data-write onclick="App.setAccountActive(${a.id}, false)">Deactivate</button>`}
+                        ${a.is_control ? '' : `<button class="btn btn-sm btn-secondary" data-write onclick="App.deleteAccount(${a.id})">Delete</button>`}
                     </td>
                 </tr>`;
             }
@@ -650,7 +715,7 @@ const App = {
                         <a href="/api/csv/export/accounts" class="btn btn-secondary" download>Export Chart of Accounts</a>
                     </div>
                 </div>
-                <div class="settings-section">
+                <div class="settings-section" data-write>
                     <h3>Import</h3>
                     <p style="font-size:11px; color:var(--text-muted); margin-bottom:12px;">Upload CSV files to import data.</p>
                     <form id="csv-import-form" onsubmit="App.importCSV(event)">
@@ -745,7 +810,7 @@ const App = {
                 <div style="margin-top:12px; display:flex; justify-content:space-between; align-items:center;">
                     <div id="qe-total" style="font-size:16px; font-weight:700; color:var(--qb-navy);">Total: $0.00</div>
                     <div class="form-actions" style="margin:0;">
-                        <button type="submit" class="btn btn-primary">Save & Next (Ctrl+Enter)</button>
+                        <button type="submit" class="btn btn-primary" data-write>Save & Next (Ctrl+Enter)</button>
                     </div>
                 </div>
             </form>

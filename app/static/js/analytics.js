@@ -114,7 +114,7 @@ const AnalyticsPage = {
                     <button class="btn btn-secondary btn-sm" id="analytics-refresh" title="Refresh (R)">&#x21bb; Refresh</button>
                     <button class="btn btn-secondary btn-sm" id="analytics-csv" title="Export CSV">Export CSV</button>
                     <button class="btn btn-secondary btn-sm" id="analytics-pdf" title="Export PDF">Export PDF</button>
-                    <button class="btn btn-primary btn-sm"   id="analytics-ai-run" title="Generate AI insights">&#10024; AI Insights</button>
+                    <button class="btn btn-primary btn-sm"   id="analytics-ai-run" data-write title="Generate AI insights">&#10024; AI Insights</button>
                 </div>
             </div>
 
@@ -695,7 +695,7 @@ const AnalyticsPage = {
             `;
     }
     return `
-            <div class="analytics-card ai-insights-card">
+            <div class="analytics-card ai-insights-card" data-write>
                 <div class="analytics-section-title ai-insights-title">
                     <span>&#10024; AI Insights</span>
                 </div>
@@ -866,7 +866,7 @@ const AnalyticsPage = {
     }
 
     return `
-        <div class="analytics-card ai-actions-card">
+        <div class="analytics-card ai-actions-card" data-write>
             <div class="analytics-section-title ai-actions-title">
                 <span>&#129504; AI Analysis</span>
                 ${result ? '<button class="btn btn-secondary btn-sm" id="ai-actions-clear" style="margin-left:auto">Clear</button>' : ""}

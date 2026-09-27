@@ -26,7 +26,7 @@ const BudgetsPage = {
                 <td style="font-weight:600; white-space:nowrap;">${escapeHtml(acct.account_number)} ${escapeHtml(acct.name)}</td>`;
             for (let m = 1; m <= 12; m++) {
                 const val = budgetMap[acct.id]?.[m] || '';
-                rows += `<td><input type="number" step="0.01" class="budget-cell" data-acct="${acct.id}" data-month="${m}"
+                rows += `<td><input type="number" step="0.01" class="budget-cell" data-write data-acct="${acct.id}" data-month="${m}"
                     value="${val}" style="width:70px; padding:2px 4px; font-size:11px; text-align:right;"></td>`;
             }
             rows += '</tr>';
