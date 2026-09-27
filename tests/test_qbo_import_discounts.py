@@ -349,3 +349,43 @@ def test_a_line_the_import_does_not_bring_is_named_and_posts_plainly(
     assert books.balance("1100") == Decimal("120.00")
     rest = books.db.query(TransactionLine).filter_by(description=ON_NO_LINE).one()
     assert rest.credit == Decimal("20.00")
+
+
+def _imported_before(books, qbo_id, number, lines, discount, total):
+    """A document as the import made it before discounts came across: its
+    sales lines and QBO's total, without the discount line."""
+    books.invoices(_discounted(qbo_id, number, lines, total))
+    assert not _adds_up(books.get(number))
+    return _discounted(qbo_id, number, lines + [discount], total)
+
+
+def test_a_document_imported_before_gets_its_discount_on_the_next_import(client, books):
+    lines = [_line(1, 100, "Catering", "NON")]
+    source = _imported_before(books, "162", "1062", lines, _discount(2, 10, 10), 90)
+    books.invoices(source)  # QBO unchanged since (same SyncToken)
+    invoice = books.get("1062")
+    assert books.lines("1062")[-1] == ("Discount 10%", Decimal("-10"), False)
+    assert (invoice.subtotal, invoice.total, invoice.balance_due) == (
+        Decimal("90"),
+        Decimal("90"),
+        Decimal("90"),
+    )
+    assert _adds_up(invoice)
+    # an edit then books the discount where QBO did, nothing to income
+    r = client.put(f"/api/invoices/{invoice.id}", json={"date": "2026-08-02"})
+    assert r.status_code == 200, r.text
+    assert books.given_balance() == Decimal("-10.00")
+    assert books.balance("4000") == Decimal("100.00")
+    said = [ln.description for ln in books.db.query(TransactionLine)]
+    assert ON_NO_LINE not in said
+
+
+def test_a_document_in_a_closed_period_keeps_its_lines_without_a_word(books):
+    from app.models.settings import Settings
+
+    lines = [_line(1, 100, "Catering", "NON")]
+    source = _imported_before(books, "163", "1063", lines, _discount(2, 10), 90)
+    books.db.add(Settings(key="closing_date", value="2026-08-31"))
+    books.db.commit()
+    books.invoices(source)  # no error
+    assert [ln[0] for ln in books.lines("1063")] == ["Catering"]

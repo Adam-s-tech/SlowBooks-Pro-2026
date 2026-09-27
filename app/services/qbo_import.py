@@ -603,6 +603,68 @@ def _not_applied(errors, entity, source, noun, why) -> None:
     )
 
 
+def _bring_discount_across(db, mapping, invoice, source, kind) -> bool:
+    """A document imported before discounts came across (2.18.0), and not
+    changed in QBO since: its lines fall short of its subtotal by the
+    discount QBO's discount line now brings. Its lines are brought up to
+    date; its amounts are QBO's already and stay as they are. False, and
+    nothing changed, when there is nothing to bring, when it is no longer
+    the import's (voided or edited here), or when its period is closed."""
+    from app.models.invoices import InvoiceStatus
+    from app.services.inventory_hooks import (
+        reconcile_invoice_inventory_delta,
+        snapshot_invoice_lines,
+    )
+    from app.services.qbo_documents import closed_on, local_cost_live
+
+    if (
+        invoice is None
+        or mapping.qbo_sync_token in NOT_OWNED
+        or invoice.transaction_id is not None
+        or invoice.status == InvoiceStatus.VOID
+        or not any(
+            _safe(line, "DetailType", "") == "DiscountLineDetail"
+            for line in _safe(source, "Line") or []
+        )
+    ):
+        return False
+    ours = [{"quantity": ln.quantity, "rate": ln.rate} for ln in invoice.lines]
+    if not _lines_short(ours, invoice.subtotal):
+        return False
+    values = _document_values(db, source, kind)
+    header = ("customer_id", "job_id", "date", "due_date", "subtotal", "tax_amount")
+    if (
+        any(getattr(invoice, key) != values[key] for key in header + ("total",))
+        or _lines_short(values["lines"], values["subtotal"])
+        or closed_on(db, invoice.date)
+    ):
+        return False
+    old_lines = snapshot_invoice_lines(invoice)
+    invoice.tax_rate = values["tax_rate"]
+    db.query(InvoiceLine).filter(InvoiceLine.invoice_id == invoice.id).delete()
+    db.flush()
+    for order, line in enumerate(values["lines"]):
+        db.add(InvoiceLine(invoice_id=invoice.id, line_order=order, **line))
+    db.flush()
+    db.refresh(invoice)
+    reconcile_invoice_inventory_delta(
+        db,
+        invoice,
+        old_lines,
+        txn_date=invoice.date,
+        post_journal=local_cost_live(db, invoice),
+    )
+    noun = "sales receipt" if kind == "sales_receipt" else "invoice"
+    qbo_progress.emit(
+        "update",
+        f"{_source_context(_LABEL[kind], source)}: its discount came across; "
+        f"{noun} {invoice.invoice_number} has its discount line now, and its "
+        f"total ({invoice.total:,.2f}) is as it was",
+        code="IMPORT_QBO_DISCOUNT_ADDED",
+    )
+    return True
+
+
 def _refresh_invoice(db, mapping, source, kind, errors) -> None:
     """Bring an invoice or sales receipt the import made up to date with QBO,
     while it is still the import's own: not voided or edited here. Its
@@ -621,6 +683,8 @@ def _refresh_invoice(db, mapping, source, kind, errors) -> None:
 
     invoice = db.get(Invoice, mapping.slowbooks_id)
     token = _changed_in_qbo(mapping, source)
+    if token is None and _bring_discount_across(db, mapping, invoice, source, kind):
+        return
     if (
         token is None
         or invoice is None
