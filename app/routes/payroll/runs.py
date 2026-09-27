@@ -49,7 +49,7 @@ def list_pay_runs(skip: int = 0, limit: int = 200, db: Session = Depends(get_db)
     runs = (
         db.query(PayRun)
         .options(joinedload(PayRun.stubs).joinedload(PayStub.employee))
-        .order_by(PayRun.pay_date.desc())
+        .order_by(PayRun.pay_date.desc(), PayRun.id.desc())
         .offset(skip)
         .limit(limit)
         .all()

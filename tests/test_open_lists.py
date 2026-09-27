@@ -135,7 +135,7 @@ const asked = [];
 const ctx = { console, window: {}, document: { addEventListener: () => {} },
   API: { get: async (url) => { asked.push(url);
     const skip = Number(/skip=(\d+)/.exec(url)[1]);
-    return Array.from({ length: skip < 2000 ? 1000 : 3 }, (_, i) => skip + i); } } };
+    return Array.from({ length: skip < 2000 ? 1000 : skip === 2000 ? 3 : 0 }, (_, i) => skip + i); } } };
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync('app/static/js/utils.js', 'utf8')
   + '\nthis.fetchAllPages = fetchAllPages; this.listCapNote = listCapNote;', ctx);
@@ -152,10 +152,69 @@ vm.runInContext(fs.readFileSync('app/static/js/utils.js', 'utf8')
     assert out.returncode == 0, out.stderr
     got = json.loads(out.stdout)
     assert got["n"] == 2003
+    # it asks until a page comes back empty, so a server that sends fewer
+    # than asked for (payroll sends at most 500) is still read to the end
     assert got["asked"] == [
         "/invoices?open_only=true&skip=0&limit=1000",
         "/invoices?open_only=true&skip=1000&limit=1000",
         "/invoices?open_only=true&skip=2000&limit=1000",
+        "/invoices?open_only=true&skip=2003&limit=1000",
     ]
     assert "Showing the newest 500 invoices." in got["note"]
     assert "X.showAll()" in got["note"] and got["none"] == ""
+
+
+def test_every_capped_list_page_says_so_and_offers_show_all():
+    pages = {
+        "estimates.js": ("EstimatesPage", "'/estimates'"),
+        "sales_receipts.js": ("SalesReceiptsPage", "'/sales-receipts'"),
+        "credit_memos.js": ("CreditMemosPage", "'/credit-memos'"),
+        "purchase_orders.js": ("PurchaseOrdersPage", "'/purchase-orders'"),
+        "vendor_credits.js": ("VendorCreditsPage", "'/vendor-credits'"),
+        "payments.js": ("PaymentsPage", "'/payments'"),
+        "payroll.js": ("PayrollPage", "'/payroll'"),
+    }
+    for name, (obj, path) in pages.items():
+        text = (JS / name).read_text(encoding="utf-8")
+        assert f"await listRows({obj}, {path}, '{obj}.showAll()'" in text, name
+        assert f"showAll() {{ {obj}._showAll = true;" in text, name
+    # the payroll list is capped at 200 by its endpoint
+    assert "'pay runs', 200)" in (JS / "payroll.js").read_text(encoding="utf-8")
+    # the review queue and a customer's payments are read to the end
+    banking = (JS / "banking.js").read_text(encoding="utf-8")
+    assert "review = await fetchAllPages(`/banking/transactions?" in banking
+    customers = (JS / "customers.js").read_text(encoding="utf-8")
+    assert "fetchAllPages(`/payments?customer_id=${id}`)" in customers
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+def test_list_rows_shows_the_newest_and_then_all():
+    probe = r"""
+const fs = require('fs'), vm = require('vm');
+const asked = [];
+const rows = (n, from = 0) => Array.from({ length: n }, (_, i) => ({ id: from + i }));
+const ctx = { console, window: {}, document: { addEventListener: () => {} },
+  API: { get: async (url) => { asked.push(url);
+    if (url.includes('limit=501')) return rows(501);
+    const skip = Number((/skip=(\d+)/.exec(url) || [0, 0])[1]);
+    return skip === 0 ? rows(700) : []; } } };
+vm.createContext(ctx);
+vm.runInContext(fs.readFileSync('app/static/js/utils.js', 'utf8')
+  + '\nthis.listRows = listRows;', ctx);
+(async () => {
+  const page = {};
+  const first = await ctx.listRows(page, '/estimates', 'P.showAll()', 'estimates');
+  page._showAll = true;
+  const all = await ctx.listRows(page, '/estimates', 'P.showAll()', 'estimates');
+  console.log(JSON.stringify({ first: first.rows.length, note: first.note,
+    all: all.rows.length, allNote: all.note, flag: page._showAll, asked }));
+})();
+"""
+    out = subprocess.run(
+        ["node", "-e", probe], cwd=ROOT, capture_output=True, text=True, timeout=60
+    )
+    assert out.returncode == 0, out.stderr
+    got = json.loads(out.stdout)
+    assert got["first"] == 500 and "Showing the newest 500 estimates." in got["note"]
+    assert got["all"] == 700 and got["allNote"] == "" and got["flag"] is False
+    assert got["asked"][0] == "/estimates?limit=501"

@@ -203,18 +203,32 @@ function _listTableHtml(state) {
         <thead><tr>${ths}</tr></thead><tbody>${rows.map(row).join('')}</tbody></table>`;
 }
 
-// Every row a list endpoint has, a page at a time (the server sends at most
-// 1,000 a page). For lists that must be complete — the open invoices a
-// payment can go to — never just the newest page (issue #191).
+// Every row a list endpoint has, a page at a time. For lists that must be
+// complete — the open invoices a payment can go to — never just the newest
+// page (issue #191). It asks until a page comes back empty, so a server that
+// sends fewer than asked for (payroll sends at most 500) is read to the end.
 async function fetchAllPages(path, pageSize = 1000) {
     const sep = path.includes('?') ? '&' : '?';
     let all = [];
-    for (let skip = 0; ; skip += pageSize) {
+    let skip = 0;
+    for (let n = 0; n < 1000; n++) { // a million rows; never an endless loop
         const url = path + sep + 'skip=' + skip + '&limit=' + pageSize;
         const page = await API.get(url);
+        if (!page.length) break;
         all = all.concat(page);
-        if (page.length < pageSize) return all;
+        skip += page.length;
     }
+    return all;
+}
+
+// A list page's rows: the newest `cap`, with a note offering Show all, or
+// every row once the page's Show all was clicked (page._showAll).
+async function listRows(page, path, showAllCall, noun, cap = 500) {
+    const all = !!page._showAll;
+    page._showAll = false;
+    const sep = path.includes('?') ? '&' : '?';
+    const raw = all ? await fetchAllPages(path) : await API.get(path + sep + 'limit=' + (cap + 1));
+    return { rows: all ? raw : raw.slice(0, cap), note: all ? '' : listCapNote(raw, cap, showAllCall, noun) };
 }
 
 // A list page shows the newest `cap` rows and says so, with a way to see

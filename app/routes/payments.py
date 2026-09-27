@@ -62,7 +62,12 @@ def list_payments(
     )
     if customer_id:
         q = q.filter(Payment.customer_id == customer_id)
-    payments = q.order_by(Payment.date.desc()).offset(skip).limit(limit).all()
+    payments = (
+        q.order_by(Payment.date.desc(), Payment.id.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
     return [_response(p) for p in payments]
 
 

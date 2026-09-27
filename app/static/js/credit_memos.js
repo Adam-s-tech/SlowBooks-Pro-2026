@@ -3,11 +3,13 @@
  * Feature 5: Credit memo UI with apply-to-invoice workflow
  */
 const CreditMemosPage = {
+    showAll() { CreditMemosPage._showAll = true; App.navigate(location.hash); },
+
     async render() {
-        const memos = await API.get('/credit-memos');
+        const { rows: memos, note: capNote } = await listRows(CreditMemosPage, '/credit-memos', 'CreditMemosPage.showAll()', 'credit memos');
         return renderListPage({
             title: 'Credit Memos',
-            headerHtml: `<button class="btn btn-primary" onclick="CreditMemosPage.showForm()">+ New Credit Memo</button>`,
+            headerHtml: `<button class="btn btn-primary" onclick="CreditMemosPage.showForm()">+ New Credit Memo</button>` + capNote,
             empty: '<p>No credit memos yet</p>',
             columns: ['#', T('Customer'), 'Date', 'Status',
                 { label: 'Total', cls: 'amount' }, { label: 'Remaining', cls: 'amount' }, 'Actions'],

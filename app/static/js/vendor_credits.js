@@ -7,11 +7,13 @@
  * which bill the credit settles.
  */
 const VendorCreditsPage = {
+    showAll() { VendorCreditsPage._showAll = true; App.navigate(location.hash); },
+
     async render() {
-        const credits = await API.get('/vendor-credits');
+        const { rows: credits, note: capNote } = await listRows(VendorCreditsPage, '/vendor-credits', 'VendorCreditsPage.showAll()', 'vendor credits');
         return renderListPage({
             title: 'Vendor Credits',
-            headerHtml: `<button class="btn btn-primary" onclick="VendorCreditsPage.showForm()">+ New Vendor Credit</button>`,
+            headerHtml: `<button class="btn btn-primary" onclick="VendorCreditsPage.showForm()">+ New Vendor Credit</button>` + capNote,
             empty: '<p>No vendor credits yet. Enter one when a supplier credits you for a return, a short shipment or an overcharge.</p>',
             columns: ['#', 'Vendor', 'Date', 'Ref', 'Status',
                 { label: 'Total', cls: 'amount' }, { label: 'Remaining', cls: 'amount' }, 'Actions'],

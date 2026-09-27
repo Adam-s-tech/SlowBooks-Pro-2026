@@ -3,13 +3,15 @@
  * Feature 17: Process payroll with withholding calculations
  */
 const PayrollPage = {
+    showAll() { PayrollPage._showAll = true; App.navigate(location.hash); },
+
     async render() {
-        const runs = await API.get('/payroll');
+        const { rows: runs, note: capNote } = await listRows(PayrollPage, '/payroll', 'PayrollPage.showAll()', 'pay runs', 200);
         let html = `
             <div class="page-header">
                 <h2>Payroll</h2>
                 <button class="btn btn-primary" onclick="PayrollPage.showRunForm()">+ New Pay Run</button>
-            </div>
+            </div>${capNote}
             <div style="background:#fef3c7;border:1px solid #fbbf24;padding:6px 10px;margin-bottom:12px;font-size:10px;color:#92400e;">
                 <strong>Disclaimer:</strong> Tax calculations are approximate. Verify with a tax professional before filing.
             </div>`;

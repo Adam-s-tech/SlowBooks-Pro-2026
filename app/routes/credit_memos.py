@@ -62,7 +62,12 @@ def list_credit_memos(
         q = q.filter(CreditMemo.customer_id == customer_id)
     if status:
         q = q.filter(CreditMemo.status == status)
-    memos = q.order_by(CreditMemo.date.desc()).offset(skip).limit(limit).all()
+    memos = (
+        q.order_by(CreditMemo.date.desc(), CreditMemo.id.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
     results = []
     for m in memos:
         resp = CreditMemoResponse.model_validate(m)

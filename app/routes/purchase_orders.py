@@ -51,7 +51,12 @@ def list_pos(
         q = q.filter(PurchaseOrder.vendor_id == vendor_id)
     if status:
         q = q.filter(PurchaseOrder.status == status)
-    pos = q.order_by(PurchaseOrder.date.desc()).offset(skip).limit(limit).all()
+    pos = (
+        q.order_by(PurchaseOrder.date.desc(), PurchaseOrder.id.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
     results = []
     for po in pos:
         resp = POResponse.model_validate(po)

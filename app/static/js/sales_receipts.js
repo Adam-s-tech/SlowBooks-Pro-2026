@@ -5,11 +5,13 @@
  * regular invoices keep their own page.
  */
 const SalesReceiptsPage = {
+    showAll() { SalesReceiptsPage._showAll = true; App.navigate(location.hash); },
+
     async render() {
-        const receipts = await API.get('/sales-receipts');
+        const { rows: receipts, note: capNote } = await listRows(SalesReceiptsPage, '/sales-receipts', 'SalesReceiptsPage.showAll()', Terms.text('sales receipts'));
         return renderListPage({
             title: T('Sales Receipts'),
-            headerHtml: `<button class="btn btn-primary" onclick="SalesReceiptsPage.showForm()">+ New ${T('Sales Receipt')}</button>`,
+            headerHtml: `<button class="btn btn-primary" onclick="SalesReceiptsPage.showForm()">+ New ${T('Sales Receipt')}</button>` + capNote,
             filter: {
                 id: 'sr-status-filter',
                 rowSelector: '.sr-row',
@@ -78,7 +80,7 @@ const SalesReceiptsPage = {
     // its allocation to this invoice.
     async _findPayment(sr) {
         try {
-            const payments = await API.get(`/payments?customer_id=${sr.customer_id}`);
+            const payments = await fetchAllPages(`/payments?customer_id=${sr.customer_id}`);
             return payments.find(p =>
                 !p.is_voided && p.allocations.some(a => a.invoice_id === sr.id)
             ) || null;

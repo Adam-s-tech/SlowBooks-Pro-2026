@@ -4,11 +4,13 @@
  * item, then marks the estimate CONVERTED.
  */
 const EstimatesPage = {
+    showAll() { EstimatesPage._showAll = true; App.navigate(location.hash); },
+
     async render() {
-        const estimates = await API.get('/estimates');
+        const { rows: estimates, note: capNote } = await listRows(EstimatesPage, '/estimates', 'EstimatesPage.showAll()', 'estimates');
         return renderListPage({
             title: 'Estimates',
-            headerHtml: `<button class="btn btn-primary" onclick="EstimatesPage.showForm()">+ New Estimate</button>`,
+            headerHtml: `<button class="btn btn-primary" onclick="EstimatesPage.showForm()">+ New Estimate</button>` + capNote,
             empty: `<p>No estimates yet.</p>
                 <button class="btn btn-primary" onclick="EstimatesPage.showForm()" style="margin-top:10px;">+ Create your first estimate</button>`,
             columns: ['#', T('Customer'), 'Date', 'Expires', 'Status',

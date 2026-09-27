@@ -3,11 +3,13 @@
  * Feature 6: CRUD + convert to bill
  */
 const PurchaseOrdersPage = {
+    showAll() { PurchaseOrdersPage._showAll = true; App.navigate(location.hash); },
+
     async render() {
-        const pos = await API.get('/purchase-orders');
+        const { rows: pos, note: capNote } = await listRows(PurchaseOrdersPage, '/purchase-orders', 'PurchaseOrdersPage.showAll()', 'purchase orders');
         return renderListPage({
             title: 'Purchase Orders',
-            headerHtml: `<button class="btn btn-primary" onclick="PurchaseOrdersPage.showForm()">+ New PO</button>`,
+            headerHtml: `<button class="btn btn-primary" onclick="PurchaseOrdersPage.showForm()">+ New PO</button>` + capNote,
             empty: '<p>No purchase orders yet</p>',
             columns: ['#', 'Vendor', 'Date', 'Status', { label: 'Total', cls: 'amount' }, 'Actions'],
             items: pos,

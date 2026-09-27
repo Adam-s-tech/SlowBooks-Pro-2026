@@ -68,7 +68,12 @@ def list_estimates(
         q = q.filter(Estimate.status == status)
     if customer_id:
         q = q.filter(Estimate.customer_id == customer_id)
-    estimates = q.order_by(Estimate.date.desc()).offset(skip).limit(limit).all()
+    estimates = (
+        q.order_by(Estimate.date.desc(), Estimate.id.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
     results = []
     for est in estimates:
         resp = EstimateResponse.model_validate(est)

@@ -378,7 +378,8 @@ const BankingPage = {
         const kind = reg.bank_kind;
         const [outLabel, inLabel] = BankingPage._cols(kind);
         let review = [];
-        if (feed) review = await API.get(`/banking/transactions?bank_account_id=${feed.bank_account_id}&status=unmatched`);
+        // the whole queue: a year fetched from a feed can be more than a page
+        if (feed) review = await fetchAllPages(`/banking/transactions?bank_account_id=${feed.bank_account_id}&status=unmatched`);
         BankingPage._ctx = { accountId: id, feedId: feed ? feed.bank_account_id : null, kind, lastReconciled: info.last_reconciled || null };
 
         let html = `

@@ -7,13 +7,15 @@
  * to open invoices from here, from the payment and from the customer page.
  */
 const PaymentsPage = {
+    showAll() { PaymentsPage._showAll = true; App.navigate(location.hash); },
+
     async render() {
-        const payments = await API.get('/payments');
+        const { rows: payments, note: capNote } = await listRows(PaymentsPage, '/payments', 'PaymentsPage.showAll()', 'payments');
         let html = `
             <div class="page-header">
                 <h2>Payments</h2>
                 <button class="btn btn-primary" onclick="PaymentsPage.showForm()">+ Record Payment</button>
-            </div>`;
+            </div>` + capNote;
 
         if (payments.length === 0) {
             html += `<div class="empty-state">
