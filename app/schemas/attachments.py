@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 class AttachmentResponse(BaseModel):
@@ -22,3 +22,11 @@ class AttachmentResponse(BaseModel):
     missing: bool = False
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="after")
+    def _no_size_without_bytes(self):
+        # the size the row kept is of a file that isn't here (skytech and
+        # macbase1, 2.18.0 round 6: "(59 bytes)" beside a missing file)
+        if self.missing:
+            self.file_size = None
+        return self
