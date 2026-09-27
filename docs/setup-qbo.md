@@ -132,7 +132,9 @@ Invoices, payments, and sales receipts resolve QBO subcustomers already imported
 
 ### Exporting to QBO
 
-Click **Export All Data** to push Slowbooks data to QBO. Already-exported records (tracked in the `qbo_mappings` table) are skipped.
+Click **Export All Data** to push Slowbooks data to QBO. A record goes once, and after that only when it changes: a document, customer, vendor, item or account sent from here that has changed here since is **updated** in QBO on the next export (SlowBooks' fields win; QBO's other fields are kept), and one voided here is **voided** in QBO. Sales receipts go as QBO sales receipts. Each line carries its tax code (`TAX`/`NON`; a document that charges no tax sends every line `NON`, so QBO doesn't add tax this document didn't charge), and several discounts go as QBO's one discount, with a note naming the other accounts. What QBO refuses is named in the result's notes, and the rest carries on.
+
+Export never sends back what the import brought in from QBO (or matched to a QBO record), nor anything voided here before it went. Records an earlier release sent are left as they went: their mappings look like the import's own, so the export can't tell they're its to change.
 
 ---
 
