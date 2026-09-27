@@ -198,11 +198,11 @@ def test_several_tax_lines_on_one_amount_come_in_as_one_rate(client, sales):
 
 
 NO_SINGLE_RATE = {
-    # 8.875% of 1,000.00 is 88.75; stored to four places (8.88%) it is 88.80
-    "a rate that is not stored to the cent": (
+    # 8.123456% of 1,000.00 is 81.23; stored to six places (8.1235%), 81.24
+    "a rate finer than six places": (
         [_line(1, 1000, "Catering", "TAX")],
-        1088.75,
-        _tax(88.75, (8.875, 1000, 88.75)),
+        1081.23,
+        _tax(81.23, (8.123456, 1000, 81.23)),
     ),
     # 5% of both lines, 2% of the first only
     "tax lines on different amounts": (
@@ -254,11 +254,23 @@ def test_a_tax_no_single_rate_gives_is_kept_as_it_is_on_an_edit(client, sales, c
     )
 
 
-def test_no_line_taxable_any_more_leaves_no_tax(client, sales):
-    tax = _tax(88.75, (8.875, 1000, 88.75))
-    sales.invoices(
-        _document("142", "1042", [_line(1, 1000, "Catering", "TAX")], 1088.75, tax)
+def test_a_rate_is_worked_out_to_six_places():
+    """8.875% is 0.08875 to the cent (2.18.0 keeps a rate to six places)."""
+    lines = [{"quantity": Decimal("1"), "rate": Decimal("1000"), "is_taxable": True}]
+    source = QBOInvoice.from_json(
+        _document("145", "1045", [_line(1, 1000, "Catering", "TAX")], 1088.75, None)
+        | {"TxnTaxDetail": _tax(88.75, (8.875, 1000, 88.75))}
     )
+    assert qbo_import._qbo_rate(source, lines, Decimal("88.75")) == Decimal("0.08875")
+
+
+def test_no_line_taxable_any_more_leaves_no_tax(client, sales):
+    """Even a tax kept as QBO charged it (no single rate gives it)."""
+    tax = _tax(81.23, (8.123456, 1000, 81.23))
+    sales.invoices(
+        _document("142", "1042", [_line(1, 1000, "Catering", "TAX")], 1081.23, tax)
+    )
+    assert sales.get("1042").tax_rate == Decimal("0")
     invoice = sales.get("1042")
     lines = client.get(f"/api/invoices/{invoice.id}").json()["lines"]
     untaxed = [

@@ -275,10 +275,14 @@ def _tax_code(detail) -> bool | None:
     return True if code == "TAX" else False if code == "NON" else None
 
 
+# A document's tax rate is a fraction kept to six places (8.875% is 0.08875).
+_RATE_PLACES = Decimal("0.000001")
+
+
 def _qbo_rate(source, lines, tax) -> Decimal:
     """QBO's sales tax as a document's rate (a fraction): its tax lines'
     percentages together, when they are all percentages of one taxable
-    amount and that rate, as stored (four places), applied to the lines
+    amount and that rate, as stored (_RATE_PLACES), applied to the lines
     marked taxable, gives QBO's tax to the cent, so an edit re-totals to
     QBO's total. 0 otherwise: the document keeps QBO's tax amount, and an
     edit keeps it as it is rather than working it out as 0.00."""
@@ -303,7 +307,7 @@ def _qbo_rate(source, lines, tax) -> Decimal:
             bases.add(Decimal(str(base)))
     if not percents or len(bases) > 1:
         return Decimal("0")
-    rate = (sum(percents) / 100).quantize(Decimal("0.0001"))
+    rate = (sum(percents) / 100).quantize(_RATE_PLACES)
     taxable = _q(
         sum(
             (
