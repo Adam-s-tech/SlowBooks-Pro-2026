@@ -24,6 +24,7 @@ from app.services.qbo_common import (
     ITEM_TYPE_TO_QBO,
     create_mapping,
     discount_mapping,
+    get_mapping_by_qbo_id,
     get_mapping_by_slowbooks_id,
 )
 from app.services.qbo_service import get_qbo_client
@@ -302,27 +303,65 @@ def export_items(db: Session) -> dict:
     return {"exported": exported, "errors": errors}
 
 
-def _discount_line(db: Session, inv_line, discount) -> dict:
-    """A line on a Discount item (qbo_common.discount_mapping) as QBO's own
-    discount: a DiscountLineDetail for the amount, on QBO's discount
-    account (the one it came in on, else the item's income account where
-    that is mapped), not a negative sales line with no item."""
-    detail = {"PercentBased": False}
+def _discount_account(db: Session, item_id, discount) -> tuple[str, str]:
+    """(QBO account id, words for it) of a Discount item: the QBO discount
+    account it came in on, else its income account where that is mapped;
+    ("", its name) when QBO has none for it."""
     account = discount.qbo_id
-    if not account:
-        item = db.get(Item, inv_line.item_id)
-        mapped = (
-            get_mapping_by_slowbooks_id(db, "account", item.income_account_id)
-            if item is not None and item.income_account_id
-            else None
-        )
+    item = db.get(Item, item_id)
+    local = None
+    if account:
+        mapped = get_mapping_by_qbo_id(db, "account", account)
+        local = db.get(Account, mapped.slowbooks_id) if mapped else None
+    elif item is not None and item.income_account_id:
+        local = db.get(Account, item.income_account_id)
+        mapped = get_mapping_by_slowbooks_id(db, "account", item.income_account_id)
         account = mapped.qbo_id if mapped else ""
+    name = local.name if local is not None else (item.name if item else "Discount")
+    return account, f"{name} (QBO #{account})" if account else name
+
+
+def _discount_line(db: Session, parts, number, notes) -> dict:
+    """An invoice's lines on Discount items (qbo_common.discount_mapping) as
+    QBO's own discount, not negative sales lines with no item: ONE
+    DiscountLineDetail, as QBO takes one discount on a transaction, for
+    their total, on the discount account of the item with the most of it.
+    A note names any other discount account whose amount went into it.
+    `parts` is [(invoice line, its item's mapping)], in order."""
+    by_item = {}
+    for inv_line, discount in parts:
+        amount = -Decimal(str(inv_line.amount or 0))
+        was = by_item.get(inv_line.item_id, (Decimal("0"), discount, inv_line))
+        by_item[inv_line.item_id] = (was[0] + amount, discount, was[2])
+    total = sum((amount for amount, _, _ in by_item.values()), Decimal("0"))
+    largest = max(by_item, key=lambda item_id: by_item[item_id][0])
+    _, discount, first = by_item[largest]
+    account, words = _discount_account(db, largest, discount)
+    others = [
+        (amount, _discount_account(db, item_id, mapping)[1])
+        for item_id, (amount, mapping, _) in by_item.items()
+        if item_id != largest
+    ]
+    if others:
+        named = "; ".join(f"{amount:,.2f} on {label}" for amount, label in others)
+        notes.append(
+            {
+                "entity": "invoice",
+                "id": first.invoice_id,
+                "message": (
+                    f"Invoice {number} went to QuickBooks Online with one discount "
+                    f"of {total:,.2f} on {words}, as QuickBooks Online takes one "
+                    f"discount on a transaction. It includes {named}."
+                ),
+            }
+        )
+    detail = {"PercentBased": False}
     if account:
         detail["DiscountAccountRef"] = {"value": account}
     return {
         "DetailType": "DiscountLineDetail",
-        "Amount": float(-Decimal(str(inv_line.amount or 0))),
-        "Description": inv_line.description or "",
+        "Amount": float(total),
+        "Description": first.description or "",
         "DiscountLineDetail": detail,
     }
 
@@ -334,6 +373,7 @@ def export_invoices(db: Session) -> dict:
     client = get_qbo_client(db)
     exported = 0
     errors = []
+    notes = []
 
     invoices = db.query(Invoice).all()
 
@@ -373,24 +413,16 @@ def export_invoices(db: Session) -> dict:
                 .all()
             )
 
-            discounts = {}  # one QBO discount for each Discount item
+            discounts = []  # its lines on Discount items: one QBO discount
             # QBO taxes the lines this document taxes (its own rate, not
             # ours): a taxable line on a document that charges tax is TAX.
             charges_tax = Decimal(str(inv.tax_amount or 0)) != 0
             for inv_line in inv_lines:
                 discount = discount_mapping(db, inv_line.item_id)
                 if discount is not None and (inv_line.amount or 0) < 0:
-                    merged = discounts.get(inv_line.item_id)
-                    if merged is None:
-                        merged = discounts[inv_line.item_id] = _discount_line(
-                            db, inv_line, discount
-                        )
-                        lines.append(merged)
-                    else:
-                        merged["Amount"] = float(
-                            Decimal(str(merged["Amount"]))
-                            - Decimal(str(inv_line.amount))
-                        )
+                    if not discounts:
+                        lines.append(None)  # where QBO's discount goes
+                    discounts.append((inv_line, discount))
                     # the discount comes off the taxable amount, as QBO's does
                     # when it works the tax out after the discount
                     if inv_line.is_taxable:
@@ -417,6 +449,9 @@ def export_invoices(db: Session) -> dict:
                 }
                 lines.append(line)
 
+            if discounts:
+                line = _discount_line(db, discounts, inv.invoice_number, notes)
+                lines[lines.index(None)] = line
             qbo_inv.Line = lines
 
             if inv.notes:
@@ -437,7 +472,7 @@ def export_invoices(db: Session) -> dict:
                 }
             )
 
-    return {"exported": exported, "errors": errors}
+    return {"exported": exported, "errors": errors, "notes": notes}
 
 
 def export_payments(db: Session) -> dict:
@@ -545,6 +580,7 @@ def export_all(db: Session) -> dict:
         "invoices": 0,
         "payments": 0,
         "errors": [],
+        "notes": [],
     }
 
     r = export_accounts(db)
@@ -566,6 +602,7 @@ def export_all(db: Session) -> dict:
     r = export_invoices(db)
     result["invoices"] = r["exported"]
     result["errors"].extend(r["errors"])
+    result["notes"].extend(r.get("notes", []))
 
     r = export_payments(db)
     result["payments"] = r["exported"]

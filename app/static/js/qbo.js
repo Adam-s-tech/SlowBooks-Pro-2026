@@ -601,7 +601,7 @@ const QBOPage = {
         const checked = QBOPage._getChecked('qbo-export-checkboxes');
         if (checked.length === 0) { toast('Select at least one entity type', 'error'); return; }
 
-        const result = { accounts: 0, customers: 0, vendors: 0, items: 0, invoices: 0, payments: 0, errors: [] };
+        const result = { accounts: 0, customers: 0, vendors: 0, items: 0, invoices: 0, payments: 0, errors: [], notes: [] };
         App.setStatus('Exporting to QuickBooks Online...');
 
         for (const entity of checked) {
@@ -611,6 +611,7 @@ const QBOPage = {
                 const data = await r.json();
                 result[entity] = data.exported || 0;
                 if (data.errors) result.errors.push(...data.errors);
+                if (data.notes) result.notes.push(...data.notes);
             } catch (err) {
                 result.errors.push({ entity, message: err.message });
             }
@@ -664,6 +665,16 @@ const QBOPage = {
                 const msg = typeof e === 'string' ? e :
                     `${e.entity || ''}: ${e.message || JSON.stringify(e)}`;
                 html += `${escapeHtml(msg)}<br>`;
+            });
+            html += '</div>';
+        }
+        // What went to QuickBooks Online differently from how it reads here,
+        // and why: an invoice's discounts on several accounts went as QBO's
+        // one discount on a transaction.
+        if (result.notes && result.notes.length > 0) {
+            html += '<div class="iif-warnings">';
+            result.notes.forEach(n => {
+                html += `${escapeHtml(typeof n === 'string' ? n : (n.message || ''))}<br>`;
             });
             html += '</div>';
         }

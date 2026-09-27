@@ -45,6 +45,9 @@ class QBOExportResult(BaseModel):
     invoices: int = 0
     payments: int = 0
     errors: list[dict] = []
+    # what went differently from how it reads here, and why (an invoice's
+    # discounts on several accounts went as QBO's one discount)
+    notes: list[dict] = []
 
 
 class QBOConnectionStatus(BaseModel):
