@@ -222,49 +222,6 @@ def rebase_account_balances(db: Session, accounts) -> None:
     db.flush()
 
 
-# ---------------------------------------------------------------------------
-# Documents the QBO import created
-# ---------------------------------------------------------------------------
-
-
-def _mapped_from_qbo(db: Session, kinds, slowbooks_id) -> bool:
-    return (
-        db.query(QBOMapping.id)
-        .filter(
-            QBOMapping.entity_type.in_(kinds),
-            QBOMapping.slowbooks_id == slowbooks_id,
-        )
-        .first()
-        is not None
-    )
-
-
-def qbo_managed_invoice(db: Session, invoice) -> bool:
-    """An invoice or sales receipt the QBO import created. It has no posting
-    of its own: its A/R, income and tax reach the books through the QBO
-    ledger import. A local invoice exported to QBO, or matched to a QBO one
-    by its number, is mapped too but keeps its own posting."""
-    return invoice.transaction_id is None and _mapped_from_qbo(
-        db, ("invoice", "sales_receipt"), invoice.id
-    )
-
-
-def qbo_managed_payment(db: Session, payment) -> bool:
-    """A payment the QBO import created: a QBO payment, or the payment half
-    of a QBO sales receipt (which has no mapping of its own). Like the
-    invoices, it has no posting of its own."""
-    if payment.transaction_id is not None:
-        return False
-    if _mapped_from_qbo(db, ("payment",), payment.id):
-        return True
-    return any(
-        alloc.invoice is not None
-        and alloc.invoice.transaction_id is None
-        and _mapped_from_qbo(db, ("sales_receipt",), alloc.invoice_id)
-        for alloc in payment.allocations
-    )
-
-
 # QBOMapping.qbo_sync_token of an import posting (a "ledger" or
 # "journal_entry" mapping) that the import no longer owns. Otherwise it
 # holds QBO's SyncToken (journals) or the posting's fingerprint (ledger).

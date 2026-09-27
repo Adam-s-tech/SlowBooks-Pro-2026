@@ -77,7 +77,9 @@ def journals(db_session, monkeypatch):
 
 
 def _journal_227(db):
-    mapping = db.query(QBOMapping).filter_by(entity_type="journal_entry").first()
+    mapping = (
+        db.query(QBOMapping).filter_by(entity_type="journal_entry", qbo_id="227").one()
+    )
     return mapping, db.get(Transaction, mapping.slowbooks_id)
 
 
@@ -128,11 +130,14 @@ def test_a_journal_voided_in_qbo_is_reversed(db_session, journals, log):
 
 def test_a_journal_deleted_from_qbo_is_reversed(db_session, journals, log):
     client, accounts = journals
-    client.entries = [_entry("228", amount=12)]  # the complete list, without 227
+    client.entries.append(_entry("229", amount=5))
+    assert qbo_import.import_journal_entries(db_session)["imported"] == 1
+    # the complete list: 229 still there, 227 gone, 228 new
+    client.entries = [_entry("229", amount=5), _entry("228", amount=12)]
     assert qbo_import.import_journal_entries(db_session)["errors"] == []
     mapping, _ = _journal_227(db_session)
     assert mapping.qbo_sync_token == "deleted-in-qbo"
-    assert accounts["2"].balance == Decimal("12.00")
+    assert accounts["2"].balance == Decimal("17.00")  # 5 + 12
     assert "JournalEntry QBO #227" in _logged(log, "IMPORT_QBO_DELETE_APPLIED")[0]
 
 
@@ -294,8 +299,12 @@ def test_a_payment_voided_in_qbo_opens_its_invoice_again(books):
     assert books.balance("1200") == Decimal("30.00")
 
 
-def test_a_change_to_a_document_changed_here_is_kept_as_it_is_here(client, books):
-    """Voided here, then changed in QBO: kept as it is here, never an error."""
+@pytest.mark.parametrize("in_qbo", ["45", "0.00"])  # changed there, or voided there
+def test_a_change_to_a_document_changed_here_is_kept_as_it_is_here(
+    client, books, in_qbo
+):
+    """Voided here, then changed or voided in QBO: kept as it is here, with
+    one line saying so, never an error."""
     books.documents()
     books.ledger()
     invoice = books.invoice("1038")
@@ -307,7 +316,7 @@ def test_a_change_to_a_document_changed_here_is_kept_as_it_is_here(client, books
         for rows in client.sections.values():
             for row in rows:
                 if row[:2] == ("Invoice", "133"):
-                    rows[rows.index(row)] = (*row[:3], "45")
+                    rows[rows.index(row)] = (*row[:3], in_qbo)
         return client
 
     books._gl = changed
@@ -489,3 +498,17 @@ def test_a_document_changed_here_is_not_brought_back_to_qbos_version(client, boo
     )
     books.documents()
     assert books.invoice("1038").total == Decimal("55")
+
+
+def test_a_list_holding_none_of_the_imported_journals_deletes_nothing(
+    db_session, journals, log
+):
+    """Another QBO company connected: its list is complete and sound, and
+    none of the journals imported before is in it."""
+    client, accounts = journals
+    client.entries = [_entry("900", amount=12), _entry("901", amount=3)]
+    assert qbo_import.import_journal_entries(db_session)["errors"] == []
+    mapping, _ = _journal_227(db_session)
+    assert mapping.qbo_sync_token == "0"
+    assert accounts["2"].balance == Decimal("40.54")  # 25.54 kept, 12 + 3 new
+    assert _logged(log, "IMPORT_QBO_DELETE_NOT_APPLIED")

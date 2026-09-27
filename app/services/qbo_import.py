@@ -1970,15 +1970,32 @@ def import_journal_entries(db: Session) -> dict:
     # Deleted in QBO: a journal imported before that a complete, sound list of
     # QBO's journals no longer has. (The list is complete: any page that
     # failed to load stopped the import above.)
+    owners = {}
+    for mapping in db.query(QBOMapping).filter_by(entity_type="journal_entry"):
+        owners.setdefault(mapping.qbo_id, []).append(mapping)
+    for qbo_id, mappings in ledger_mappings.items():
+        owners.setdefault(qbo_id, []).extend(mappings)
+    missing = {
+        qbo_id: mappings
+        for qbo_id, mappings in owners.items()
+        if qbo_id not in seen
+        and not any(m.qbo_sync_token in NOT_OWNED for m in mappings)
+    }
+    if missing and listed and not (seen & owners.keys()):
+        # None of the journals imported before is in QBO's list: another
+        # QBO company connected, most likely. Nothing is taken as deleted.
+        qbo_progress.emit(
+            "verify",
+            f"None of the {len(owners)} journal(s) imported before is in "
+            "QuickBooks Online's list of journals (is this the company they "
+            "came from?), so none of them was taken as deleted",
+            level="warning",
+            code="IMPORT_QBO_DELETE_NOT_APPLIED",
+            item_id="",
+        )
+        listed = False
     if listed:
-        owners = {}
-        for mapping in db.query(QBOMapping).filter_by(entity_type="journal_entry"):
-            owners.setdefault(mapping.qbo_id, []).append(mapping)
-        for qbo_id, mappings in ledger_mappings.items():
-            owners.setdefault(qbo_id, []).extend(mappings)
-        for qbo_id, mappings in sorted(owners.items()):
-            if qbo_id in seen or any(m.qbo_sync_token in NOT_OWNED for m in mappings):
-                continue
+        for qbo_id, mappings in sorted(missing.items()):
             txn = db.get(Transaction, mappings[0].slowbooks_id)
             if txn is None:
                 continue

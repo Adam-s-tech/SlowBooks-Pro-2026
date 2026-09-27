@@ -581,6 +581,10 @@ def import_ledger(
     # Voided in QBO: an imported transaction whose rows now all read 0.00.
     for key in sorted(zeroed - entries.keys()):
         existing = tracked.get(key)
+        if existing is not None and existing.qbo_sync_token == CHANGED_HERE:
+            qbo_progress.item(key, "")
+            _kept_here()
+            continue
         if existing is None or not imported(key):
             continue
         txn_type, _, qbo_id = key.partition(":")
