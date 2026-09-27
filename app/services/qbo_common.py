@@ -246,6 +246,27 @@ def kept_here(key, mappings) -> None:
             mapping.qbo_sync_token = KEPT_HERE
 
 
+# The item a QuickBooks Online discount comes in on (qbo_import._discount_item):
+# a mapping of this entity type, keyed by QBO's discount account, names it.
+DISCOUNT_ITEM = "discount_item"
+
+
+def is_discount_item(db: Session, item_id) -> bool:
+    """Whether a local item is one a QuickBooks Online discount came in on:
+    a line on it may carry a negative price (routes/invoices/helpers.py,
+    refuse_negative_lines)."""
+    return (
+        bool(item_id)
+        and db.query(QBOMapping.id)
+        .filter(
+            QBOMapping.entity_type == DISCOUNT_ITEM,
+            QBOMapping.slowbooks_id == item_id,
+        )
+        .first()
+        is not None
+    )
+
+
 def ledger_posting(db: Session, txn_type: str, qbo_id) -> QBOMapping | None:
     """The QBO ledger import's mapping for QBO transaction `txn_type` #qbo_id
     ("Invoice", "Sales Receipt"), when it has posted that transaction. The

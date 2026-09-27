@@ -5,8 +5,10 @@
 
 from datetime import date, timedelta
 from decimal import Decimal
+import logging
 
 from fastapi import HTTPException
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy.orm import Session
 
 from app.models.accounts import Account
@@ -19,6 +21,7 @@ from app.services.accounting import (
 from app.services.terminology import document_reference
 
 ZERO_TOTAL_CODE = "zero_total"
+logger = logging.getLogger(__name__)
 
 
 def _zero_total_sentence(noun: str, action: str) -> str:
@@ -148,6 +151,39 @@ def resolve_line_taxable(db: Session, lines_data, customer=None) -> None:
         ln.is_taxable = default
 
 
+def refuse_negative_lines(db: Session, lines, invoice=None) -> None:
+    """A negative price is a discount. A line may carry one on a discount
+    item (the one a QuickBooks Online discount came in on:
+    qbo_common.is_discount_item), or on an item (or no item) the invoice
+    being edited already has a negative line on: a QuickBooks Online
+    document keeps the negative lines it came with, and an edit saves them
+    back. Any other is refused as it always was, in the same words: a
+    refund belongs on a credit memo."""
+    from app.services.qbo_common import is_discount_item
+
+    had = {
+        line.item_id
+        for line in (invoice.lines if invoice is not None else [])
+        if Decimal(str(line.rate or 0)) < 0
+    }
+    for index, line in enumerate(lines):
+        if Decimal(str(line.rate or 0)) >= 0:
+            continue
+        if line.item_id in had or is_discount_item(db, line.item_id):
+            continue
+        raise RequestValidationError(
+            [
+                {
+                    "type": "value_error",
+                    "loc": ("body", "lines", index),
+                    "msg": "Value error, rate must be non-negative; use a credit "
+                    "memo for refunds",
+                    "input": None,
+                }
+            ]
+        )
+
+
 def kept_tax(invoice, tax_rate, lines):
     """The tax amount an edit keeps as it is: one an import brought with no
     rate that gives it (QuickBooks Online's, when its tax lines don't make a
@@ -210,8 +246,10 @@ def _build_invoice_journal_lines(
         journal_lines.append(
             {
                 "account_id": income_id,
-                "debit": Decimal("0"),
-                "credit": line_amount,
+                # A discount line (negative) is taken off its account, the
+                # discount account of the item it is on: a debit.
+                "debit": -line_amount if line_amount < 0 else Decimal("0"),
+                "credit": line_amount if line_amount > 0 else Decimal("0"),
                 "description": (getattr(ld, "description", "") or ""),
                 "class_id": getattr(ld, "class_id", None),
                 "job_id": getattr(ld, "job_id", None),
@@ -242,9 +280,12 @@ def _post_invoice_journal(
     """One construction/conversion/posting path for invoice create and edit.
 
     `balance_on_income` is for an invoice the QuickBooks Online import
-    created, whose stored lines need not add up to its total (the import
-    keeps QBO's total but not its discount lines): the difference posts to
-    the income account, so the entry carries the total the invoice shows."""
+    created. Its discount comes across as a line (qbo_import._document_lines),
+    so its lines add up to its total; a line of a kind the import doesn't
+    bring across (a bundle) still leaves a difference, which the import log
+    named. That difference posts to the income account, said plainly on the
+    entry and in the server log, so the entry carries the total the invoice
+    shows."""
     from app.services.accounting import (
         create_journal_entry,
         get_ar_account_id,
@@ -277,9 +318,18 @@ def _post_invoice_journal(
                     "account_id": get_default_income_account_id(db),
                     "debit": -short if short < 0 else Decimal("0"),
                     "credit": short if short > 0 else Decimal("0"),
-                    "description": "Other lines QuickBooks Online totals in "
-                    "(discounts and charges)",
+                    "description": "Part of the QuickBooks Online total on no "
+                    "line here",
                 }
+            )
+            logger.warning(
+                "%s %s from QuickBooks Online: its lines and tax come to %s and "
+                "its total to %s; the %s on no line was posted to income",
+                face,
+                invoice.invoice_number,
+                invoice.total - short,
+                invoice.total,
+                short,
             )
     return create_journal_entry(
         db,

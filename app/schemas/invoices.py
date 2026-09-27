@@ -40,7 +40,10 @@ class InvoiceLineCreate(StrictModel):
 
     @model_validator(mode="after")
     def _check_non_negative(self):
-        validate_non_negative_line(self.quantity, self.rate)
+        # A negative price is a discount; whether this line may carry one
+        # depends on its item and on the invoice it is on, which the route
+        # decides (routes/invoices/helpers.py, refuse_negative_lines).
+        validate_non_negative_line(self.quantity, None)
         return self
 
 
