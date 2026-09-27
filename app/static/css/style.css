@@ -44,6 +44,14 @@
        Measured: 12.6:1 here, 7.2:1 in dark. (macbase1, 2.10.3 gate) */
     --text-link:      #003366;
     --text-success:   #166534;   /* 7.13:1 on white */
+    /* The A/R aging bands, for the bar and the key beside each label, so
+       the two stay matched. A key is a graphic: 3:1 on the card (WCAG
+       1.4.11). Gold #cc9933 was 2.57 and orange #f97316 2.80 (macbase1
+       NEW-11); these are 3.13 and 3.11. */
+    --aging-current:  var(--success);   /* 3.57 */
+    --aging-30:       #b88a2e;
+    --aging-60:       #f36706;
+    --aging-90:       var(--danger);    /* 5.14 */
     /* Red and amber for words, as --text-success is green for them: the
        pages wrote #a4242b, #c0392b, #a8761f and #b45309 in by hand, which
        the dark theme could not change (2.22:1 and 4.09 there) */
@@ -330,9 +338,10 @@ body {
     padding: 8px 14px;
     border-top: 1px solid rgba(255,255,255,0.08);
     font-size: 9px;
-    /* 0.25 alpha measured 2.53:1 against the sidebar. 0.50 is 5.24:1 —
-       still clearly secondary, now legible. */
-    color: rgba(255,255,255,0.50);
+    /* 0.25 alpha measured 2.53:1 against the sidebar, and 0.50 is 4.28 at
+       the top of the sidebar's navy (5.06 where the footer sits): 0.60 is
+       5.47 at the top. Still clearly secondary. */
+    color: rgba(255,255,255,0.60);
     text-align: center;
     user-select: none;
 }
@@ -341,7 +350,8 @@ body {
     display: block;
     margin-bottom: 4px;
     font-size: 10px;
-    color: rgba(255,255,255,0.35);
+    /* 0.35 was 3.13:1 (skytech R3-1); 0.55 is 4.84 at the navy's top */
+    color: rgba(255,255,255,0.55);
     text-decoration: none;
 }
 
@@ -892,11 +902,13 @@ a:hover { text-decoration: underline; }
     border: none;
     font-size: 16px;
     cursor: pointer;
-    color: rgba(255,255,255,0.7);
+    /* white: the dialog header's gradient starts at --qb-blue-light, where
+       0.7 white was 3.11:1 and white is 4.56 */
+    color: #ffffff;
     padding: 2px 4px;
     line-height: 1;
 }
-.modal-close:hover { color: #ffffff; }
+.modal-close:hover { color: #ffffff; background: rgba(255, 255, 255, 0.15); }
 
 #modal-body {
     padding: 14px 16px;
@@ -1188,7 +1200,9 @@ tr.clickable { cursor: pointer; }
 
 .splash-info {
     font-size: 10px;
-    color: rgba(255,255,255,0.5);
+    /* 0.5 was 4.28:1 at the top of the navy (4.48 as skytech measured it
+       with the terms showing, R3-1); 0.6 is 5.47. Its bold stays 0.7. */
+    color: rgba(255,255,255,0.6);
     line-height: 1.6;
     margin-bottom: 16px;
 }
@@ -1236,7 +1250,8 @@ tr.clickable { cursor: pointer; }
 
 .splash-legal {
     font-size: 8px;
-    color: rgba(255,255,255,0.25);
+    /* 0.25 was 2.22:1 (skytech R3-1); 0.55 is 4.84, still the faintest line */
+    color: rgba(255,255,255,0.55);
     line-height: 1.5;
     margin-bottom: 16px;
     padding: 0 16px;
@@ -2307,6 +2322,13 @@ tr.clickable { cursor: pointer; }
 .card.note--caution,
 .note--caution { background: #fffbe6; border-left: 4px solid #f5a623; }
 .note--plain   { background: #f4f6f9; }
+
+/* A void or inactive row reads as set aside: its text takes the muted
+   colour. It used to fade the whole row (opacity .55-.6), which took the
+   text below AA: muted text at 2.4:1 in dark. Badges keep their own. */
+tbody tr.row--dim > td,
+tbody tr.row--dim > td strong,
+tbody tr.row--dim > td.amount { color: var(--text-muted); }
 
 .form-group input[disabled],
 .form-group select[disabled] {

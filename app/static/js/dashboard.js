@@ -196,12 +196,12 @@ const DashboardPage = {
             const owed = d.current + d.d30 + d.d60 + d.d90;
             if (!owed && !d.credits) return '<div style="color:var(--gray-500);font-size:12px">No open receivables.</div>';
             const seg = (v, color, label) => v > 0 ? `<div style="width:${(v / owed * 100).toFixed(1)}%;background:${color}" title="${label}: ${formatCurrency(v)}"></div>` : '';
-            return `<div style="display:flex;height:28px;border-radius:4px;overflow:hidden">${seg(d.current, 'var(--success)', 'Current')}${seg(d.d30, 'var(--qb-gold)', '1-30')}${seg(d.d60, '#f97316', '31-60')}${seg(d.d90, 'var(--danger)', '61+')}</div>
+            return `<div style="display:flex;height:28px;border-radius:4px;overflow:hidden">${seg(d.current, 'var(--aging-current)', 'Current')}${seg(d.d30, 'var(--aging-30)', '1-30')}${seg(d.d60, 'var(--aging-60)', '31-60')}${seg(d.d90, 'var(--aging-90)', '61+')}</div>
                 <div style="display:flex;gap:12px;margin-top:6px;font-size:10px;flex-wrap:wrap">
-                    <span><span style="color:var(--success)">■</span> Current ${formatCurrency(d.current)}</span>
-                    <span><span style="color:var(--qb-gold)">■</span> 1-30 ${formatCurrency(d.d30)}</span>
-                    <span><span style="color:#f97316">■</span> 31-60 ${formatCurrency(d.d60)}</span>
-                    <span><span style="color:var(--danger)">■</span> 61+ ${formatCurrency(d.d90)}</span>
+                    <span><span style="color:var(--aging-current)">■</span> Current ${formatCurrency(d.current)}</span>
+                    <span><span style="color:var(--aging-30)">■</span> 1-30 ${formatCurrency(d.d30)}</span>
+                    <span><span style="color:var(--aging-60)">■</span> 31-60 ${formatCurrency(d.d60)}</span>
+                    <span><span style="color:var(--aging-90)">■</span> 61+ ${formatCurrency(d.d90)}</span>
                 </div>
                 <table class="data-table" style="font-size:12px;margin-top:6px"><tbody>
                     ${d.credits ? `<tr><td>Credits not yet applied</td><td class="amount">${formatCurrency(-d.credits)}</td></tr>` : ''}

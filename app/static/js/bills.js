@@ -111,7 +111,7 @@ const BillsPage = {
             const applied = (p.allocations || []).filter(a => a.bill_id === bill.id)
                 .reduce((sum, a) => sum + Number(a.amount), 0);
             const how = [p.method ? p.method.replace('_', ' ') : '', p.check_number ? `#${p.check_number}` : ''].filter(Boolean).join(' ');
-            return `<tr${p.is_voided ? ' style="opacity:.6;"' : ''}>
+            return `<tr${p.is_voided ? ' class="row--dim"' : ''}>
                 <td>${formatDate(p.date)}</td>
                 <td>${escapeHtml(how)}</td>
                 <td class="amount">${formatCurrency(applied)}</td>

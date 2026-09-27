@@ -24,7 +24,7 @@ const VendorsPage = {
                 </tr></thead><tbody>`;
             for (const v of vendors) {
                 const inactive = v.is_active === false;
-                html += `<tr${inactive ? ' style="opacity:.55;"' : ''}>
+                html += `<tr${inactive ? ' class="row--dim"' : ''}>
                     <td><strong>${escapeHtml(v.name)}</strong>${inactive ? ' <span class="badge badge-draft">inactive</span>' : ''}</td>
                     <td>${escapeHtml(v.company) || ''}</td>
                     <td>${escapeHtml(v.phone) || ''}</td>

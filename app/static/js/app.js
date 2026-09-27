@@ -365,7 +365,7 @@ const App = {
             html += `<tr style="background:linear-gradient(180deg, #e8ecf2 0%, #dde2ea 100%);"><td colspan="5" style="font-weight:700; color:var(--qb-navy); font-size:11px; padding:4px 10px;">${typeNames[type]}</td></tr>`;
             for (const a of accts) {
                 const inactive = a.is_active === false;
-                html += `<tr${inactive ? ' style="opacity:.55;"' : ''}>
+                html += `<tr${inactive ? ' class="row--dim"' : ''}>
                     <td style="font-family:var(--font-mono);">${escapeHtml(a.account_number || '')}</td>
                     <td><strong>${escapeHtml(a.name)}</strong>${a.is_control ? ` <span class="badge-control" title="${escapeHtml(a.control_purpose || 'the software finds this account by its number')}">control</span>` : ''}${inactive ? ' <span class="badge badge-draft">inactive</span>' : ''}</td>
                     <td>${a.account_type}</td>

@@ -12,7 +12,7 @@ const InKindPage = {
 
     async render() {
         const gifts = await API.get('/in-kind-gifts');
-        const rows = gifts.map(g => `<tr class="clickable" onclick="InKindPage.view(${g.id})" style="${g.status === 'void' ? 'opacity:.6' : ''}">
+        const rows = gifts.map(g => `<tr class="clickable${g.status === 'void' ? ' row--dim' : ''}" onclick="InKindPage.view(${g.id})">
             <td>${escapeHtml(g.number)}</td>
             <td>${escapeHtml(g.date)}</td>
             <td>${escapeHtml(g.customer_name || '')}</td>

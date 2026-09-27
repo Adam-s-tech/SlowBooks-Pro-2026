@@ -18,7 +18,7 @@ const JobCostsPage = {
 
     async render() {
         const entries = await API.get('/job-costs');
-        const rows = entries.map(jc => `<tr class="clickable" onclick="JobCostsPage.view(${jc.id})" style="${jc.status === 'void' ? 'opacity:.6' : ''}">
+        const rows = entries.map(jc => `<tr class="clickable${jc.status === 'void' ? ' row--dim' : ''}" onclick="JobCostsPage.view(${jc.id})">
             <td>${escapeHtml(jc.number)}</td>
             <td>${escapeHtml(jc.date)}</td>
             <td>${escapeHtml(jc.job_name || (jc.source === 'allocation' ? `${jc.lines.length} jobs (allocation)` : ''))}</td>

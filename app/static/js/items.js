@@ -34,7 +34,7 @@ const ItemsPage = {
                 // An inactive item stays in the list, marked, so it can be
                 // opened and made active again; the pickers leave it out.
                 const inactive = item.is_active === false;
-                html += `<tr${inactive ? ' style="opacity:.55;"' : ''}>
+                html += `<tr${inactive ? ' class="row--dim"' : ''}>
                     <td><strong>${escapeHtml(item.name)}</strong>${inactive ? ' <span class="badge badge-draft">inactive</span>' : ''}</td>
                     <td>${statusBadge(item.item_type)}</td>
                     <td>${escapeHtml(item.description) || ''}</td>
