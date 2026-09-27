@@ -157,6 +157,28 @@ const QBOPage = {
     // ==== Connection ====
 
     async connect() {
+        // The desktop app: Intuit's sign-in opens in the system browser
+        // through the launcher's bridge. A blank window opened first (the
+        // browser path below) became an empty browser tab Intuit never
+        // loaded into, or, with no window handed back, took this app's own
+        // window off to Intuit.
+        const bridge = window.pywebview && window.pywebview.api;
+        if (bridge && typeof bridge.open_external === 'function') {
+            try {
+                App.setStatus('Connecting to QuickBooks Online...');
+                const data = await API.get('/qbo/auth-url');
+                if (!data.url) throw new Error('QuickBooks did not provide an authorization link');
+                const opened = await bridge.open_external(data.url);
+                if (opened && opened.success === false) {
+                    throw new Error(opened.error || 'Your browser could not be opened');
+                }
+                toast("Intuit's sign-in opened in your browser. Come back here when it says you're connected.");
+            } catch (err) {
+                toast(err.message, 'error');
+                App.setStatus('Connection failed');
+            }
+            return;
+        }
         // Keep this page available for copying values from a failed localhost
         // redirect when SlowBooks is running on a different machine.
         const authTab = window.open('about:blank', '_blank');
