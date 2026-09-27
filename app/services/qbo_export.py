@@ -374,6 +374,9 @@ def export_invoices(db: Session) -> dict:
             )
 
             discounts = {}  # one QBO discount for each Discount item
+            # QBO taxes the lines this document taxes (its own rate, not
+            # ours): a taxable line on a document that charges tax is TAX.
+            charges_tax = Decimal(str(inv.tax_amount or 0)) != 0
             for inv_line in inv_lines:
                 discount = discount_mapping(db, inv_line.item_id)
                 if discount is not None and (inv_line.amount or 0) < 0:
@@ -393,9 +396,11 @@ def export_invoices(db: Session) -> dict:
                     if inv_line.is_taxable:
                         qbo_inv.ApplyTaxAfterDiscount = True
                     continue
+                taxed = charges_tax and inv_line.is_taxable is not False
                 detail = {
                     "Qty": float(inv_line.quantity or 1),
                     "UnitPrice": float(inv_line.rate or 0),
+                    "TaxCodeRef": {"value": "TAX" if taxed else "NON"},
                 }
 
                 # Link item if mapped

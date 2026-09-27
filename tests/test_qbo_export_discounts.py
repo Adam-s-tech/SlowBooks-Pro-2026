@@ -69,20 +69,22 @@ def items(db_session, seed_accounts):
     return made
 
 
-def _invoice(db, items, number, lines):
+def _invoice(db, items, number, lines, tax=0, **fields):
     """(item, description, amount, taxable) lines; quantity 1."""
-    total = sum((Decimal(str(amount)) for _, _, amount, _ in lines), Decimal("0"))
+    subtotal = sum((Decimal(str(amount)) for _, _, amount, _ in lines), Decimal("0"))
+    total = subtotal + Decimal(str(tax))
     invoice = Invoice(
         invoice_number=number,
         customer_id=items["customer"].id,
         date=date(2026, 8, 3),
         due_date=date(2026, 8, 3),
         status=InvoiceStatus.SENT,
-        subtotal=total,
+        subtotal=subtotal,
         tax_rate=Decimal("0"),
-        tax_amount=Decimal("0"),
+        tax_amount=Decimal(str(tax)),
         total=total,
         balance_due=total,
+        **fields,
     )
     db.add(invoice)
     db.flush()
@@ -133,6 +135,7 @@ def test_a_discount_item_line_exports_as_qbos_discount(db_session, items, sent):
     assert coupon["SalesItemLineDetail"] == {
         "Qty": 1.0,
         "UnitPrice": -5.0,
+        "TaxCodeRef": {"value": "NON"},
         "ItemRef": {"value": "31"},
     }
     assert invoice.ApplyTaxAfterDiscount is True  # it came off the taxable amount
