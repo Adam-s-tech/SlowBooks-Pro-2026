@@ -20,6 +20,8 @@ _SENSITIVE_KEYS = frozenset(
     {
         "auth_password_hash",
         "session_secret",
+        # which company a sign-in belongs to (app/services/auth.py)
+        "company_session_id",
     }
 )
 

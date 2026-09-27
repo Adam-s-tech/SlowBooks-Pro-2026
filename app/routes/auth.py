@@ -28,7 +28,9 @@ from app.services.auth import (
     password_is_set,
     remember_this_start,
     set_password,
+    remember_this_company,
     signed_in_before_this_start,
+    signed_in_to_another_company,
 )
 from app.services.rate_limit import limiter
 from app.services.request_utils import client_ip as _client_ip
@@ -156,7 +158,10 @@ def auth_status(request: Request, db: Session = Depends(get_db)):
     """Tell the SPA whether first-run setup is needed and whether the
     current session is authenticated."""
     authenticated = request.session.get("authenticated") is True
-    if authenticated and signed_in_before_this_start(request.session):
+    if authenticated and (
+        signed_in_before_this_start(request.session)
+        or signed_in_to_another_company(request.session)
+    ):
         # "Ask for the password each time SlowBooks Pro starts": a session
         # from before this start is signed out here too, or the page would
         # be told it is signed in while every request answers 401.
@@ -270,6 +275,7 @@ def setup(
     request.session.clear()
     request.session["authenticated"] = True
     remember_this_start(request.session)
+    remember_this_company(request.session)
     _stash_user(request, admin)
     return {"status": "ok", "authenticated": True}
 
@@ -324,6 +330,7 @@ def login(
     request.session.clear()
     request.session["authenticated"] = True
     remember_this_start(request.session)
+    remember_this_company(request.session)
     _stash_user(request, user)
     return {"status": "ok", "authenticated": True}
 

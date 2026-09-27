@@ -17,7 +17,16 @@ const CompaniesPage = {
 
     async switchCompany() {
         if (!confirm('Sign out of this company and choose another?')) return;
-        try { await API.post('/auth/logout', {}); } catch (_e) { /* cookie may be gone already */ }
+        try {
+            await API.post('/auth/logout', {});
+        } catch (e) {
+            // Signed out already (a 401) is fine; anything else may have left
+            // this sign-in open, so the picker waits (skytech R6-1, 2.18.0).
+            if (!(e && e.status === 401)) {
+                toast(`Couldn't sign out of this company (${e.message}). Try again.`, 'error');
+                return;
+            }
+        }
         window.pywebview.api.show_picker();
     },
 

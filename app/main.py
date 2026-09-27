@@ -124,6 +124,7 @@ from app.routes import ocr as ocr_routes
 from app.services.auth import get_session_secret
 from app.services.auth import (
     signed_in_before_this_start as _signed_in_before_this_start,
+    signed_in_to_another_company as _signed_in_to_another_company,
 )
 
 from app import __version__
@@ -847,6 +848,16 @@ async def require_session(request: Request, call_next):
                 content={
                     "detail": "SlowBooks Pro was restarted. Enter the password "
                     "to continue."
+                },
+            )
+        if _signed_in_to_another_company(request.session):
+            # A sign-in belongs to the company it was made in (R6-1).
+            request.session.clear()
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "detail": "That sign-in was for another company. Enter this "
+                    "company's password to continue."
                 },
             )
         role = request.session.get("role") or "admin"
