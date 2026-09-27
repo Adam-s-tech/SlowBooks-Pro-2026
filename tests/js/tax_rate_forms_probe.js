@@ -135,6 +135,25 @@ const tbody = (rows) => ({ querySelectorAll: () => rows });
   ctx.CreditMemosPage.invoiceSelected(String(given.invoice.id));
   out.creditMemoFromInvoice = String(cmRate.value);
 
+  // Half a cent of tax rounds up on every form, as it does on the server.
+  const sales = (amount, pct) => ctx.SalesLines.totals(tbody([row(1, amount, true)]), pct).tax;
+  out.salesTax = [sales(1000, '8.875'), sales(1000, '7.0625'), sales(175800, '1.0875'), sales(1290, '6.35')];
+  const purchase = (form, recalc, amount, pct) => {
+    const tax = { textContent: '' };
+    els = {
+      [`#${form}-lines tr`]: [row(1, amount)],
+      [`#${form}-form [name="tax_rate"]`]: { value: pct },
+      [`#${form}-tax`]: tax,
+    };
+    recalc();
+    return tax.textContent;
+  };
+  out.purchaseTax = [
+    purchase('po', () => ctx.PurchaseOrdersPage.recalc(), 102, '8.25'),
+    purchase('po', () => ctx.PurchaseOrdersPage.recalc(), 1000, '8.875'),
+    purchase('vc', () => ctx.VendorCreditsPage.recalc(), 280, '7.0625'),
+  ];
+
   // The Sales Tax report prints each rate as the documents do.
   let report = '';
   ctx.ReportsPage.openPeriodModal = async (_title, _period, load) => {

@@ -149,8 +149,8 @@ const VendorCreditsPage = {
             const cell = row.querySelector('.line-amount');
             if (cell) cell.textContent = formatCurrency(amount);
         });
-        const pct = parseFloat($('#vc-form [name="tax_rate"]')?.value) || 0;
-        const tax = PurchaseLines.cents(subtotal * pct / 100);
+        // to the cent, half up, as the server works it out
+        const tax = SalesLines.tax(subtotal, $('#vc-form [name="tax_rate"]')?.value);
         if ($('#vc-subtotal')) $('#vc-subtotal').textContent = formatCurrency(subtotal);
         if ($('#vc-tax')) $('#vc-tax').textContent = formatCurrency(tax);
         if ($('#vc-total')) $('#vc-total').textContent = formatCurrency(subtotal + tax);

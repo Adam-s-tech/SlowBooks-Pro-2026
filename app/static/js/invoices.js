@@ -58,8 +58,36 @@ const SalesLines = {
             if (cell) cell.textContent = SalesLines.money(amount, currency);
         });
         subtotal = SalesLines.cents(subtotal);
-        const tax = SalesLines.cents(SalesLines.cents(taxable) * (parseFloat(taxPct) || 0) / 100);
+        const tax = SalesLines.tax(SalesLines.cents(taxable), taxPct);
         return { subtotal, tax, total: SalesLines.cents(subtotal + tax) };
+    },
+
+    // Tax on an amount at a percent typed on a form, to the cent, half up:
+    // the figure the server stores. It is worked in whole cents and
+    // ten-thousandths of a percent (a rate keeps four places), because a
+    // binary fraction can put a half cent on the wrong side: $175,800.00
+    // at 1.0875% is $1,911.825, so $1,911.83, and floating point showed
+    // $1,911.82; a purchase order showed $8.41 for 8.25% of $102.00.
+    tax(amount, taxPct) {
+        const cents = Math.round((Number(amount) || 0) * 100);
+        const units = SalesLines.percentUnits(taxPct);
+        const product = Math.abs(cents * units) + 500000;
+        if (!Number.isSafeInteger(product)) {
+            return SalesLines.cents(SalesLines.cents(amount) * (parseFloat(taxPct) || 0) / 100);
+        }
+        const whole = (product - product % 1000000) / 1000000;
+        return ((cents < 0) !== (units < 0) && whole ? -whole : whole) / 100;
+    },
+
+    // A typed percent in ten-thousandths ("8.875" is 88750), read from its
+    // digits rather than through a binary fraction. A fifth place rounds
+    // half up, as the server rounds the rate it is sent.
+    percentUnits(taxPct) {
+        const text = String(taxPct ?? '').trim();
+        const m = /^(\d*)(?:\.(\d*))?$/.exec(text);
+        if (!m || !(m[1] || m[2])) return Math.round((parseFloat(text) || 0) * 10000);
+        const places = ((m[2] || '') + '00000').slice(0, 5);
+        return Number(m[1] || 0) * 10000 + Number(places.slice(0, 4)) + (places[4] >= '5' ? 1 : 0);
     },
 
     // Write totals into the form's Subtotal / Tax / Total cells (by id).

@@ -171,8 +171,8 @@ const PurchaseOrdersPage = {
             const cell = row.querySelector('.line-amount');
             if (cell) cell.textContent = formatCurrency(amount);
         });
-        const pct = parseFloat($('#po-form [name="tax_rate"]')?.value) || 0;
-        const tax = PurchaseLines.cents(subtotal * pct / 100);
+        // to the cent, half up, as the server works it out
+        const tax = SalesLines.tax(subtotal, $('#po-form [name="tax_rate"]')?.value);
         if ($('#po-subtotal')) $('#po-subtotal').textContent = formatCurrency(subtotal);
         if ($('#po-tax')) $('#po-tax').textContent = formatCurrency(tax);
         if ($('#po-total')) $('#po-total').textContent = formatCurrency(subtotal + tax);

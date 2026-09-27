@@ -317,8 +317,8 @@ def test_the_forms_take_and_show_four_places(
     client, db_session, seed_accounts, seed_customer
 ):
     """Every Tax Rate field steps in ten-thousandths and opens with the rate
-    as it was typed; the Sales Tax report and a scanned receipt keep four
-    places."""
+    as it was typed; the forms work tax out to the cent as the server does;
+    the Sales Tax report and a scanned receipt keep four places."""
     _ok(client.put("/api/settings", json={"default_tax_rate": "8.875"}))
     inv = _invoice(client, seed_customer.id, NYC)
     _invoice(client, seed_customer.id, SEVEN)
@@ -379,6 +379,11 @@ def test_the_forms_take_and_show_four_places(
     }
     assert got["newInvoiceTotals"] == {"subtotal": 1000, "tax": 88.75, "total": 1088.75}
     assert got["creditMemoFromInvoice"] == "8.875"
+    # $175,800.00 at 1.0875% is $1,911.825 and $1,290.00 at 6.35% is
+    # $81.915: half a cent, rounded up as the server rounds it
+    assert got["salesTax"] == [88.75, 70.63, 1911.83, 81.92]
+    # 8.25% of $102.00 is $8.415; a purchase order showed $8.41
+    assert got["purchaseTax"] == ["$8.42", "$88.75", "$19.78"]
     assert got["reportRates"] == ["8.875%", "7.0625%", "8.25%"]
     assert got["percent"] == ["8.875", "7.0625", "8.25", "7.00", "0.00"]
     assert got["scanned"] == [8.875, 7.063, 8.875]
