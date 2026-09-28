@@ -349,3 +349,22 @@ def test_a_job_already_here_is_not_counted_again(db_session, seed_accounts):
     again = import_all(db_session, iif)
     assert again["customers"] == 0
     assert db_session.query(Job).count() == 1
+
+
+def test_a_name_outside_ascii_still_matches_itself(db_session, seed_accounts):
+    # SQLite's lower() folds ASCII only: "CAFÉ" must still find "CAFÉ", so a
+    # second import of the same payment is a duplicate, not a second payment
+    iif = (
+        "!CUST\tNAME\nCUST\tCAFÉ ROUGE\n"
+        "!TRNS\tTRNSTYPE\tDATE\tACCNT\tNAME\tAMOUNT\tDOCNUM\n"
+        "!SPL\tTRNSTYPE\tDATE\tACCNT\tNAME\tAMOUNT\tDOCNUM\n"
+        "!ENDTRNS\n"
+        "TRNS\tPAYMENT\t05/03/2026\tUndeposited Funds\tCAFÉ ROUGE\t80.00\tP-9\n"
+        "SPL\tPAYMENT\t05/03/2026\tAccounts Receivable\tCAFÉ ROUGE\t-80.00\tP-9\n"
+        "ENDTRNS\n"
+    )
+    assert import_all(db_session, iif)["payments"] == 1
+    again = import_all(db_session, iif)
+    assert (again["customers"], again["payments"]) == (0, 0)
+    assert db_session.query(Payment).count() == 1
+    assert _names(db_session, Customer) == ["CAFÉ ROUGE"]

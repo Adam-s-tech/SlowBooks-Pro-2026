@@ -16,7 +16,7 @@ import logging
 from datetime import datetime, date
 from decimal import Decimal, InvalidOperation
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.models.accounts import Account, AccountType
@@ -1399,7 +1399,12 @@ def _import_payment(db: Session, trns: dict, spls: list) -> Payment:
         db.query(Payment)
         .join(Customer)
         .filter(
-            func.lower(Customer.name) == cust_name.lower(),
+            # exact, or in any case (SQLite's lower() folds ASCII only, so
+            # "CAFÉ" must still match itself exactly)
+            or_(
+                Customer.name == cust_name,
+                func.lower(Customer.name) == cust_name.lower(),
+            ),
             Payment.date == (pmt_date or date.today()),
             Payment.amount == pmt_amount,
         )
@@ -1530,7 +1535,10 @@ def _import_cash_sale(db: Session, trns: dict, spls: list) -> Invoice:
             db.query(Invoice)
             .join(Customer, Invoice.customer_id == Customer.id)
             .filter(
-                func.lower(Customer.name) == cust_name.lower(),
+                or_(
+                    Customer.name == cust_name,
+                    func.lower(Customer.name) == cust_name.lower(),
+                ),
                 Invoice.date == sale_date,
                 Invoice.total == total,
                 Invoice.is_sales_receipt.is_(True),
