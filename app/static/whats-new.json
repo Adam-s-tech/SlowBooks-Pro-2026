@@ -5,6 +5,7 @@
       "IIF import: a name QuickBooks put in quotes because it holds a comma (\"Jones, Bob\") comes in without the quote marks (#195, @TheLocalW)",
       "IIF import: names typed in ALL CAPS can come in as normal capitalization; Validate shows a few of your own names as they would import, and it's off unless you tick it (#195, @TheLocalW)",
       "IIF import: a bill or invoice line posted to a sub-account (Automobile Expense:Gasoline) imports instead of being refused as not found",
+      "IIF import: a second import of the same file says what it skipped, and a payment for a customer who isn't in your books is reported instead of dropped",
       "Add Reseller Permit: the state's format note sits under the State and Permit number boxes instead of over them (#194, @cnbarry1)"
     ]
   },

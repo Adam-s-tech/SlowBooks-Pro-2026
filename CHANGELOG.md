@@ -59,6 +59,15 @@ still refused rather than posted to `Utilities:Gas`. Re-importing a list also
 counted each job already there as a customer imported; it doesn't. Both
 turned up while testing the samples for this release, and predate it.
 
+**A second import says what it skipped.** Importing the same file twice adds
+nothing, rightly, but the result counted only the bills, deposits and sales
+receipts it skipped, and labelled the count "imported": "Duplicates skipped:
+1 imported" for a bill, an invoice and a payment (both QA agents, 2.18.1
+gate). Every document type counts what it skips now, shown as "Already here,
+skipped". A payment for a customer who isn't in the books, and an invoice or
+estimate with no customer name, vanished without a word; each is an error
+naming the document now.
+
 **The permit form's format note covered the boxes above it** (#194,
 @cnbarry1). On Add Reseller Permit, the state's note under State and Permit
 number (for Washington, "9 digits…") was drawn over both boxes, and a click
