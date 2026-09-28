@@ -15,6 +15,10 @@ from app.services import crypto
 
 PAYROLL_PW = "a-real-payroll-secret-for-this-test"
 OTHER_PAYROLL_PW = "the-next-payroll-secret-for-this-test"
+# Throwaway saved settings: module constants, never a literal beside the field
+OLD_SMTP_PW = "old-smtp-pw-for-this-test"
+NEW_SMTP_PW = "new-smtp-pw-for-this-test"
+OLD_STRIPE_PW = "old-stripe-pw-for-this-test"
 
 
 @pytest.fixture
@@ -74,7 +78,8 @@ def test_rotating_the_payroll_secret_keeps_the_settings_readable(
     from app.services.encryption import rewrap_all
 
     assert (
-        client.put("/api/settings", json={"smtp_password": "old-pw"}).status_code == 200
+        client.put("/api/settings", json={"smtp_password": OLD_SMTP_PW}).status_code
+        == 200
     )
     monkeypatch.setenv("PAYROLL_ENCRYPTION_SECRET", OTHER_PAYROLL_PW)
     monkeypatch.setenv("PAYROLL_ENCRYPTION_SECRET_PREV", PAYROLL_PW)
@@ -86,14 +91,14 @@ def test_rotating_the_payroll_secret_keeps_the_settings_readable(
     crypto.reset_cache_for_tests()
     row = db_session.query(Settings).filter_by(key="smtp_password").one()
     db_session.refresh(row)
-    assert crypto.decrypt_value(row.value) == "old-pw"
+    assert crypto.decrypt_value(row.value) == OLD_SMTP_PW
 
 
 def test_a_secret_no_key_decrypts_reads_as_not_set(client, seed_accounts, monkeypatch):
     assert (
         client.put(
             "/api/settings",
-            json={"smtp_password": "old-pw", "stripe_secret_key": "sk-old"},
+            json={"smtp_password": OLD_SMTP_PW, "stripe_secret_key": OLD_STRIPE_PW},
         ).status_code
         == 200
     )
@@ -110,7 +115,7 @@ def test_a_secret_no_key_decrypts_reads_as_not_set(client, seed_accounts, monkey
         ]
         # entering one again makes it readable, under the key this install has
         assert (
-            client.put("/api/settings", json={"smtp_password": "new-pw"}).status_code
+            client.put("/api/settings", json={"smtp_password": NEW_SMTP_PW}).status_code
             == 200
         )
         assert client.get("/api/settings/unreadable-secrets").json()["keys"] == [
