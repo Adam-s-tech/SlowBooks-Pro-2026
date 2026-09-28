@@ -86,3 +86,19 @@ def test_switch_company_waits_when_the_sign_out_fails():
     switch = js[js.index("async switchCompany() {") : js.index("async render() {")]
     assert "if (!(e && e.status === 401)) {" in switch
     assert switch.index("return;") < switch.index("show_picker()")
+
+
+def test_a_company_id_goes_with_its_engine():
+    # Keyed by id(engine), a new engine could reuse a freed one's address and
+    # inherit its company id: an order-dependent 401 "That sign-in was for
+    # another company" in the full suite. The cache holds the engine weakly.
+    import gc
+
+    from sqlalchemy import create_engine
+
+    engine = create_engine("sqlite://")
+    auth_service._company_ids[engine] = "an-old-company-id"
+    assert len(auth_service._company_ids) == 1
+    del engine
+    gc.collect()
+    assert len(auth_service._company_ids) == 0

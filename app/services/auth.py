@@ -14,6 +14,7 @@ import logging
 import os
 import secrets
 import threading
+import weakref
 from pathlib import Path
 
 from argon2 import PasswordHasher
@@ -329,7 +330,13 @@ def signed_in_before_this_start(session: dict) -> bool:
 
 SESSION_COMPANY_KEY = "company"
 COMPANY_SESSION_SETTING = "company_session_id"
-_company_ids: dict = {}
+# Keyed by the engine itself, held weakly: the entry goes when the engine
+# does. Keyed by id(engine), a new engine could reuse a freed one's address
+# and inherit its company id — every request then read as "signed in to
+# another company" (seen as an order-dependent test failure; a server serves
+# one company per process, so only a process that repoints its engine can
+# meet it).
+_company_ids: "weakref.WeakKeyDictionary" = weakref.WeakKeyDictionary()
 _company_ids_lock = threading.Lock()
 
 
@@ -340,7 +347,7 @@ def _company_id() -> str | None:
     import app.database as database
 
     factory = database.SessionLocal
-    key = id(getattr(factory, "kw", {}).get("bind") or factory)
+    key = getattr(factory, "kw", {}).get("bind") or factory
     company = _company_ids.get(key)
     if company:
         return company
