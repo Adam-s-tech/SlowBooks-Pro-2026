@@ -14,6 +14,8 @@ class IIFImportResult(BaseModel):
     bills: int = 0
     deposits: int = 0
     duplicates_skipped: int = 0
+    # ALL-CAPS names rewritten on request ("Change ALL-CAPS names", #195)
+    names_changed: int = 0
     errors: list[dict] = []
     warnings: list[str] = []
 
@@ -24,3 +26,7 @@ class IIFValidationReport(BaseModel):
     record_counts: dict = {}
     warnings: list[str] = []
     errors: list[str] = []
+    # How many customer, vendor and account names are in ALL CAPS, and a few
+    # of them as "Change ALL-CAPS names" would import them.
+    caps_names: int = 0
+    caps_name_examples: list[dict] = []

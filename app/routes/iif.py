@@ -14,7 +14,7 @@ import logging
 from datetime import date, datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
@@ -166,11 +166,17 @@ def export_estimates_iif(db: Session = Depends(get_db)):
 
 
 @router.post("/import", response_model=IIFImportResult)
-async def import_iif(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def import_iif(
+    file: UploadFile = File(...),
+    retitle_names: bool = Form(False),
+    db: Session = Depends(get_db),
+):
     """Upload and import an IIF file into Slowbooks.
 
     Processes accounts, customers, vendors, items, and transactions.
-    Skips duplicates and collects per-row errors.
+    Skips duplicates and collects per-row errors. ``retitle_names``: import
+    ALL-CAPS customer, vendor and account names in normal capitalization
+    (item names are kept as typed).
     """
     if not file.filename.lower().endswith(".iif"):
         raise HTTPException(400, "File must have .iif extension")
@@ -183,7 +189,7 @@ async def import_iif(file: UploadFile = File(...), db: Session = Depends(get_db)
         text = content.decode("cp1252", errors="replace")
 
     try:
-        result = import_all(db, text)
+        result = import_all(db, text, retitle_names=retitle_names)
     except Exception:
         db.rollback()
         logger.exception("IIF import failed")

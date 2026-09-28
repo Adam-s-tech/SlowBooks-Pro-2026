@@ -35,6 +35,22 @@ def split_customer_job(name: str) -> tuple[str, Optional[str]]:
     return cust, job
 
 
+def find_customer(db: Session, name: str) -> Optional[Customer]:
+    """Exact, then in any case, as find_job does: an import that spells a
+    customer BOB JONES means the Bob Jones already on file (#195)."""
+    if not name:
+        return None
+    row = db.query(Customer).filter(Customer.name == name).first()
+    if not row:
+        row = (
+            db.query(Customer)
+            .filter(sqlfunc.lower(Customer.name) == name.lower())
+            .order_by(Customer.id)
+            .first()
+        )
+    return row
+
+
 def find_job(db: Session, customer_id: int, name: str) -> Optional[Job]:
     """Exact, then case-insensitive match within one customer."""
     if not name:
@@ -72,11 +88,11 @@ def resolve_customer_and_job(
     raw = (full_name or "").strip()
     if not raw:
         return None, None
-    flat = db.query(Customer).filter(Customer.name == raw).first()
+    flat = find_customer(db, raw)
     if flat:
         return flat, None
     cust_name, job_name = split_customer_job(raw)
-    customer = db.query(Customer).filter(Customer.name == cust_name).first()
+    customer = find_customer(db, cust_name)
     if not customer:
         if not create:
             return None, None

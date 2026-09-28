@@ -16,6 +16,7 @@ import logging
 from datetime import datetime, date
 from decimal import Decimal, InvalidOperation
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.accounts import Account, AccountType
@@ -134,12 +135,57 @@ def _unquote_iif(raw: str) -> str:
     QuickBooks quotes such fields on export (``"ACME, Inc."``); the quotes are
     delimiters, not part of the value, so they must not reach the database.
     Only a matched surrounding pair is removed, so a name that legitimately
-    ends in a quote character survives.
+    ends in a quote character survives. Inside the pair a quote mark is
+    written twice (``"The ""Best"" Co"``), and comes back as one.
     """
     value = raw.strip()
     if len(value) >= 2 and value.startswith('"') and value.endswith('"'):
-        return value[1:-1].strip()
+        return value[1:-1].replace('""', '"').strip()
     return value
+
+
+# Where a file names a customer, vendor or account: the list rows' own NAME,
+# and every place a transaction or an item points at one. Items keep the
+# names they were typed with (they are often part numbers), so an item's
+# own NAME and a line's INVITEM are not here.
+_RETITLED_FIELDS = {
+    "ACCNT": ("NAME",),
+    "CUST": ("NAME",),
+    "VEND": ("NAME",),
+    "INVITEM": ("ACCNT",),
+}
+_RETITLED_TXN_FIELDS = ("NAME", "ACCNT")
+
+
+def retitle_all_caps(parsed: dict) -> list[tuple[str, str]]:
+    """Rewrite the ALL-CAPS names in a parsed file as normal capitalization.
+
+    Asked for with the import's "Change ALL-CAPS names" box (#195,
+    @TheLocalW). Every place a name appears is rewritten the same way, so a
+    bill for "ACME TOOLING, INC." still finds the vendor row that became
+    "ACME Tooling, Inc.". Returns each distinct change once: the accounts',
+    customers' and vendors' own rows first, then what the transactions add.
+    """
+    changes: dict[str, str] = {}
+
+    def fix(row: dict, field: str) -> None:
+        value = row.get(field)
+        if not value:
+            return
+        new = normalize_name(value)
+        if new and new != value:
+            row[field] = new
+            changes.setdefault(value, new)
+
+    for section, fields in _RETITLED_FIELDS.items():
+        for row in parsed.get(section, []):
+            for field in fields:
+                fix(row, field)
+    for block in parsed.get("TRNS", []):
+        for row in [block["trns"], *block["spl"]]:
+            for field in _RETITLED_TXN_FIELDS:
+                fix(row, field)
+    return list(changes.items())
 
 
 def _fields_to_dict(header: list, fields: list) -> dict:
@@ -153,6 +199,30 @@ def _fields_to_dict(header: list, fields: list) -> dict:
         else:
             d[name] = ""
     return d
+
+
+def _named(db: Session, model, name: str):
+    """The row called ``name``: exact first, then in any case.
+
+    QuickBooks keeps one name per customer, vendor or account whatever its
+    case, and an import with "Change ALL-CAPS names" stores BOB JONES as Bob
+    Jones. A later file, or an earlier import, that spells the name the other
+    way means the same record; matching exactly made a second one, and a bill
+    for "ACME TOOLING, INC." could not find the vendor imported as "ACME
+    Tooling, Inc." (#195). ``lower()`` equality, not ``ilike``: a ``%`` or
+    ``_`` in a name is a character, not a wildcard.
+    """
+    if not name:
+        return None
+    row = db.query(model).filter(model.name == name).first()
+    if row is None:
+        row = (
+            db.query(model)
+            .filter(func.lower(model.name) == name.lower())
+            .order_by(model.id)
+            .first()
+        )
+    return row
 
 
 def _parse_iif_date(s: str) -> date:
@@ -339,7 +409,7 @@ def import_accounts(db: Session, rows: list) -> dict:
     for i, row in enumerate(rows):
         sp = db.begin_nested()  # savepoint — isolate per-row failures
         try:
-            full_name = normalize_name(row.get("NAME", "").strip()) or ""
+            full_name = row.get("NAME", "").strip()
             if not full_name:
                 errors.append({"row": i + 1, "message": "Missing account NAME"})
                 sp.rollback()
@@ -355,7 +425,7 @@ def import_accounts(db: Session, rows: list) -> dict:
                 parts = full_name.split(":")
                 name = parts[-1].strip()
                 parent_name = parts[-2].strip()
-                parent = db.query(Account).filter(Account.name == parent_name).first()
+                parent = _named(db, Account, parent_name)
                 if parent:
                     parent_id = parent.id
             else:
@@ -371,6 +441,9 @@ def import_accounts(db: Session, rows: list) -> dict:
                     (Account.name == name) | (Account.account_number == acct_num)
                 )
             existing = dup_q.first()
+            if existing is None:
+                # the same name in another case is the same account (_named)
+                existing = _named(db, Account, name)
 
             # Parse OBAMOUNT (QB convention: positive = debit-side).
             # Applied to either the newly-created account or an existing
@@ -533,13 +606,13 @@ def import_customers(db: Session, rows: list) -> dict:
     for i, row in enumerate(rows):
         sp = db.begin_nested()
         try:
-            name = (normalize_name(row.get("NAME", "").strip()) or "")[:200]
+            name = row.get("NAME", "").strip()[:200]
             if not name:
                 errors.append({"row": i + 1, "message": "Missing customer NAME"})
                 sp.rollback()
                 continue
 
-            existing = db.query(Customer).filter(Customer.name == name).first()
+            existing = _named(db, Customer, name)
             if existing:
                 sp.rollback()
                 continue
@@ -596,13 +669,13 @@ def import_vendors(db: Session, rows: list) -> dict:
     for i, row in enumerate(rows):
         sp = db.begin_nested()
         try:
-            name = (normalize_name(row.get("NAME", "").strip()) or "")[:200]
+            name = row.get("NAME", "").strip()[:200]
             if not name:
                 errors.append({"row": i + 1, "message": "Missing vendor NAME"})
                 sp.rollback()
                 continue
 
-            existing = db.query(Vendor).filter(Vendor.name == name).first()
+            existing = _named(db, Vendor, name)
             if existing:
                 sp.rollback()
                 continue
@@ -647,7 +720,7 @@ def import_items(db: Session, rows: list) -> dict:
     for i, row in enumerate(rows):
         sp = db.begin_nested()
         try:
-            name = normalize_name(row.get("NAME", "").strip()) or ""
+            name = row.get("NAME", "").strip()
             if not name:
                 errors.append({"row": i + 1, "message": "Missing item NAME"})
                 sp.rollback()
@@ -862,7 +935,7 @@ def _import_bill(db: Session, trns: dict, spls: list) -> Bill:
     vendor_name = trns.get("NAME", "").strip()
     if not vendor_name:
         raise DataProblem("BILL: missing vendor NAME on TRNS line")
-    vendor = db.query(Vendor).filter(Vendor.name == vendor_name).first()
+    vendor = _named(db, Vendor, vendor_name)
     if not vendor:
         raise DataProblem(
             f"BILL: vendor '{vendor_name}' not found. Add the vendor in "
@@ -1284,7 +1357,7 @@ def _import_payment(db: Session, trns: dict, spls: list) -> Payment:
         db.query(Payment)
         .join(Customer)
         .filter(
-            Customer.name == cust_name,
+            func.lower(Customer.name) == cust_name.lower(),
             Payment.date == (pmt_date or date.today()),
             Payment.amount == pmt_amount,
         )
@@ -1415,7 +1488,7 @@ def _import_cash_sale(db: Session, trns: dict, spls: list) -> Invoice:
             db.query(Invoice)
             .join(Customer, Invoice.customer_id == Customer.id)
             .filter(
-                Customer.name == cust_name,
+                func.lower(Customer.name) == cust_name.lower(),
                 Invoice.date == sale_date,
                 Invoice.total == total,
                 Invoice.is_sales_receipt.is_(True),
@@ -1624,6 +1697,8 @@ def validate_iif(content: str) -> dict:
         "record_counts": {},
         "warnings": [],
         "errors": [],
+        "caps_names": 0,
+        "caps_name_examples": [],
     }
 
     try:
@@ -1731,6 +1806,13 @@ def validate_iif(content: str) -> dict:
                 f"(TRNS={trns_amt}, SPL total={spl_total})"
             )
 
+    # What "Change ALL-CAPS names" would do to this file, shown before the
+    # person decides; the file itself is left as it is.
+    changes = retitle_all_caps(parsed)
+    report["caps_names"] = len(changes)
+    report["caps_name_examples"] = [
+        {"name": old, "becomes": new} for old, new in changes[:6]
+    ]
     return report
 
 
@@ -1739,12 +1821,15 @@ def validate_iif(content: str) -> dict:
 # ============================================================================
 
 
-def import_all(db: Session, content: str) -> dict:
+def import_all(db: Session, content: str, retitle_names: bool = False) -> dict:
     """Import an entire IIF file into Slowbooks.
 
     Processes in dependency order: classes -> accounts -> customers ->
     vendors -> items -> transactions.
     Returns counts of imported records and any errors.
+
+    ``retitle_names``: the person importing asked for ALL-CAPS customer,
+    vendor and account names in normal capitalization (retitle_all_caps).
     """
     result = {
         "classes": 0,
@@ -1759,11 +1844,14 @@ def import_all(db: Session, content: str) -> dict:
         "estimates": 0,
         "bills": 0,
         "deposits": 0,
+        "names_changed": 0,
         "errors": [],
         "warnings": [],
     }
 
     parsed = parse_iif(content)
+    if retitle_names:
+        result["names_changed"] = len(retitle_all_caps(parsed))
 
     # Import lists first (order matters for FK resolution)
 

@@ -1677,6 +1677,34 @@ tr.clickable { cursor: pointer; }
     color: var(--qb-orange);
 }
 
+/* "Change ALL-CAPS names" on the IIF import (#195): the box, and a few of
+   the file's own names as it would import them */
+.iif-retitle {
+    margin-top: 8px;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    padding: 8px 10px;
+    font-size: 11px;
+    color: var(--text-primary);
+}
+
+.iif-retitle label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 700;
+}
+
+.iif-retitle ul {
+    margin: 6px 0 6px 20px;
+    font-family: var(--font-mono);
+}
+
+.iif-retitle p {
+    margin: 0;
+    color: var(--text-secondary);
+}
+
 /* ===========================================================================
    Phase 9: Analytics page (#/analytics)
    Inline SPA page matching the QB2003 blue skin with light/dark support.

@@ -353,6 +353,23 @@ const IIFPage = {
             html += '</div>';
         }
 
+        // ALL-CAPS names (#195): a box, off unless ticked, and a few of this
+        // file's own names as the box would import them, so the choice is
+        // made on the names that will change.
+        if (report.valid && report.caps_names > 0) {
+            const n = report.caps_names;
+            const examples = (report.caps_name_examples || []).map(x =>
+                `<li>${escapeHtml(x.name)} &rarr; ${escapeHtml(x.becomes)}</li>`).join('');
+            html += `<div class="iif-retitle">
+                <label><input type="checkbox" id="iif-retitle-names">
+                    Change ${n} ALL-CAPS name${n === 1 ? '' : 's'} to normal capitalization</label>
+                <ul>${examples}</ul>
+                <p>Customer, vendor and account names; item names are kept as typed, and
+                    names already in your books are not changed. A name that should stay
+                    in capitals may not, so look over the examples first.</p>
+            </div>`;
+        }
+
         $('#iif-validation-result').innerHTML = html;
     },
 
@@ -366,6 +383,7 @@ const IIFPage = {
 
         const formData = new FormData();
         formData.append('file', IIFPage._selectedFile);
+        formData.append('retitle_names', $('#iif-retitle-names')?.checked ? 'true' : 'false');
 
         try {
             App.setStatus('Importing IIF file...');
@@ -413,6 +431,12 @@ const IIFPage = {
                     <span class="result-count">${count} imported</span>
                 </div>`;
             }
+        }
+        if (result.names_changed > 0) {
+            html += `<div class="result-row">
+                <span>ALL-CAPS names changed to normal capitalization</span>
+                <span class="result-count">${result.names_changed}</span>
+            </div>`;
         }
         html += '</div>';
 
