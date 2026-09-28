@@ -43,6 +43,15 @@ customers, vendors, items. Export those and drop the `.iif` file(s) on
 **QuickBooks Interop → Import** — there's a **Validate** button that
 checks the file before anything is written.
 
+Names typed in ALL CAPS in QuickBooks come across as typed. If you'd rather
+have them in normal capitalization, Validate shows a few of the file's names
+as they would import and offers **Change ALL-CAPS names to normal
+capitalization**. It covers customer, vendor and account names; item names
+stay as typed (they are often part numbers), and nothing already in your
+books is renamed. Look over the examples first: a name that should stay in
+capitals (a company's initials) may not. A transactions file imported later
+still finds each name, whichever way it spells it.
+
 ### Transactions need one extra step
 
 Desktop does not export transactions to IIF natively. Two options:

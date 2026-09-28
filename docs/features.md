@@ -157,15 +157,15 @@ Flat CSV with columns `(section, key, subkey, value)` covering 9 sections: perio
 ### AI Insights
 An optional LLM layer sits on top of the analytics snapshot and produces a compact **3 observations / 3 risks / 3 recommendations** executive brief. Nothing is sent until you click the **AI Insights** button — the feature is zero-cost by default.
 
-**Seven providers supported out of the box** (verified April 2026):
+**Eight providers supported out of the box**, Claude and Grok first (verified April 2026):
 
 | Provider | Wire format | Default model | Free tier |
 |---|---|---|---|
+| **Anthropic Claude** | `/v1/messages` | `claude-sonnet-4-6` | Paid only |
 | **xAI Grok** | OpenAI-compat | `grok-4-fast` | $25 signup credit |
 | **Groq (LPU Cloud)** | OpenAI-compat | `llama-3.3-70b-versatile` | Generous free tier, no card |
 | **Cloudflare Workers AI** | OpenAI-compat | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | 10k neurons/day, no card |
 | **Cloudflare Worker Gateway** (self-hosted) | OpenAI-compat | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | Same 10k neurons/day — **your keys stay in *your* Cloudflare account** |
-| **Anthropic Claude** | `/v1/messages` | `claude-sonnet-4-6` | Paid only |
 | **OpenAI** | `/v1/chat/completions` | `gpt-5.4-mini` | Paid only |
 | **Google Gemini** | `generateContent` | `gemini-2.5-flash` | Free Flash tier via AI Studio |
 | **Custom (OpenAI-compatible)** | `/v1/chat/completions` | *you supply it* | Any vendor or gateway that speaks the OpenAI wire format, on the public internet — HTTPS only, private/LAN addresses refused (v2.9, contributed by @jarvis4openclaw) |
@@ -382,14 +382,18 @@ Slowbooks can exchange data with QuickBooks 2003 Pro via **Intuit Interchange Fo
 2. In Slowbooks: navigate to **QuickBooks Interop**
 3. Drag and drop the `.iif` file (or click to browse)
 4. Click **Validate** — checks structure, account types, and balanced transactions
-5. If validation passes, click **Import**
+5. If the file has names typed in ALL CAPS, Validate shows a few of them as they would import and offers **Change ALL-CAPS names to normal capitalization** (`BOB JONES` → `Bob Jones`, `ACME TOOLING, INC.` → `ACME Tooling, Inc.`). It is off unless you tick it: customer, vendor and account names only, item names kept as typed, and names already in your books are left alone (v2.18.1, #195)
+6. If validation passes, click **Import**
 
 The importer handles:
 - Automatic account type mapping (QB's 14 types → Slowbooks' 6 types)
 - Parent:Child colon-separated account names
-- Duplicate detection (skips records that already exist by name or document number)
+- Fields QuickBooks quotes because they hold a comma (`"Jones, Bob"`, `"99,250.02"`) — the quotes are not part of the name (v2.18.1, #195)
+- Duplicate detection (skips records that already exist by name, in any case, or by document number)
 - Per-row error collection (a bad row won't abort the entire import)
 - Windows-1252 and UTF-8 encoded files
+
+`tools/clean_iif.py` (source installs) writes a cleaned copy of an export with the same quote and capitalization rules, for anyone who wants the file fixed before importing it.
 
 ### IIF Format Reference
 
@@ -578,7 +582,8 @@ All payroll, HR, tax-form, and self-service portal endpoints are documented with
 | Endpoint | Methods | Description |
 |----------|---------|-------------|
 | `/api/iif/export/all` | GET | Export everything as .iif |
-| `/api/iif/import` | POST | Import .iif file |
+| `/api/iif/validate` | POST | Check an .iif file without importing; `caps_names` and `caps_name_examples` show what the ALL-CAPS box would change |
+| `/api/iif/import` | POST | Import .iif file; form field `retitle_names=true` imports ALL-CAPS customer, vendor and account names in normal capitalization |
 | `/api/csv/export/{type}` | GET | Export entities as CSV |
 | `/api/csv/import/{type}` | POST | Import CSV file |
 | `/api/bank-import/preview` | POST | Preview OFX/QFX transactions |

@@ -7,6 +7,71 @@ on what the software does, not on what sprint shipped what.
 
 ## [Unreleased]
 
+### v2.18.1 — Names from QuickBooks come across clean
+
+**A name QuickBooks had put in quotes kept them.** QuickBooks writes a field
+that holds a comma inside double quotes (`"JONES, BOB"`, `"99,250.02"`) and
+a quote mark within one twice. The IIF import kept the quotes as part of the
+value, so a customer or vendor whose name has a comma was listed with quote
+marks around it. They come off now (#195, @TheLocalW).
+
+**ALL-CAPS names can come in as normal capitalization.** Many QuickBooks
+users typed every name in capitals. When a file has names in ALL CAPS,
+**Validate** now shows a few of them as they would import and offers
+**Change ALL-CAPS names to normal capitalization**: `BOB JONES` becomes
+`Bob Jones` and `ACME TOOLING, INC.` becomes `ACME Tooling, Inc.`, with
+initials, legal forms and web addresses kept as they are written
+(`CVS Pharmacy`, `Wells Fargo Bank, N.A.`, `Amazon.com`). It is off unless
+you tick it, because no word list knows every initialism a business uses,
+and the examples are your own names, so you can see first. It covers
+customer, vendor and account names; item names are kept as typed, since
+they are often part numbers, and nothing already in your books is renamed.
+From @TheLocalW (#195), who also added `tools/clean_iif.py`: for source
+installs, it writes a cleaned copy of an export with the same rules.
+
+Fixed in review, before it shipped:
+
+- The renaming reached the list rows but not the transactions that name
+  them: a bill for `ACME TOOLING, INC.` could not find the vendor imported as
+  `ACME Tooling, Inc.`, and an invoice or payment for `BOB JONES` made a
+  second customer. A name is now rewritten everywhere the file uses it.
+- Re-importing a list that an earlier version had imported made a second copy
+  of every ALL-CAPS name. **A name in a file now matches the customer, vendor
+  or account already in your books whatever its case**, as QuickBooks treats
+  names, box ticked or not; `ACME CO` beside an existing `Acme Co` used to
+  make a second one. So a transactions file imported after its lists finds
+  every name, however it spells it. Item names still match exactly.
+- The list of initials held ordinary words ("BANK OF AMERICA" read "BANK of
+  America", "NEW YORK LIFE" read "New YORK Life") and read a bank's `NA`
+  (National Association) as "N/A". Initials beside a full stop, `&` or `/`
+  keep their capitals (`N.A.`, `AT&T`, `A/R`), and `MCDONALD'S` reads
+  `McDonald's`.
+- `tools/clean_iif.py` keeps a file's Windows line endings and a Windows-1252
+  file's encoding.
+
+**A line posted to a sub-account imports.** QuickBooks names a sub-account
+by its path (`Automobile Expense:Gasoline`) on a transaction, while the list
+import keeps it under its own name with its parent linked, and the path was
+never looked up: every bill, invoice or deposit line posted to a sub-account
+was refused as "account ... not found". The path finds it now, in any case.
+One under a different parent is not taken: a line for `Automobile:Gas` is
+still refused rather than posted to `Utilities:Gas`. Re-importing a list also
+counted each job already there as a customer imported; it doesn't. Both
+turned up while testing the samples for this release, and predate it.
+
+**The permit form's format note covered the boxes above it** (#194,
+@cnbarry1). On Add Reseller Permit, the state's note under State and Permit
+number (for Washington, "9 digits…") was drawn over both boxes, and a click
+on their lower part landed on the note. It has a row of its own now, and a
+longer note wraps within it.
+
+**API.** `POST /api/iif/import` takes a form field `retitle_names` (default
+false). `POST /api/iif/validate` reports `caps_names` and up to six
+`caps_name_examples` (`{name, becomes}`), and the import result reports
+`names_changed`. 545 operations, unchanged.
+
+No schema change.
+
 ### v2.18.0 — Around the ledger
 
 Two of the QA agents each started a brand-new company and ran it for a day

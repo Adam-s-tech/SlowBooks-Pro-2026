@@ -69,6 +69,11 @@ four decimal places (8.875%), and the payment screens see every open invoice
 and bill, not just the newest 500 (#191). Each company now keeps its logo,
 attachments and employee documents in its own company file: companies on
 one desktop shared them, and a server published them without a sign-in.
+2.18.1 imports QuickBooks names without the quote marks QuickBooks puts
+around a name with a comma, offers to bring ALL-CAPS names in as normal
+capitalization (#195, @TheLocalW), imports the lines QuickBooks posts to a
+sub-account, and keeps the permit form's format note off its boxes (#194,
+@cnbarry1).
 
 **v2.17 — Your ledger, in a spreadsheet.** Trial Balance and General Ledger
 save as a CSV and a printable PDF, and Profit & Loss and Balance Sheet gain
@@ -110,12 +115,12 @@ been edited since generation, against the local `document_audits` chain.
 Not a watermark — a verification trail.
 
 **Bring-your-own-AI, including your own gateway.** AI Insights runs
-against any of eight providers (xAI Grok, Groq, Cloudflare Workers AI,
-Anthropic Claude, OpenAI, Google Gemini, a Cloudflare Worker you host
-yourself, or any OpenAI-compatible endpoint you name) — keys encrypted at rest with versioned, rotatable ciphertext.
+against any of eight providers (Anthropic Claude and xAI Grok first, then
+Groq, Cloudflare Workers AI, OpenAI, Google Gemini, a Cloudflare Worker you
+host yourself, or any OpenAI-compatible endpoint you name) — keys encrypted at rest with versioned, rotatable ciphertext.
 And the whole app is agent-operable: every install serves a
-self-documenting local REST API (545 operations in v2.18) — point Claude
-Code or any agentic CLI at it; the
+self-documenting local REST API (545 operations in v2.18) — built for Claude
+Code and Grok first, and any agentic CLI works; the
 [AI setup guide](https://www.slowbookspro.com/ai/) has the paste-prompt.
 
 **One-click reseller-permit verification.** Per-state format validation
