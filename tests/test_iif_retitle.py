@@ -275,3 +275,77 @@ def test_totals_are_unchanged_by_the_box(db_session, seed_accounts):
     assert result["errors"] == []
     assert db_session.query(Bill).one().total == Decimal("40.00")
     assert db_session.query(Invoice).one().total == Decimal("100.00")
+
+
+# ---------------------------------------------------------------------------
+# Found while testing the samples for the 2.18.1 gate (both predate #195)
+# ---------------------------------------------------------------------------
+
+SUB_ACCOUNT_BILL = (
+    "!ACCNT\tNAME\tACCNTTYPE\n"
+    "ACCNT\tAUTOMOBILE EXPENSE\tEXP\n"
+    "ACCNT\tAUTOMOBILE EXPENSE:GASOLINE\tEXP\n"
+    "!VEND\tNAME\n"
+    "VEND\tFUEL STOP\n"
+    "!TRNS\tTRNSTYPE\tDATE\tACCNT\tNAME\tAMOUNT\tDOCNUM\n"
+    "!SPL\tTRNSTYPE\tDATE\tACCNT\tNAME\tAMOUNT\tDOCNUM\n"
+    "!ENDTRNS\n"
+    "TRNS\tBILL\t05/04/2026\tAccounts Payable\tFUEL STOP\t-61.20\tF-1\n"
+    "SPL\tBILL\t05/04/2026\tAUTOMOBILE EXPENSE:GASOLINE\tFUEL STOP\t61.20\tF-1\n"
+    "ENDTRNS\n"
+)
+
+
+def test_a_bill_to_a_sub_account_finds_it(db_session, seed_accounts):
+    # the list keeps "GASOLINE" under "AUTOMOBILE EXPENSE"; the bill names the
+    # path, and was refused as "expense account ... not found"
+    for retitle in (False, True):
+        db_session.query(Bill).delete()
+        result = import_all(db_session, SUB_ACCOUNT_BILL, retitle_names=retitle)
+        assert result["errors"] == [], (retitle, result["errors"])
+        assert result["bills"] == 1
+        line = db_session.query(Bill).one().lines[0]
+        assert line.account.name.lower() == "gasoline"
+        assert line.account.parent.name.lower() == "automobile expense"
+
+
+def test_the_path_picks_the_sub_account_under_the_right_parent(
+    db_session, seed_accounts
+):
+    from app.services.iif_import import _find_account
+
+    def add(name, parent=None):
+        acct = Account(
+            name=name,
+            account_type="expense",
+            is_active=True,
+            parent_id=parent.id if parent else None,
+        )
+        db_session.add(acct)
+        db_session.flush()
+        return acct
+
+    utilities, automobile = add("Utilities"), add("Automobile")
+    add("Gas", utilities)
+    fica = add("FICA")
+    db_session.commit()
+
+    found = _find_account(db_session, "UTILITIES:GAS")
+    assert (found.name, found.parent.name) == ("Gas", "Utilities")
+    # the only Gas is under Utilities: an Automobile:Gas line is refused as
+    # before, not posted to Utilities
+    assert _find_account(db_session, "Automobile:Gas") is None
+    add("Gas", automobile)
+    db_session.commit()
+    found = _find_account(db_session, "Automobile:Gas")
+    assert (found.name, found.parent.name) == ("Gas", "Automobile")
+    # a sub-account whose parent the file's list didn't carry
+    assert _find_account(db_session, "PAYROLL EXPENSES:FICA").id == fica.id
+
+
+def test_a_job_already_here_is_not_counted_again(db_session, seed_accounts):
+    iif = "!CUST\tNAME\nCUST\tBob Jones\nCUST\tBob Jones:Kitchen remodel\n"
+    assert import_all(db_session, iif)["customers"] == 2
+    again = import_all(db_session, iif)
+    assert again["customers"] == 0
+    assert db_session.query(Job).count() == 1

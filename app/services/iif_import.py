@@ -30,7 +30,12 @@ from app.models.bills import Bill, BillLine, BillStatus
 from app.models.transactions import Transaction
 from app.services.csv_export import strip_formula_guard
 from app.services.iif_common import IIF_TO_ACCOUNT_TYPE, IIF_TO_ITEM_TYPE
-from app.services.jobs_service import resolve_customer_and_job, split_customer_job
+from app.services.jobs_service import (
+    find_customer,
+    find_job,
+    resolve_customer_and_job,
+    split_customer_job,
+)
 from app.services.name_case import normalize_name
 from app.services.accounting import (
     _q,
@@ -304,7 +309,39 @@ def _find_account(db: Session, name: str) -> Account:
         if acct:
             return acct
 
+    # 4. "Parent:Child". The list import keeps a sub-account under its own
+    # name with its parent linked, and a transaction names the whole path, so
+    # a bill to "Automobile Expense:Gasoline" was refused as not found. The
+    # sub-account whose parents match the path, in any case; else the only
+    # account with that name if it has no parent (the file's list may not
+    # have carried one). One under a different parent is not it: posting an
+    # Automobile:Gas bill to Utilities:Gas would be wrong in silence.
+    if ":" in name:
+        parts = [part.strip() for part in name.split(":") if part.strip()]
+        leaf, parents = parts[-1], parts[:-1]
+        candidates = (
+            db.query(Account)
+            .filter(func.lower(Account.name) == leaf.lower())
+            .order_by(Account.id)
+            .all()
+        )
+        for acct in candidates:
+            if _under(acct, parents):
+                return acct
+        if len(candidates) == 1 and candidates[0].parent_id is None:
+            return candidates[0]
+
     return None
+
+
+def _under(acct: Account, parents: list) -> bool:
+    """Whether ``acct`` sits under exactly this chain of parent names."""
+    node = acct.parent
+    for want in reversed(parents):
+        if node is None or node.name.lower() != want.lower():
+            return False
+        node = node.parent
+    return True
 
 
 # ============================================================================
@@ -622,6 +659,11 @@ def import_customers(db: Session, rows: list) -> dict:
             # but a partial export may not) and the job under it.
             parent_name, job_name = split_customer_job(name)
             if job_name:
+                parent = find_customer(db, parent_name)
+                if parent and find_job(db, parent.id, job_name):
+                    # already here: a re-import counted it as imported again
+                    sp.rollback()
+                    continue
                 _customer, _job = resolve_customer_and_job(db, name)
                 sp.commit()
                 imported += 1
