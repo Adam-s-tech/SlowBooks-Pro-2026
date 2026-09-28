@@ -9,7 +9,9 @@ Two fixes are applied, and only to the name-bearing fields:
 
 2. ``ACME TOOLING, INC.`` -> ``ACME Tooling, Inc.``
    Names typed in all caps are re-cased for readability, via the same
-   ``normalize_name`` the patched importer uses, so both paths agree.
+   ``normalize_name`` the importer uses when its "Change ALL-CAPS names" box
+   is ticked, so both paths agree. Item names are kept as typed, as the
+   import keeps them: they are often part numbers.
 
 The original file is never modified. Structural rules this script obeys:
 
@@ -35,6 +37,8 @@ from app.services.name_case import normalize_name  # noqa: E402
 
 # Column names whose values are human-readable names.
 NAME_COLUMNS = {"NAME", "COMPANYNAME", "PRINTNAME", "FULLNAME"}
+# Rows whose names are left as typed: an item's name is often a part number.
+KEEP_SECTIONS = {"INVITEM"}
 
 
 def _unquote(field: str) -> tuple[str, bool]:
@@ -75,7 +79,14 @@ def clean_field(field: str) -> str:
 
 
 def clean_iif(source: Path, dest: Path) -> dict:
-    raw = source.read_text(encoding="utf-8")
+    # Bytes in, bytes out: reading as text turns QuickBooks' CRLF line endings
+    # into LF (and writing text on Windows turns them into CR CR LF). An older
+    # QuickBooks writes Windows-1252, as the importer allows for.
+    data = source.read_bytes()
+    try:
+        encoding, raw = "utf-8", data.decode("utf-8")
+    except UnicodeDecodeError:
+        encoding, raw = "cp1252", data.decode("cp1252")
     newline = "\r\n" if "\r\n" in raw else "\n"
     lines = raw.splitlines()
 
@@ -98,7 +109,7 @@ def clean_iif(source: Path, dest: Path) -> dict:
         parts = line.split("\t")
         section = parts[0].upper()
         columns = headers.get(section)
-        if not columns:
+        if not columns or section in KEEP_SECTIONS:
             out.append(line)
             continue
 
@@ -122,7 +133,8 @@ def clean_iif(source: Path, dest: Path) -> dict:
             )
         out.append("\t".join(parts))
 
-    dest.write_text(newline.join(out) + (newline if out else ""), encoding="utf-8")
+    text = newline.join(out) + (newline if out else "")
+    dest.write_bytes(text.encode(encoding))
     return stats
 
 
