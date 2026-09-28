@@ -121,6 +121,20 @@ const IIFPage = {
             </div>`;
     },
 
+    // What an import says when it's done (#197). One that came back with
+    // errors said "Imported 0 records" in green and "Import complete", and the
+    // red box below was the only sign of them.
+    _reportImport(total, errors) {
+        const records = `Imported ${total} record${total === 1 ? '' : 's'}`;
+        if (errors > 0) {
+            toast(`${records}, ${errors} error${errors === 1 ? '' : 's'}: see the list below`, 'error');
+            App.setStatus('QuickBooks Interop — Import finished with errors');
+        } else {
+            toast(records);
+            App.setStatus('QuickBooks Interop — Import complete');
+        }
+    },
+
     async importQbReportCsv() {
         const input = $('#qbcsv-file-input');
         if (!input?.files[0]) { toast('Choose a CSV file first', 'error'); return; }
@@ -158,8 +172,7 @@ const IIFPage = {
             }
             $('#qbcsv-import-result').innerHTML = html;
             const total = (result.sales_receipts || 0) + (result.deposits || 0) + (result.checks || 0);
-            toast(`Imported ${total} record${total === 1 ? '' : 's'}`);
-            App.setStatus('QuickBooks Interop — Import complete');
+            IIFPage._reportImport(total, (result.errors || []).length);
         } catch (err) {
             toast(err.message, 'error');
             App.setStatus('Import failed');
@@ -399,8 +412,7 @@ const IIFPage = {
                           (result.sales_receipts || 0) +
                           (result.estimates || 0) + (result.bills || 0) +
                           (result.deposits || 0);
-            toast(`Imported ${total} records`);
-            App.setStatus('QuickBooks Interop — Import complete');
+            IIFPage._reportImport(total, (result.errors || []).length);
         } catch (err) {
             toast(err.message, 'error');
             App.setStatus('Import failed');
