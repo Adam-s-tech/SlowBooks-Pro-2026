@@ -843,6 +843,11 @@ def import_transactions(db: Session, blocks: list) -> dict:
                         warnings.append(
                             f"Invoice {doc}: imported but journal entry could not be created (account mismatch)"
                         )
+                else:
+                    # None = this invoice number is already here. Only bills,
+                    # deposits and sales receipts were counted, so a
+                    # re-import reported "Duplicates skipped 1" for three.
+                    counts["duplicates_skipped"] += 1
             elif trns_type == "PAYMENT":
                 result = _import_payment(db, trns, spls)
                 if result:
@@ -851,6 +856,8 @@ def import_transactions(db: Session, blocks: list) -> dict:
                         warnings.append(
                             f"Payment block {i+1}: imported but journal entry could not be created (account mismatch)"
                         )
+                else:
+                    counts["duplicates_skipped"] += 1
             elif trns_type in ("CASH SALE", "CASHSALE", "SALES RECEIPT"):
                 if not trns.get("NAME", "").strip():
                     warnings.append(
@@ -871,6 +878,8 @@ def import_transactions(db: Session, blocks: list) -> dict:
                 result = _import_estimate(db, trns, spls)
                 if result:
                     counts["estimates"] += 1
+                else:
+                    counts["duplicates_skipped"] += 1
             elif trns_type == "BILL":
                 result = _import_bill(db, trns, spls)
                 if result:
@@ -1228,7 +1237,10 @@ def _import_invoice(db: Session, trns: dict, spls: list) -> Invoice:
         # creating a Customer(name="") plants a record that is invisible in
         # list views and unsearchable — the API refuses blank names since
         # 6c82e9a, so the importer must not sneak them in the back door.
-        return None
+        # Said, not dropped: None means "already imported" to the caller.
+        raise DataProblem(
+            f"INVOICE {doc_num or '(no number)'}: missing customer NAME on TRNS line"
+        )
     # QuickBooks' NAME is the "Customer:Job" path — the job part becomes a
     # Job under the customer (created on first sight), and the invoice is
     # tagged to it so job costing survives the migration.
@@ -1418,7 +1430,16 @@ def _import_payment(db: Session, trns: dict, spls: list) -> Payment:
     # is not job-costed — the invoice it pays already is)
     customer, _job = resolve_customer_and_job(db, cust_name, create=False)
     if not customer:
-        return None  # Can't create payment without customer
+        # Said, not dropped (2.18.1 gate): the payment used to vanish with
+        # nothing in the result. None means "already imported" to the caller.
+        if not cust_name:
+            raise DataProblem(
+                f"PAYMENT {ref or '(no number)'}: missing customer NAME on TRNS line"
+            )
+        raise DataProblem(
+            f"PAYMENT {ref or '(no number)'}: customer '{cust_name}' not found. "
+            f"Import the customer list first, or correct the NAME in the IIF file."
+        )
 
     pmt_date = _parse_iif_date(trns.get("DATE", ""))
     amount = abs(_parse_decimal(trns.get("AMOUNT", "")))
@@ -1630,11 +1651,11 @@ def _import_estimate(db: Session, trns: dict, spls: list) -> Estimate:
 
     cust_name = trns.get("NAME", "").strip()[:200]
     if not cust_name:
-        # A TRNS row with no NAME cannot anchor an AR document, and auto-
-        # creating a Customer(name="") plants a record that is invisible in
-        # list views and unsearchable — the API refuses blank names since
-        # 6c82e9a, so the importer must not sneak them in the back door.
-        return None
+        # A TRNS row with no NAME cannot anchor an AR document (see
+        # _import_invoice); said, not dropped.
+        raise DataProblem(
+            f"ESTIMATE {doc_num or '(no number)'}: missing customer NAME on TRNS line"
+        )
     customer, job = resolve_customer_and_job(db, cust_name)
 
     est_date = _parse_iif_date(trns.get("DATE", ""))

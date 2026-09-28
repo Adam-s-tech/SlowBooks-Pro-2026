@@ -368,3 +368,76 @@ def test_a_name_outside_ascii_still_matches_itself(db_session, seed_accounts):
     assert (again["customers"], again["payments"]) == (0, 0)
     assert db_session.query(Payment).count() == 1
     assert _names(db_session, Customer) == ["CAFÉ ROUGE"]
+
+
+# ---------------------------------------------------------------------------
+# 2.18.1 gate, both QA agents: what a second import of the same file says
+# ---------------------------------------------------------------------------
+
+
+def test_a_second_import_counts_every_duplicate_once(db_session, seed_accounts):
+    # the bill, the invoice and the payment are all already here; only bills,
+    # deposits and sales receipts were counted ("Duplicates skipped 1")
+    first = import_all(db_session, LISTS + TRANSACTIONS)
+    assert first["errors"] == [] and first["duplicates_skipped"] == 0
+    again = import_all(db_session, LISTS + TRANSACTIONS)
+    assert again["errors"] == []
+    assert again["duplicates_skipped"] == 3
+    assert (again["bills"], again["invoices"], again["payments"]) == (0, 0, 0)
+
+
+def test_an_estimate_already_here_is_counted_as_skipped(db_session, seed_accounts):
+    iif = (
+        "!TRNS\tTRNSTYPE\tDATE\tACCNT\tNAME\tAMOUNT\tDOCNUM\n"
+        "!SPL\tTRNSTYPE\tDATE\tACCNT\tNAME\tAMOUNT\tDOCNUM\n"
+        "!ENDTRNS\n"
+        "TRNS\tESTIMATE\t05/05/2026\tEstimates\tBob Jones\t75.00\tE-1\n"
+        "SPL\tESTIMATE\t05/05/2026\tService Income\tBob Jones\t-75.00\tE-1\n"
+        "ENDTRNS\n"
+    )
+    assert import_all(db_session, iif)["estimates"] == 1
+    again = import_all(db_session, iif)
+    assert (again["estimates"], again["duplicates_skipped"]) == (0, 1)
+
+
+def test_a_payment_for_a_customer_not_here_says_so(db_session, seed_accounts):
+    # it used to vanish: no payment, no error, nothing in the result
+    iif = (
+        "!TRNS\tTRNSTYPE\tDATE\tACCNT\tNAME\tAMOUNT\tDOCNUM\n"
+        "!SPL\tTRNSTYPE\tDATE\tACCNT\tNAME\tAMOUNT\tDOCNUM\n"
+        "!ENDTRNS\n"
+        "TRNS\tPAYMENT\t05/03/2026\tUndeposited Funds\tNOBODY HERE\t10.00\tP-404\n"
+        "SPL\tPAYMENT\t05/03/2026\tAccounts Receivable\tNOBODY HERE\t-10.00\tP-404\n"
+        "ENDTRNS\n"
+    )
+    result = import_all(db_session, iif)
+    assert result["payments"] == 0 and result["duplicates_skipped"] == 0
+    assert len(result["errors"]) == 1
+    message = result["errors"][0]["message"]
+    assert "P-404" in message and "'NOBODY HERE' not found" in message
+    assert db_session.query(Payment).count() == 0
+
+
+def test_an_invoice_with_no_customer_says_so(db_session, seed_accounts):
+    iif = (
+        "!TRNS\tTRNSTYPE\tDATE\tACCNT\tNAME\tAMOUNT\tDOCNUM\n"
+        "!SPL\tTRNSTYPE\tDATE\tACCNT\tNAME\tAMOUNT\tDOCNUM\n"
+        "!ENDTRNS\n"
+        "TRNS\tINVOICE\t05/02/2026\tAccounts Receivable\t\t50.00\tINV-BLANK\n"
+        "SPL\tINVOICE\t05/02/2026\tService Income\t\t-50.00\tINV-BLANK\n"
+        "ENDTRNS\n"
+    )
+    result = import_all(db_session, iif)
+    assert result["invoices"] == 0 and result["duplicates_skipped"] == 0
+    assert "INV-BLANK: missing customer NAME" in result["errors"][0]["message"]
+    assert db_session.query(Customer).filter(Customer.name == "").count() == 0
+
+
+def test_the_page_does_not_call_a_skipped_duplicate_imported():
+    from pathlib import Path
+
+    js = (
+        Path(__file__).resolve().parents[1] / "app" / "static" / "js" / "iif.js"
+    ).read_text(encoding="utf-8")
+    assert "['Duplicates skipped'" not in js  # the loop labels each row "imported"
+    assert "Already here, skipped" in js

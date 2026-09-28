@@ -420,7 +420,6 @@ const IIFPage = {
             ['Estimates', result.estimates],
             ['Bills', result.bills],
             ['Deposits', result.deposits],
-            ['Duplicates skipped', result.duplicates_skipped],
         ];
 
         let html = '<div class="iif-results"><h4>Import Results</h4>';
@@ -431,6 +430,14 @@ const IIFPage = {
                     <span class="result-count">${count} imported</span>
                 </div>`;
             }
+        }
+        // Not "imported": a record already here that the file named again
+        // (both QA agents, 2.18.1 gate: "Duplicates skipped: 1 imported")
+        if (result.duplicates_skipped > 0) {
+            html += `<div class="result-row">
+                <span>Already here, skipped</span>
+                <span class="result-count">${result.duplicates_skipped}</span>
+            </div>`;
         }
         if (result.names_changed > 0) {
             html += `<div class="result-row">
