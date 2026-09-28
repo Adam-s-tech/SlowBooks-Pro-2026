@@ -18,6 +18,10 @@ or its Chromium is not installed.
 - NEW-9 (2.18.0 gate, macbase1): after the toolbar's Home, the sidebar link
   of the page just left did nothing. Clicked through with the real toolbar
   and sidebar, and Back.
+- #194 (@cnbarry1): on Add Reseller Permit the state's format note was drawn
+  over the State and Permit number boxes, and a click on either box's lower
+  part landed on the note. Checked with a long note and a short one, typed
+  and empty, in a wide window and a narrow one.
 """
 
 import json
@@ -343,3 +347,46 @@ def test_the_estimate_line_table_fits_the_dialog_at_1280(browser):
         assert page.evaluate(LINE_TABLE_FITS) == []
     finally:
         page.close()
+
+
+PERMIT_NOTE_CLEAR = """() => {
+    const note = document.getElementById('permit-format-hint');
+    const n = note.getBoundingClientRect();
+    const out = [];
+    if (!note.textContent.trim()) out.push('the note is empty');
+    for (const el of document.querySelectorAll('#modal-body input, #modal-body select, #modal-body textarea')) {
+        if (el.offsetParent === null || el.type === 'checkbox') continue;
+        const r = el.getBoundingClientRect();
+        if (n.top < r.bottom - 0.5 && n.bottom > r.top + 0.5 && n.left < r.right && n.right > r.left) {
+            out.push(`the note covers ${el.name}`);
+        }
+        // a click on the box's lower part reaches the box
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.bottom - 3);
+        if (hit !== el) out.push(`a click low on ${el.name} lands on ${hit && (hit.id || hit.tagName)}`);
+    }
+    return out;
+}"""
+
+
+def test_the_permit_format_note_covers_no_box(browser):
+    # #194: WA's note is the long one; TX's is short; ZZ has no rule
+    problems = {}
+    for width, height in ((1280, 800), (600, 800)):
+        page = _open(browser, width, height, "#/reseller-permits")
+        try:
+            _open_dialog(page, "ResellerPermitsPage.showForm()", "#permit-format-hint")
+            for state, number in (
+                ("WA", ""),
+                ("WA", "603-123"),
+                ("TX", ""),
+                ("ZZ", "1"),
+            ):
+                page.fill('#modal-body [name="jurisdiction"]', state)
+                page.fill('#modal-body [name="permit_number"]', number)
+                page.evaluate("() => ResellerPermitsPage._checkFormat()")
+                found = page.evaluate(PERMIT_NOTE_CLEAR)
+                if found:
+                    problems[(width, state, number)] = found
+        finally:
+            page.close()
+    assert problems == {}

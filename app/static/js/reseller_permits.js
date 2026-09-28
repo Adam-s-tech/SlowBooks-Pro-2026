@@ -155,7 +155,10 @@ const ResellerPermitsPage = {
                         <input name="permit_number" value="${escapeHtml(p.permit_number || '')}" required maxlength="50"
                                onkeyup="ResellerPermitsPage._checkFormat()"></div>
                 </div>
-                <p id="permit-format-hint" style="font-size:12px;margin:-6px 0 8px 0;color:var(--text-muted)"></p>
+                <!-- The format note has a row of its own under State and Permit
+                     number; a negative top margin had drawn it over both boxes
+                     (#194). A longer note wraps in its row. -->
+                <p id="permit-format-hint" style="font-size:12px;line-height:1.4;min-height:1.4em;margin:4px 0 10px 0;color:var(--text-muted)"></p>
                 <div class="form-grid">
                     <div class="form-group"><label>Issued</label>
                         <input name="issued_at" type="date" value="${escapeHtml(p.issued_at || '')}"></div>
