@@ -108,3 +108,54 @@ class TestEdgeCases:
         # can make a spreadsheet treat the cell as a live formula.
         for name in ("=HYPERLINK(1)", "@Acme", "+1 555 0100", "-ACME"):
             assert normalize_name(name) == name, name
+
+
+class TestCommonNames:
+    """Names the first word lists got wrong (2.18.1 review of #195). Words
+    that are also ordinary words in business names are not acronyms, letters
+    that stand for words keep their caps, and each side of a colon is a name
+    of its own."""
+
+    def test_ordinary_words_are_not_acronyms(self):
+        assert normalize_name("BANK OF AMERICA") == "Bank of America"
+        assert normalize_name("NEW YORK LIFE") == "New York Life"
+        assert normalize_name("CHASE BANK") == "Chase Bank"
+        assert normalize_name("SHELL OIL") == "Shell Oil"
+        assert normalize_name("POLKA DOT BAKERY") == "Polka Dot Bakery"
+        assert normalize_name("CITIBANK") == "Citibank"
+
+    def test_na_is_national_association(self):
+        assert normalize_name("WELLS FARGO BANK NA") == "Wells Fargo Bank NA"
+        assert normalize_name("WELLS FARGO BANK, N.A.") == "Wells Fargo Bank, N.A."
+
+    def test_initials_keep_their_caps(self):
+        assert normalize_name("AT&T") == "AT&T"
+        assert normalize_name("H&R BLOCK") == "H&R Block"
+        assert normalize_name("M&T BANK") == "M&T Bank"
+        assert normalize_name("ACCOUNTS RECEIVABLE A/R") == "Accounts Receivable A/R"
+        assert normalize_name("C/O JOHN SMITH") == "C/O John Smith"
+        assert normalize_name("J. SMITH PLUMBING") == "J. Smith Plumbing"
+        assert normalize_name("D/B/A SAMPLE") == "D/B/A Sample"
+
+    def test_common_initialisms(self):
+        assert normalize_name("CVS PHARMACY") == "CVS Pharmacy"
+        assert normalize_name("USAA") == "USAA"
+        assert normalize_name("ABC SUPPLY CO") == "ABC Supply Co"
+        assert normalize_name("SMITH DDS") == "Smith DDS"
+        assert normalize_name("ABC PLUMBING NJ") == "ABC Plumbing NJ"
+        assert normalize_name("PAYROLL EXPENSES:FICA") == "Payroll Expenses:FICA"
+        assert normalize_name("COST OF GOODS SOLD:COGS") == "Cost of Goods Sold:COGS"
+
+    def test_names_written_their_own_way(self):
+        assert normalize_name("MCDONALD'S") == "McDonald's"
+        assert normalize_name("FEDEX") == "FedEx"
+        assert normalize_name("PAYPAL FEES") == "PayPal Fees"
+        assert normalize_name("MACHINE SHOP") == "Machine Shop"
+        assert normalize_name("ST. LOUIS BREAD CO.") == "St. Louis Bread Co."
+
+    def test_each_side_of_a_colon_is_judged_on_its_own(self):
+        # a job typed in mixed case under a customer typed in caps
+        assert (
+            normalize_name("BOB JONES:Kitchen remodel") == "Bob Jones:Kitchen remodel"
+        )
+        assert normalize_name("Bob Jones:KITCHEN") == "Bob Jones:Kitchen"

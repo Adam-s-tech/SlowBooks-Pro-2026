@@ -1,12 +1,15 @@
 """Readable names from QuickBooks' all-caps habit.
 
 QuickBooks stores whatever the user typed, and decades of typing in caps is
-common. SlowBooks should present ``ACME TOOLING, INC.`` as ``ACME Tooling, Inc.``
-without damaging names that are already correct.
+common. SlowBooks can present ``ACME TOOLING, INC.`` as ``ACME Tooling, Inc.``
+without damaging names that are already correct. The IIF import does it only
+when the person importing asks (its "Change ALL-CAPS names" box), because the
+word lists below cannot know every initialism a business uses.
 
 Two rules keep this safe:
 
-* Only a name with **no lowercase letter at all** is rewritten. Anything already
+* Only a name with **no lowercase letter at all** is rewritten; in a
+  ``Parent:Child`` name each side is judged on its own. Anything already
   mixed-case (``Contoso``, ``Model-X42``, ``illycaffè``) is returned
   untouched, because we cannot tell an intentional casing from a typo and
   guessing would corrupt it.
@@ -50,8 +53,6 @@ LEGAL_FORMS_TITLE = {
     "LTD.": "Ltd.",
     "LIMITED": "Limited",
     "COMPANY": "Company",
-    "NA": "N/A",
-    "N/A": "N/A",
 }
 
 # Short function words that are legitimately upper-case in an all-caps name but
@@ -85,7 +86,6 @@ ACRONYMS = {
     "UN",
     "FBI",
     "IRS",
-    "DOT",
     "DMV",
     "FDNY",
     "NYPD",
@@ -104,20 +104,16 @@ ACRONYMS = {
     "VII",
     "VIII",
     # Banks and card issuers whose names are conventionally written in caps.
+    # Words that are also ordinary words in business names (BANK, WELLS,
+    # FARGO, SHELL, CHEVRON, YORK, DOT) are not here: "BANK OF AMERICA" read
+    # "BANK of America" and "NEW YORK LIFE" read "New YORK Life".
     "HSBC",
     "AMEX",
-    "Citibank",
-    "CITIBANK",
-    "BANK",
-    "WELLS",
-    "FARGO",
-    "CHEVRON",
-    "SHELL",
-    "IBM",
+    "NA",  # National Association: "WELLS FARGO BANK NA"
+    "USAA",
     "UPS",
     "USPS",
-    "FedEx",
-    "FEDEX",
+    "DHL",
     # Short product/model codes where a capital letter is the product name.
     "TC",
     "QSC",
@@ -136,7 +132,6 @@ ACRONYMS = {
     "KIA",
     "AOL",
     "SAP",
-    "YORK",
     "JPM",
     "AXA",
     "BNY",
@@ -145,9 +140,97 @@ ACRONYMS = {
     "AXP",
     "BOFA",
     "ACME",
+    # Common trading names and initialisms in US books.
+    "AAA",
+    "AARP",
+    "ABC",
+    "ADP",
+    "ATM",
+    "BP",
+    "CBS",
+    "CVS",
+    "ESPN",
+    "GE",
+    "GM",
+    "GNC",
+    "HBO",
+    "HR",
+    "HVAC",
+    "IHOP",
+    "KFC",
+    "NBC",
+    "PTA",
+    "TV",
+    "YMCA",
+    "YWCA",
+    # Professional letters after a name: "SMITH DDS" -> "Smith DDS".
+    "CPA",
+    "DDS",
+    "DMD",
+    "DVM",
+    "MD",
+    "RN",
+    # Payroll and ledger initialisms in account names: "TAXES:FICA".
+    "AP",
+    "AR",
+    "COGS",
+    "EFT",
+    "FICA",
+    "FSA",
+    "FUTA",
+    "HSA",
+    "IRA",
+    "PPP",
+    "PTO",
+    "SBA",
+    "SDI",
+    "SUI",
+    "SUTA",
+    "YTD",
+    # State codes after a name ("ABC PLUMBING NJ"). Codes that are also words
+    # or name parts (IN, OR, ME, HI, OH, OK, CO, DE, AL, MI, MO, MS, MT, PA) are
+    # left out.
+    "AK",
+    "AZ",
+    "CT",
+    "FL",
+    "GA",
+    "IA",
+    "IL",
+    "KS",
+    "KY",
+    "MN",
+    "NC",
+    "ND",
+    "NH",
+    "NJ",
+    "NM",
+    "NV",
+    "NY",
+    "RI",
+    "SC",
+    "SD",
+    "TN",
+    "TX",
+    "VA",
+    "VT",
+    "WA",
+    "WI",
+    "WV",
+    "WY",
     # A domain's leading label: "WWW.EXAMPLE.COM" reads as "WWW.Example.com",
     # not "Www.Example.com".
     "WWW",
+}
+
+# Names whose owners write them their own way.
+BRANDS = {
+    "FEDEX": "FedEx",
+    "PAYPAL": "PayPal",
+    "EBAY": "eBay",
+    "LINKEDIN": "LinkedIn",
+    "YOUTUBE": "YouTube",
+    "QUICKBOOKS": "QuickBooks",
 }
 
 # A word is a run of letters/digits plus any of these internal marks.
@@ -202,6 +285,9 @@ def _smart_cap(core: str) -> str:
         if after_apostrophe and len(part) == 1 and part.isalpha():
             # "SMITH'S" -> "Smith's", "O'BRIEN'S PUB" -> "O'Brien's Pub".
             out.append(part.lower())
+        elif not out and len(part) >= 4 and part[:2].upper() == "MC" and part.isalpha():
+            # "MCDONALD'S" -> "McDonald's", not "Mcdonald's".
+            out.append("Mc" + part[2].upper() + part[3:].lower())
         else:
             # Every other part title-cases, which is what turns the elision in
             # "O'BRIEN" into "O'Brien".
@@ -274,6 +360,8 @@ def _title_word(word: str, *, first_word: bool) -> str:
     core = match.group(0)
 
     upper_core = core.upper()
+    if upper_core in BRANDS:
+        return BRANDS[upper_core] + word[match.end() :]
     if upper_core in ACRONYMS or upper_core in LEGAL_FORMS_CAPS:
         return word
     if _looks_like_code(core):
@@ -299,18 +387,38 @@ def _retitle_segment(segment: str) -> str:
     is a separator and is copied through untouched, so ``JUDITH/RANDALL`` and
     ``ROOMS & RENT`` are cased word by word without disturbing the punctuation.
     """
+    tokens = re.findall(r"[^\W_]+(?:['’][^\W_]+)*|[^\w\s]+|\s+", segment, re.UNICODE)
     out: list[str] = []
     word_index = 0
-    for match in re.finditer(
-        r"[^\W_]+(?:['’][^\W_]+)*|[^\w\s]+|\s+", segment, re.UNICODE
-    ):
-        token = match.group(0)
+    for i, token in enumerate(tokens):
         if not token[0].isalnum():
             out.append(token)  # separator: space, slash, hyphen, comma, ...
             continue
-        out.append(_title_word(token, first_word=(word_index == 0)))
+        before = tokens[i - 1] if i else ""
+        after = tokens[i + 1] if i + 1 < len(tokens) else ""
+        if _is_initial(token, before, after):
+            out.append(token)
+        else:
+            out.append(_title_word(token, first_word=(word_index == 0)))
         word_index += 1
     return "".join(out)
+
+
+def _is_initial(word: str, before: str, after: str) -> bool:
+    """Letters that stand for words keep their caps.
+
+    A single letter beside a full stop is an initial (``N.A.``, ``S.I.``,
+    ``J. SMITH``), and a short run joined to another by ``&`` or ``/`` with
+    no space is an abbreviation (``AT&T``, ``H&R``, ``A/R``, ``C/O``,
+    ``D/B/A``). Without this, the "A" of "N.A." and "A/R" and the "AT" of
+    "AT&T" were taken for the ordinary words "a" and "at".
+    """
+    if not word.isalpha():
+        return False
+    if len(word) == 1 and (after.startswith(".") or before.endswith(".")):
+        return True
+    glued = after[:1] in {"&", "/"} or before[-1:] in {"&", "/"}
+    return len(word) <= 3 and glued
 
 
 def normalize_name(name: str | None) -> str | None:
@@ -342,13 +450,17 @@ def normalize_name(name: str | None) -> str | None:
     if not cleaned:
         return cleaned
 
+    # Sub-accounts and jobs are "Parent:Child", and each side is a name of its
+    # own, decided on its own: "BOB JONES:Kitchen" reads "Bob Jones:Kitchen",
+    # the same "Bob Jones" the customer's own row "BOB JONES" becomes, so the
+    # job still finds its customer.
+    return ":".join(_normalize_part(part) for part in cleaned.split(":"))
+
+
+def _normalize_part(cleaned: str) -> str:
     # Already mixed-case: leave it exactly as the user typed it.
     if _has_lowercase(cleaned):
         return cleaned
-
-    # Sub-accounts are "Parent:Child"; each side is an independent name.
-    if ":" in cleaned:
-        return ":".join(_retitle_segment(part) for part in cleaned.split(":"))
 
     # A whole name that is one dotted run is a domain. An apostrophe rules that
     # out — no real host contains one — so "ACME'S.COM" is a company name that
