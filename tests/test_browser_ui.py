@@ -18,6 +18,9 @@ or its Chromium is not installed.
 - NEW-9 (2.18.0 gate, macbase1): after the toolbar's Home, the sidebar link
   of the page just left did nothing. Clicked through with the real toolbar
   and sidebar, and Back.
+- #197: an IIF or report-CSV import that came back with errors said
+  "Imported 0 records" in green and "Import complete"; the red box below was
+  the only sign of them. Driven through the real page with the file input.
 - #194 (@cnbarry1): on Add Reseller Permit the state's format note was drawn
   over the State and Permit number boxes, and a click on either box's lower
   part landed on the note. Checked with a long note and a short one, typed
@@ -390,3 +393,131 @@ def test_the_permit_format_note_covers_no_box(browser):
         finally:
             page.close()
     assert problems == {}
+
+
+IIF_VALID = {
+    "valid": True,
+    "sections_found": ["TRNS"],
+    "record_counts": {"TRNS": 1},
+    "warnings": [],
+    "errors": [],
+    "caps_names": 0,
+    "caps_name_examples": [],
+}
+IIF_RESULT = {
+    "classes": 0,
+    "accounts": 0,
+    "customers": 0,
+    "vendors": 0,
+    "items": 0,
+    "invoices": 0,
+    "payments": 0,
+    "sales_receipts": 0,
+    "estimates": 0,
+    "bills": 0,
+    "deposits": 0,
+    "duplicates_skipped": 0,
+    "names_changed": 0,
+    "warnings": [],
+}
+PAYMENT_404 = (
+    "PAYMENT P-404: customer 'NOBODY HERE' not found. Import the "
+    "customer list first, or correct the NAME in the IIF file."
+)
+
+
+def _answer(body):
+    # one parameter: Playwright hands a two-parameter handler the request too
+    return lambda route: route.fulfill(json=body)
+
+
+def _last_toast_and_status(page):
+    page.wait_for_selector("#toast-container .toast")
+    return page.evaluate("""() => {
+        const t = [...document.querySelectorAll('#toast-container .toast')].pop();
+        return [t.className, t.textContent, document.getElementById('status-text').textContent];
+    }""")
+
+
+def test_an_import_with_errors_says_so(browser):
+    # #197
+    cases = {
+        "errors": (
+            {**IIF_RESULT, "errors": [{"row": 1, "message": PAYMENT_404}]},
+            [
+                "toast toast-error",
+                "Imported 0 records, 1 error: see the list below",
+                "QuickBooks Interop — Import finished with errors",
+            ],
+        ),
+        "clean": (
+            {**IIF_RESULT, "payments": 1, "errors": []},
+            [
+                "toast toast-success",
+                "Imported 1 record",
+                "QuickBooks Interop — Import complete",
+            ],
+        ),
+    }
+    for name, (result, expected) in cases.items():
+        page = _open(browser, 1280, 800, "#/iif")
+        try:
+            page.route("**/api/iif/validate", lambda r: r.fulfill(json=IIF_VALID))
+            page.route("**/api/iif/import", _answer(result))
+            page.wait_for_selector("#iif-file-input", state="attached")
+            page.set_input_files(
+                "#iif-file-input",
+                files=[
+                    {"name": "p.iif", "mimeType": "text/plain", "buffer": b"!TRNS\n"}
+                ],
+            )
+            page.click("#iif-import-actions button:has-text('Validate')")
+            page.wait_for_selector("#iif-import-btn:not([disabled])")
+            page.evaluate(
+                "() => document.getElementById('toast-container').replaceChildren()"
+            )
+            page.click("#iif-import-btn")
+            assert _last_toast_and_status(page) == expected, name
+            if name == "errors":
+                assert PAYMENT_404 in page.inner_text("#iif-import-result")
+        finally:
+            page.close()
+
+
+def test_a_report_csv_import_with_errors_says_so(browser):
+    # the same page's other import had the same green message (#197)
+    page = _open(browser, 1280, 800, "#/iif")
+    try:
+        page.route(
+            "**/api/csv/import/qb-report",
+            lambda r: r.fulfill(
+                json={
+                    "detected": "deposits",
+                    "sales_receipts": 0,
+                    "deposits": 0,
+                    "checks": 0,
+                    "duplicates_skipped": 0,
+                    "warnings": [],
+                    "errors": ["Row 4: account 'Checking 2' not found"],
+                }
+            ),
+        )
+        page.wait_for_selector("#qbcsv-file-input", state="attached")
+        page.set_input_files(
+            "#qbcsv-file-input",
+            files=[
+                {
+                    "name": "deposits.csv",
+                    "mimeType": "text/csv",
+                    "buffer": b"Type,Date\n",
+                }
+            ],
+        )
+        page.evaluate("() => IIFPage.importQbReportCsv()")
+        assert _last_toast_and_status(page) == [
+            "toast toast-error",
+            "Imported 0 records, 1 error: see the list below",
+            "QuickBooks Interop — Import finished with errors",
+        ]
+    finally:
+        page.close()
