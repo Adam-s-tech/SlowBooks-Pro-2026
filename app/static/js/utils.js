@@ -815,9 +815,15 @@ function _gridName(field) {
             at += h.colSpan || 1;
         }
     }
-    // the row: its first cell's words, or "line N" where that cell is a field too
+    // the row: the words of its first cell before this one that has any (an
+    // amount isn't a row's name), or "line N" where they're all fields
     let rowName = '';
-    if (row.cells[0] !== cell) rowName = _cellText(row.cells[0]);
+    for (const c of row.cells) {
+        if (c === cell) break;
+        if (c.matches('.amount, .col-amount')) continue;
+        rowName = _cellText(c);
+        if (rowName) break;
+    }
     if (!rowName && row.parentElement && row.parentElement.tagName === 'TBODY') {
         rowName = `line ${row.sectionRowIndex + 1}`;
     }

@@ -94,7 +94,20 @@ def _unnamed_on_pages(page, handled, books):
         names = page.evaluate(UNNAMED, None)
         if names:
             found[route] = names
+    # the reconcile screen is drawn by a button, not a route
+    _reconcile(page, handled, books)
+    names = page.evaluate(UNNAMED, None)
+    if names:
+        found["reconcile"] = names
     return routes, found
+
+
+def _reconcile(page, handled, books):
+    _visit(page, handled, f"#/banking/{books['checking']}")
+    page.evaluate(
+        f"async () => {{ await BankingPage.showReconcileView({books['reconciliation']}); }}"
+    )
+    settle(page, handled)
 
 
 def _unnamed_in_dialogs(page, handled, books, groups):
@@ -129,6 +142,38 @@ def test_every_field_on_every_page_has_a_name(browser, company, books):
         page.close()
     assert len(routes) >= 45, routes
     assert found == {}
+
+
+# Each field of a grid, as [its name, the words of its row's `cell`].
+GRID = r"""([sel, cell]) => [...document.querySelectorAll(sel)].map(f => [
+    f.getAttribute('aria-label'),
+    f.closest('tr').cells[cell].textContent.replace(/\s+/g, ' ').trim(),
+])"""
+
+
+def test_a_grid_field_says_its_column_and_row(browser, company, books):
+    """A field in a grid is named from its column and its row: the row's
+    first words where it has some ("Jan, 4000 Service Income"; "Payment,
+    1001" rather than "line 2" when a checkbox comes first), and a row's
+    checkbox says what ticking it does."""
+    page, handled = _open(browser, company)
+    try:
+        _visit(page, handled, "#/budgets")
+        budget = page.evaluate(GRID, ["#page-content td input", 0])
+        _visit(page, handled, "#/batch-payments")
+        amounts = page.evaluate(GRID, [".batch-amt", 1])
+        ticks = page.evaluate(GRID, [".batch-check", 1])
+        _reconcile(page, handled, books)
+        cleared = page.evaluate(GRID, ["#page-content td input[type=checkbox]", 2])
+    finally:
+        page.close()
+    assert budget and all(n.endswith(f", {row}") for n, row in budget), budget
+    assert budget[0][0].startswith("Jan, ")
+    assert amounts and all(n == f"Payment, {inv}" for n, inv in amounts), amounts
+    assert ticks and all(n == f"Pay invoice {inv}" for n, inv in ticks), ticks
+    assert cleared and all(
+        n.startswith("Cleared, ") and payee in n for n, payee in cleared
+    ), cleared
 
 
 def test_every_field_in_every_dialog_has_a_name(browser, company, books):

@@ -50,7 +50,7 @@ const PayrollPage = {
 
         let empRows = emps.map(e => `
             <tr data-emp-row="${e.id}">
-                <td><input type="checkbox" class="pr-check" data-emp="${e.id}" checked></td>
+                <td><input type="checkbox" class="pr-check" data-emp="${e.id}" checked aria-label="Pay ${escapeHtml(e.first_name)} ${escapeHtml(e.last_name)}"></td>
                 <td>${escapeHtml(e.first_name)} ${escapeHtml(e.last_name)}</td>
                 <td>${e.pay_type}</td>
                 <td class="amount">${formatCurrency(e.pay_rate)}${e.pay_type==='hourly'?'/hr':'/yr'}</td>
