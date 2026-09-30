@@ -44,11 +44,14 @@ source code or binaries were available, decompiled, or used.
 
 ## Accessibility
 
-SlowBooks Pro strives to conform to WCAG 2.1 AA: labelled controls,
-real dialogs, live notifications, AA contrast in both themes, and every
-generated PDF tagged (PDF/UA-1) so tax forms read to a screen reader.
+SlowBooks Pro strives to conform to WCAG 2.1 AA: AA contrast in both
+themes on every page and dialog, real dialogs, announced notifications, and
+every generated PDF tagged (PDF/UA-1) so tax forms read to a screen reader.
+Form fields are not yet announced with their labels; that fix is
+[#198](https://github.com/VonHoltenCodes/SlowBooks-Pro-2026/issues/198).
 Details, known gaps and how to report a barrier:
-[docs/accessibility.md](docs/accessibility.md).
+[docs/accessibility.md](docs/accessibility.md) and
+[the accessibility page](https://www.slowbookspro.com/accessibility/).
 
 ## What's New
 
@@ -181,8 +184,8 @@ Full catalog in **[docs/features.md](docs/features.md)**. Highlights:
   with restrictions, releases, functional expenses, donor acknowledgments,
   giving statements, pledges
   ([docs/nonprofit-module.md](docs/nonprofit-module.md))
-- **Accessibility** — WCAG 2.1 AA, tagged PDFs
-  ([docs/accessibility.md](docs/accessibility.md))
+- **Accessibility** — AA contrast in both themes, tagged PDFs, working
+  toward WCAG 2.1 AA ([docs/accessibility.md](docs/accessibility.md))
 - **Duplicate detection** — fuzzy customer/vendor matching at create time
 
 ![Company Snapshot in light and dark themes](screenshots/hero-themes.png)

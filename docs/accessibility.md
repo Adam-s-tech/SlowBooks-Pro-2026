@@ -6,30 +6,62 @@ conform to WCAG 2.1 Level AA**. We do not claim compliance — no certifying
 body issues one — but we test against it, fix what we find, and treat a
 barrier as a bug.
 
-## What is in place (v2.8)
+![The Company Snapshot split down the middle: the light theme on the left, the dark theme on the right, with the same figures and the same A/R aging colour key in both](../screenshots/a11y-split.png)
 
-- Every data table declares its column headers (`scope="col"`).
-- Icon-only buttons (remove a line, delete an attachment, close a dialog)
-  carry accessible names.
-- Notifications ("Invoice saved") announce through a polite live region.
-- Dialogs are real dialogs: focus moves into them, Tab and Shift+Tab stay
-  inside, Escape closes them, and focus returns to the control that opened
-  them.
-- State is never conveyed by colour alone (e.g. the reconciliation
-  difference reads "Balanced" / "Out of balance").
-- Muted text meets the 4.5:1 contrast ratio in both the light and dark
-  themes.
+*The same screen in both themes. Switch with the theme button in the toolbar,
+or Alt+D.*
+
+## What is in place (v2.18.1)
+
+### Contrast, in both themes
+
+- Text meets **WCAG AA contrast** (4.5:1, or 3:1 for large text: 24px, or
+  18.66px bold) in the light and the dark theme everywhere it is drawn: every
+  page, 142 dialogs, the sign-in and setup screens, pop-up messages and the
+  PDF window. Semi-transparent text is measured as it is painted. (v2.18.0)
+- Chart lines, bars and colour keys meet **3:1** (WCAG 1.4.11), so the A/R
+  aging colours can be told apart in both themes. (v2.18.0)
+- **How it's checked:** `tests/test_theme_contrast.py`,
+  `tests/test_dialog_contrast.py` and `tests/test_css_hidden_and_contrast.py`
+  open every page, notice and dialog in Chromium in both themes and measure
+  the colours actually painted. They run with the suite before each release
+  (they skip where playwright's Chromium isn't installed), and the macOS
+  release gate carries its own contrast rules.
+
+### Screen readers and keyboards
+
 - **Every PDF the app generates is tagged (PDF/UA-1)** and declares its
   language and title — invoices, statements, estimates, pay stubs, W-2s,
   1099s, Forms 940/941, checks, reports — so screen readers receive
   headings, tables and reading order rather than a flat image of text.
+- **Dialogs are real dialogs:** focus moves into them, Tab and Shift+Tab stay
+  inside, Escape closes them, and focus returns to the control that opened
+  them.
+- **Notifications** ("Invoice saved") announce through a polite live region.
+- **Every data table declares its column headers** (`scope="col"`).
+- **Icon-only buttons** (remove a line, delete an attachment, close a dialog)
+  carry accessible names.
+- **State is never conveyed by colour alone:** an invoice reads Paid, Draft or
+  Sent; a reconciliation reads "Balanced" or "Out of balance".
+
+![The New Invoice dialog with keyboard focus in the Date field](../screenshots/a11y-dialog.png)
+
+*New Invoice: focus is inside the dialog and moves from field to field with
+Tab.*
 
 ## What we know is still open
 
+- **Form fields are not yet announced with their labels**
+  ([#198](https://github.com/VonHoltenCodes/SlowBooks-Pro-2026/issues/198)).
+  Most labels sit beside their field without being tied to it, so a screen
+  reader says "combo box" where it should say "Customer". A sweep of 2.18.1
+  found about 700 visible fields with no accessible name across 52 pages
+  (grids of inputs such as Budgets and Batch Payments most of all), and 14 to
+  24 in each of the New Invoice, New Bill and New Customer dialogs.
 - The chart-of-accounts tree and some long entry forms could use landmark
   regions and skip links.
-- Colour-coding on the dashboard charts (A/R aging) has text equivalents in
-  the legend but not on the bars themselves.
+- Colour-coding on the dashboard charts has text equivalents in the legend
+  but not on the bars themselves.
 - Keyboard-only drag ordering is not offered where a mouse drag exists
   (the dashboard uses arrow buttons instead).
 
@@ -37,5 +69,8 @@ barrier as a bug.
 
 If something in SlowBooks Pro is hard or impossible for you to use, open
 an issue at https://github.com/VonHoltenCodes/SlowBooks-Pro-2026/issues or
-email support@slowbookspro.com and say which screen and which assistive
+email trent@neonpulsetechshop.com and say which screen and which assistive
 technology. Barriers are triaged as bugs.
+
+The same statement, with more screenshots, is on the website:
+https://www.slowbookspro.com/accessibility/
