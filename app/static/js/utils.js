@@ -845,5 +845,8 @@ function nameFields(root = document) {
 // Whatever a page or a dialog draws, as it is drawn. Setting attributes
 // doesn't wake the observer; wrapping a label's "*" does, once, and finds
 // nothing left to do.
-new MutationObserver(() => nameFields(document)).observe(document.body, { childList: true, subtree: true });
-nameFields(document);
+// (The node tests that load this file have no MutationObserver or body.)
+if (typeof MutationObserver === 'function' && typeof document !== 'undefined' && document.body) {
+    new MutationObserver(() => nameFields(document)).observe(document.body, { childList: true, subtree: true });
+    nameFields(document);
+}

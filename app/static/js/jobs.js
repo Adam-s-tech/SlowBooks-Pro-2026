@@ -67,7 +67,7 @@ const JobsPage = {
             </div>
             <div class="toolbar" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
                 <input type="text" placeholder="${Terms.text('Search jobs...')}" id="job-search" oninput="JobsPage.setFilter('q', this.value)">
-                <select id="job-filter-customer" aria-label="Customer" onchange="JobsPage.setFilter('customer_id', this.value)">
+                <select id="job-filter-customer" aria-label="${Terms.text('Customer')}" onchange="JobsPage.setFilter('customer_id', this.value)">
                     <option value="">${Terms.text('All customers')}</option>${custOpts}</select>
                 <select id="job-filter-status" aria-label="Status" onchange="JobsPage.setFilter('status', this.value)">
                     <option value="">Active jobs</option>${statusOpts}<option value="__inactive__">Inactive</option></select>
