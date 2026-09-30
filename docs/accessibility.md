@@ -11,7 +11,7 @@ barrier as a bug.
 *The same screen in both themes. Switch with the theme button in the toolbar,
 or Alt+D.*
 
-## What is in place (v2.18.1)
+## What is in place (v2.18.2)
 
 ### Contrast, in both themes
 
@@ -30,6 +30,16 @@ or Alt+D.*
 
 ### Screen readers and keyboards
 
+- **Every form field has a name a screen reader can say** (v2.18.2, #198):
+  a form's label is tied to its field (clicking the label puts the cursor in
+  the field), a required field is read as required rather than as "star",
+  a field in a grid of inputs is named from its column and row ("Jan, 6500
+  Rent or Lease"), and a checkbox that starts a row says what ticking it
+  does ("Pay invoice 1001"). Fields with the same label in different parts
+  of a screen sit in groups named after their headings (Billing Address,
+  Shipping Address). `tests/test_field_names.py` sweeps every page and
+  dialog, a nonprofit's included, for a field without a name (2.18.1 had
+  about 1,100) and for two fields a screen reader couldn't tell apart.
 - **Every PDF the app generates is tagged (PDF/UA-1)** and declares its
   language and title — invoices, statements, estimates, pay stubs, W-2s,
   1099s, Forms 940/941, checks, reports — so screen readers receive
@@ -51,13 +61,6 @@ Tab.*
 
 ## What we know is still open
 
-- **Form fields are not yet announced with their labels**
-  ([#198](https://github.com/VonHoltenCodes/SlowBooks-Pro-2026/issues/198)).
-  Most labels sit beside their field without being tied to it, so a screen
-  reader says "combo box" where it should say "Customer". A sweep of 2.18.1
-  found about 700 visible fields with no accessible name across 52 pages
-  (grids of inputs such as Budgets and Batch Payments most of all), and 14 to
-  24 in each of the New Invoice, New Bill and New Customer dialogs.
 - The chart-of-accounts tree and some long entry forms could use landmark
   regions and skip links.
 - Colour-coding on the dashboard charts has text equivalents in the legend

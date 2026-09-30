@@ -44,11 +44,10 @@ source code or binaries were available, decompiled, or used.
 
 ## Accessibility
 
-SlowBooks Pro strives to conform to WCAG 2.1 AA: AA contrast in both
-themes on every page and dialog, real dialogs, announced notifications, and
-every generated PDF tagged (PDF/UA-1) so tax forms read to a screen reader.
-Form fields are not yet announced with their labels; that fix is
-[#198](https://github.com/VonHoltenCodes/SlowBooks-Pro-2026/issues/198).
+SlowBooks Pro strives to conform to WCAG 2.1 AA: every form field has a
+name a screen reader can say, AA contrast in both themes on every page and
+dialog, real dialogs, announced notifications, and every generated PDF
+tagged (PDF/UA-1) so tax forms read to a screen reader.
 Details, known gaps and how to report a barrier:
 [docs/accessibility.md](docs/accessibility.md) and
 [the accessibility page](https://www.slowbookspro.com/accessibility/).
@@ -76,7 +75,9 @@ one desktop shared them, and a server published them without a sign-in.
 around a name with a comma, offers to bring ALL-CAPS names in as normal
 capitalization (#195, @TheLocalW), imports the lines QuickBooks posts to a
 sub-account, and keeps the permit form's format note off its boxes (#194,
-@cnbarry1).
+@cnbarry1). 2.18.2 gives every form field a name a screen reader can say
+(#198), says so when an import comes back with errors (#197), and lists
+Claude and Grok first among the AI providers (#200).
 
 **v2.17 — Your ledger, in a spreadsheet.** Trial Balance and General Ledger
 save as a CSV and a printable PDF, and Profit & Loss and Balance Sheet gain

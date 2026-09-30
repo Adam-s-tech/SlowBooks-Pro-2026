@@ -7,6 +7,56 @@ on what the software does, not on what sprint shipped what.
 
 ## [Unreleased]
 
+### v2.18.2 — Every field says its name
+
+**A screen reader says what each field is.** Most forms put a label beside its
+field without tying the two, so a screen reader said "combo box" where it
+should have said "Customer", and a grid of inputs (a budget, a batch of
+payments, opening balances) had no names at all: in 2.18.1, 495 fields on 22
+of 53 pages and 625 in 91 of 125 dialogs had no name a screen reader could
+say (#198). Every field has one now, wherever a page or dialog draws it:
+- a form's label is tied to its field, so clicking the label also puts the
+  cursor in the field, and a required field is read as required rather than
+  as "star";
+- a label written just before its field ("Deposit To:", From and To) is tied
+  to it;
+- a field in a table is named from its column and its row: the row's
+  first words where it has some ("Jan, 6500 Rent or Lease", "Payment,
+  1001"), else its line ("Qty, line 2");
+- a checkbox that starts a row says what ticking it does ("Pay invoice
+  1001", "Pay Lena Ortiz", and on the reconcile screen "Cleared", with the
+  line's date, payee and amount);
+- fields with the same label in different parts of a screen are in groups
+  named after their headings, so a screen reader can tell them apart: New
+  Customer's Billing Address and Shipping Address, each Settings section
+  (PayPal, Square and QuickBooks Online each have an Environment), and the
+  four tax forms' Year;
+- the few fields with nothing beside them to borrow from (the status and
+  other filters, file choosers, the job page's period) are named where
+  they're drawn.
+
+A browser test sweeps every page, every dialog, the reconcile screen and a
+nonprofit's own pages for a field with no name, and for two fields with one
+name in one group.
+
+**An import that hit errors says so.** The QuickBooks Interop page ended every
+import with a green "Imported 0 records" and "Import complete", even when the
+only result was an error in the red box below. An import that comes back
+with errors now shows a red "Imported N records, M errors: see the list
+below", and the status bar says "Import finished with errors" (#197). The
+report-CSV import on the same page did the same, and is fixed too.
+
+**Claude and Grok come first in the AI provider list** (Settings → AI
+Insights), side by side, as the docs and the website list them (#200). An
+install that hasn't chosen a provider starts on Claude; a saved choice is
+kept.
+
+**Docs.** The accessibility statement (`docs/accessibility.md`) describes
+2.18's contrast work and how it's checked; `docs/development.md` counts the
+app's 64 page routes.
+
+No schema change. 545 operations.
+
 ### v2.18.1 — Names from QuickBooks come across clean
 
 **A name QuickBooks had put in quotes kept them.** QuickBooks writes a field

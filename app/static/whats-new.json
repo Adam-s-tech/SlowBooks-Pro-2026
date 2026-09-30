@@ -1,4 +1,12 @@
 {
+  "2.18.2": {
+    "title": "Every field says its name",
+    "items": [
+      "Screen readers: every form field is announced with its label, a required field as required, and a cell in a grid of inputs (a budget, a batch of payments) with its column and row; a row's checkbox says what ticking it does; clicking a label puts the cursor in its field (#198)",
+      "QuickBooks Interop: an import that came back with errors says so in red, with the count, instead of a green \"Imported 0 records\" (#197)",
+      "AI Insights: Anthropic Claude and xAI Grok come first in the provider list (#200)"
+    ]
+  },
   "2.18.1": {
     "title": "Names from QuickBooks come across clean",
     "items": [
