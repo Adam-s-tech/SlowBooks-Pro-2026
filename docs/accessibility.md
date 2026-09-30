@@ -11,7 +11,7 @@ barrier as a bug.
 *The same screen in both themes. Switch with the theme button in the toolbar,
 or Alt+D.*
 
-## What is in place (v2.18.2)
+## What is in place (v2.19.0)
 
 ### Contrast, in both themes
 
@@ -30,6 +30,10 @@ or Alt+D.*
 
 ### Screen readers and keyboards
 
+- **The pickers search as you type** (v2.19.0): each is a WAI-ARIA 1.2
+  combobox, so a screen reader hears its name, how many names match as you
+  type, and the highlighted one. The arrow keys move through the list, Enter
+  or Tab takes a name, and Escape backs out.
 - **Every form field has a name a screen reader can say** (v2.18.2, #198):
   a form's label is tied to its field (clicking the label puts the cursor in
   the field), a required field is read as required rather than as "star",

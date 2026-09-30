@@ -1,4 +1,12 @@
 {
+  "2.19.0": {
+    "title": "Type to find it",
+    "items": [
+      "Pickers: type part of a name to find it, in the customer, vendor, item, account, employee, job and class pickers and any long list; \"6500\" finds 6500 Rent or Lease, and Enter, Tab or a click takes it",
+      "+ New Customer and + New Vendor stay in the list, and chosen after typing a name that isn't there, the quick add opens with that name filled in",
+      "Screen readers hear each picker by its label, how many names match, and the highlighted one"
+    ]
+  },
   "2.18.2": {
     "title": "Every field says its name",
     "items": [

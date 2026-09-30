@@ -7,6 +7,32 @@ on what the software does, not on what sprint shipped what.
 
 ## [Unreleased]
 
+### v2.19.0 — Type to find it
+
+**The pickers search as you type**, as QuickBooks' do. Type part of a name
+into a customer, vendor, item, account, employee, job, class or fund picker,
+or any list of 15 or more, and the list narrows to what matches: "harb"
+finds Harbor Light Bakery, "6500" finds 6500 Rent or Lease. Every word typed
+has to appear in the name; names that start with it come first, and the
+matching part is in bold. Enter, Tab or a click takes the highlighted name,
+Escape backs out, and a name typed in full is taken when you leave the box
+(#207).
+- "+ New Customer" and "+ New Vendor" stay in the list. Chosen after typing
+  a name that isn't there, the quick add opens with that name filled in.
+- A required picker left empty stops the save with "Choose one from the
+  list." A read-only sign-in sees the pickers locked, as before.
+- Screen readers hear each picker by its label (#198), how many names match
+  as you type, and the highlighted one. The list follows the WAI-ARIA 1.2
+  combobox pattern, and its text meets AA contrast in both themes.
+- Behind the box the picker is still the same `<select>`: every form reads it
+  as before, and whatever changes it shows in the box.
+
+**Windows builds pin pythonnet 3.2.0** (#208), the library pywebview's window
+runs on. pywebview asks for it unpinned, so 2.18.1 was built on 3.1.0 and
+2.18.2 on 3.2.0; every build now gets the version the gate ran.
+
+No schema change. 545 operations.
+
 ### v2.18.2 — Every field says its name
 
 **A screen reader says what each field is.** Most forms put a label beside its

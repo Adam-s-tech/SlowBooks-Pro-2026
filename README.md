@@ -54,6 +54,12 @@ Details, known gaps and how to report a barrier:
 
 ## What's New
 
+**v2.19 — Type to find it.** The pickers search as you type, as QuickBooks'
+do: a customer, vendor, item, account, employee, job or class picker, or any
+long list, narrows to what matches ("6500" finds 6500 Rent or Lease), and
+"+ New Customer" opens its quick add with the name you typed. Screen readers
+hear the picker's name, the number of matches and the highlighted one.
+
 **v2.18 — Around the ledger.** Two of the QA agents each ran a brand-new
 company for a day through the screens and checked every figure against the
 ledger; this release fixes all sixty-eight things they found around it.
