@@ -77,7 +77,8 @@ capitalization (#195, @TheLocalW), imports the lines QuickBooks posts to a
 sub-account, and keeps the permit form's format note off its boxes (#194,
 @cnbarry1). 2.18.2 gives every form field a name a screen reader can say
 (#198), says so when an import comes back with errors (#197), and lists
-Claude and Grok first among the AI providers (#200).
+Claude and Grok first among the AI providers, with Claude on Sonnet 5.5
+(#200).
 
 **v2.17 — Your ledger, in a spreadsheet.** Trial Balance and General Ledger
 save as a CSV and a printable PDF, and Profit & Loss and Balance Sheet gain

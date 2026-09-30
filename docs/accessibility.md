@@ -34,8 +34,9 @@ or Alt+D.*
   a form's label is tied to its field (clicking the label puts the cursor in
   the field), a required field is read as required rather than as "star",
   a field in a grid of inputs is named from its column and row ("Jan, 6500
-  Rent or Lease"), and a checkbox that starts a row says what ticking it
-  does ("Pay invoice 1001"). Fields with the same label in different parts
+  Rent or Lease"), a checkbox that starts a row says what ticking it
+  does ("Pay invoice 1001"), and a field with only a placeholder, like a
+  search box, takes it as its name (VoiceOver reads it that way too). Fields with the same label in different parts
   of a screen sit in groups named after their headings (Billing Address,
   Shipping Address). `tests/test_field_names.py` sweeps every page and
   dialog, a nonprofit's included, for a field without a name (2.18.1 had

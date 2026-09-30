@@ -33,11 +33,15 @@ say (#198). Every field has one now, wherever a page or dialog draws it:
   four tax forms' Year;
 - the few fields with nothing beside them to borrow from (the status and
   other filters, file choosers, the job page's period) are named where
-  they're drawn.
+  they're drawn;
+- a field whose only words are its placeholder, like the search boxes and
+  a quick add's Email and Phone, takes them as its name. Chromium read
+  placeholders as names already, but WebKit, and so VoiceOver on the Mac,
+  doesn't.
 
 A browser test sweeps every page, every dialog, the reconcile screen and a
-nonprofit's own pages for a field with no name, and for two fields with one
-name in one group.
+nonprofit's own pages for a field with no name, a field named only by its
+placeholder, and two fields with one name in one group.
 
 **An import that hit errors says so.** The QuickBooks Interop page ended every
 import with a green "Imported 0 records" and "Import complete", even when the
@@ -47,9 +51,11 @@ below", and the status bar says "Import finished with errors" (#197). The
 report-CSV import on the same page did the same, and is fixed too.
 
 **Claude and Grok come first in the AI provider list** (Settings → AI
-Insights), side by side, as the docs and the website list them (#200). An
-install that hasn't chosen a provider starts on Claude; a saved choice is
-kept.
+Insights) and in the sentence above it, side by side, as the docs and the
+website list them (#200). An install that hasn't chosen a provider starts on
+Claude; a saved choice is kept. Claude's models move to the current
+generation: Opus 5.5, Sonnet 5.5 and Haiku 4.5, with Sonnet 5.5 the default
+(it was Sonnet 4.6). A model you saved before is kept, shown as Custom.
 
 **Docs.** The accessibility statement (`docs/accessibility.md`) describes
 2.18's contrast work and how it's checked; `docs/development.md` counts the
