@@ -52,7 +52,7 @@ const OpeningBalancesPage = {
                     <label style="font-size:11px;">
                         <input type="checkbox" id="ob-auto-balance" data-write> Auto-balance to
                     </label>
-                    <select id="ob-equity-account" data-write>${equityOpts}</select>
+                    <select id="ob-equity-account" aria-label="Account to auto-balance to" data-write>${equityOpts}</select>
                 </div>
                 <div class="form-actions" style="margin-top:12px;" data-write>
                     <button class="btn btn-primary" onclick="OpeningBalancesPage.save()">Post Opening Balances</button>

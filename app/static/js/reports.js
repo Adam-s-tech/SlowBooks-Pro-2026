@@ -678,7 +678,7 @@ const ReportsPage = {
                 <div style="margin-bottom:12px; display:flex; gap:8px;" data-write>
                     <button class="btn btn-sm btn-secondary" onclick="ReportsPage.applyLateFees()">Apply Late Fees</button>
                     <button class="btn btn-sm btn-secondary" onclick="ReportsPage.batchEmailStatements()">Email All Overdue</button>
-                    <select id="collection-letter-type" style="font-size:11px; padding:2px 6px;">
+                    <select id="collection-letter-type" aria-label="Collection letter" style="font-size:11px; padding:2px 6px;">
                         <option value="30">30-Day Letter</option>
                         <option value="60">60-Day Letter</option>
                         <option value="90">90-Day Letter</option>

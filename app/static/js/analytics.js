@@ -835,7 +835,7 @@ const AnalyticsPage = {
             </optgroup>`,
         )
         .join("");
-      dropdown = `<select id="ai-actions-select" ${busy ? "disabled" : ""}>
+      dropdown = `<select id="ai-actions-select" aria-label="Analysis" ${busy ? "disabled" : ""}>
             <option value="" disabled${selected ? "" : " selected"}>Choose an analysis…</option>
             ${opts}
         </select>`;

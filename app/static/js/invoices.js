@@ -271,7 +271,7 @@ const InvoicesPage = {
             <div style="margin-top:16px; border-top:1px solid var(--gray-200); padding-top:12px;">
                 <h3 style="font-size:13px; margin-bottom:8px;">Attachments</h3>
                 <div id="inv-attachments-list" style="margin-bottom:8px; font-size:11px;">Loading...</div>
-                <input type="file" id="inv-attach-file" style="font-size:11px;">
+                <input type="file" id="inv-attach-file" aria-label="File to attach" style="font-size:11px;">
                 <button class="btn btn-sm btn-secondary" onclick="InvoicesPage.uploadAttachment(${inv.id})" style="margin-left:4px;">Upload</button>
             </div>
             <div class="form-actions">

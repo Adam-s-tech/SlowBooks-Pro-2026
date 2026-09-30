@@ -147,7 +147,7 @@ const SettingsPage = {
                         <div class="form-group">
                             ${s.company_logo_path && !(logo && logo.missing) ? `<img id="company-logo-preview" src="${escapeHtml(s.company_logo_path)}" style="max-width:200px; max-height:80px; margin-bottom:8px; display:block;">` : ''}
                             ${SettingsPage._logoNote(logo)}
-                            ${SettingsPage._isAdmin() ? `<input type="file" id="logo-upload" data-admin accept="image/*" onchange="SettingsPage.uploadLogo(this)">
+                            ${SettingsPage._isAdmin() ? `<input type="file" id="logo-upload" aria-label="Logo image" data-admin accept="image/*" onchange="SettingsPage.uploadLogo(this)">
                             ${s.company_logo_path ? `<button type="button" class="btn btn-sm btn-secondary" data-admin data-write style="margin-left:6px;" onclick="SettingsPage.removeLogo()">Remove logo</button>` : ''}
                             <div data-admin style="font-size:10px; color:var(--text-muted); margin-top:4px;">PNG, JPG, GIF, WebP, or SVG &middot; max 5 MB &middot; 200&times;80 px recommended.</div>`
                             : `<div id="logo-admin-only" style="font-size:10px; color:var(--text-muted);">Only an administrator can change the logo.</div>`}
@@ -475,12 +475,12 @@ const SettingsPage = {
                     <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;" data-write>
                         <input type="text" id="new-cc-code" placeholder="Code" style="width:90px;">
                         <input type="text" id="new-cc-name" placeholder="Name" style="width:220px;">
-                        <select id="new-cc-type">
+                        <select id="new-cc-type" aria-label="Cost code type">
                             <option value="labor">Labor</option><option value="material">Material</option>
                             <option value="subcontract">Subcontract</option><option value="equipment">Equipment</option>
                             <option value="other" selected>Other</option>
                         </select>
-                        <select id="new-cc-parent"><option value="">(top level)</option></select>
+                        <select id="new-cc-parent" aria-label="Parent cost code"><option value="">(top level)</option></select>
                         <button type="button" class="btn btn-primary" onclick="SettingsPage.addCostCode()">Add Cost Code</button>
                         <button type="button" class="btn btn-secondary" onclick="SettingsPage.loadStandardCostCodes()" title="CSI MasterFormat divisions + Labor + Equipment Rental">Load standard list</button>
                         <button type="button" class="btn btn-secondary" onclick="SettingsPage.showCostCodeImport()">Import CSV</button>
