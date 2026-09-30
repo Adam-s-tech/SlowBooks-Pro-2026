@@ -359,13 +359,15 @@ PERMIT_NOTE_CLEAR = """() => {
     if (!note.textContent.trim()) out.push('the note is empty');
     for (const el of document.querySelectorAll('#modal-body input, #modal-body select, #modal-body textarea')) {
         if (el.offsetParent === null || el.type === 'checkbox') continue;
+        // a type-ahead picker's select is out of sight: its box is the field
+        if (el.closest('[aria-hidden="true"]')) continue;
         const r = el.getBoundingClientRect();
         if (n.top < r.bottom - 0.5 && n.bottom > r.top + 0.5 && n.left < r.right && n.right > r.left) {
-            out.push(`the note covers ${el.name}`);
+            out.push(`the note covers ${el.name || el.id}`);
         }
         // a click on the box's lower part reaches the box
         const hit = document.elementFromPoint(r.left + r.width / 2, r.bottom - 3);
-        if (hit !== el) out.push(`a click low on ${el.name} lands on ${hit && (hit.id || hit.tagName)}`);
+        if (hit !== el) out.push(`a click low on ${el.name || el.id} lands on ${hit && (hit.id || hit.tagName)}`);
     }
     return out;
 }"""

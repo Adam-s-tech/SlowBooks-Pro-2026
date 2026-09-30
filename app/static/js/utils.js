@@ -848,7 +848,9 @@ function _nameFromHint(field) {
 
 function nameFields(root = document) {
     for (const field of root.querySelectorAll(_FIELD_SEL)) {
-        if (_ownName(field)) continue;
+        // out of the accessibility tree (a type-ahead picker's select,
+        // whose box carries the name): nothing to name
+        if (_ownName(field) || field.closest('[aria-hidden="true"]')) continue;
         const group = field.closest('.form-group');
         const label = group && [...group.querySelectorAll('label')].find(l => !l.querySelector(_FIELD_SEL));
         const before = field.previousElementSibling;

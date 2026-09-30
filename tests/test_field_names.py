@@ -74,6 +74,7 @@ UNNAMED = r"""(rootSel) => {
     const out = [];
     for (const el of root.querySelectorAll(sel)) {
         if (!el.getClientRects().length) continue;  // not shown
+        if (el.closest('[aria-hidden="true"]')) continue;  // not in the tree: a type-ahead's select
         if (nameOf(el)) continue;
         const group = el.closest('.form-group, td, th, label, div');
         const near = group ? text(group).slice(0, 40) : '';
@@ -116,6 +117,7 @@ SHARED = r"""(rootSel) => {
     const seen = {};
     for (const el of root.querySelectorAll(sel)) {
         if (!rootSel && el.closest('#modal')) continue;
+        if (el.closest('[aria-hidden="true"]')) continue;
         const name = nameOf(el);
         if (!name) continue;
         const key = [groupOf(el), name].filter(Boolean).join(' / ');
@@ -135,6 +137,7 @@ HINT_ONLY = r"""(rootSel) => {
     const out = [];
     for (const el of root.querySelectorAll(sel)) {
         if (!rootSel && el.closest('#modal')) continue;
+        if (el.closest('[aria-hidden="true"]')) continue;
         if ((el.labels && el.labels.length) || el.getAttribute('aria-label')
             || el.getAttribute('aria-labelledby')) continue;
         const hint = (el.getAttribute('title')
