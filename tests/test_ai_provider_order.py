@@ -22,6 +22,23 @@ def test_a_new_install_starts_on_the_first_and_a_saved_choice_is_kept():
     assert "cfg.provider || (providers[0] && providers[0].key)" in js
 
 
+def test_the_help_text_names_them_first_too():
+    # the sentence above the picker listed Claude fourth
+    js = (ROOT / "app" / "static" / "js" / "settings.js").read_text(encoding="utf-8")
+    assert "access to Anthropic Claude, xAI Grok, Groq," in js
+
+
+def test_claude_starts_on_a_current_model():
+    # a new company starts on Claude, so Claude's default is what most get
+    spec = PROVIDERS["anthropic"]
+    assert spec.default_model == "claude-sonnet-5-5"
+    assert spec.model_choices == (
+        "claude-opus-5-5",
+        "claude-sonnet-5-5",
+        "claude-haiku-4-5-20251001",
+    )
+
+
 def test_the_ai_config_lists_them_in_that_order(client):
     body = client.get("/api/analytics/ai-config").json()
     assert [p["key"] for p in body["providers"]][:2] == ["anthropic", "grok"]

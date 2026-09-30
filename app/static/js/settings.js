@@ -367,7 +367,7 @@ const SettingsPage = {
                 <div class="settings-section" id="settings-ai">
                     <h3>AI Insights</h3>
                     <div style="font-size:10px; color:var(--text-muted); margin-bottom:8px;">
-                        Bring-your-own-key access to xAI Grok, Groq, Cloudflare Workers AI, Anthropic Claude, OpenAI, or Google Gemini.
+                        Bring-your-own-key access to Anthropic Claude, xAI Grok, Groq, Cloudflare Workers AI, OpenAI, or Google Gemini.
                         Used by the Analytics dashboard to generate observations, risks, and recommendations.
                         API keys are encrypted at rest with Fernet (AES-128-CBC + HMAC-SHA256).
                     </div>

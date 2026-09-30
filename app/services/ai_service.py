@@ -252,13 +252,15 @@ PROVIDERS: Dict[str, ProviderSpec] = {
     "anthropic": ProviderSpec(
         key="anthropic",
         label="Anthropic Claude",
-        default_model="claude-sonnet-4-6",
+        # Claude 5: a new company starts here, so on a current model. A
+        # model saved before (Sonnet 4.6, say) is kept, shown as Custom.
+        default_model="claude-sonnet-5-5",
         wire_format="anthropic",
         docs_url="https://console.anthropic.com/",
         free_tier_hint="Paid only (no free tier)",
         model_choices=(
-            "claude-opus-4-7",
-            "claude-sonnet-4-6",
+            "claude-opus-5-5",
+            "claude-sonnet-5-5",
             "claude-haiku-4-5-20251001",
         ),
     ),

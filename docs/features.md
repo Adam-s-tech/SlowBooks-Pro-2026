@@ -161,7 +161,7 @@ An optional LLM layer sits on top of the analytics snapshot and produces a compa
 
 | Provider | Wire format | Default model | Free tier |
 |---|---|---|---|
-| **Anthropic Claude** | `/v1/messages` | `claude-sonnet-4-6` | Paid only |
+| **Anthropic Claude** | `/v1/messages` | `claude-sonnet-5-5` | Paid only |
 | **xAI Grok** | OpenAI-compat | `grok-4-fast` | $25 signup credit |
 | **Groq (LPU Cloud)** | OpenAI-compat | `llama-3.3-70b-versatile` | Generous free tier, no card |
 | **Cloudflare Workers AI** | OpenAI-compat | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | 10k neurons/day, no card |
