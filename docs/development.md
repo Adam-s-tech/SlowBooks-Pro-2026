@@ -105,7 +105,7 @@ SlowBooks-Pro-2026/
 │       │   ├── style.css     # QB2003 "Default Blue" skin
 │       │   └── dark.css      # Dark mode CSS overrides
 │       └── js/               # SPA router, API wrapper, 40+ page modules
-│           ├── app.js              # Main SPA router with 40 routes
+│           ├── app.js              # Main SPA router with 64 routes
 │           ├── api.js              # HTTP wrapper (API.get/post/put/del)
 │           ├── employees.js        # Employee CRUD + Details modal
 │           ├── onboarding.js       # Onboarding checklists + e-signature
