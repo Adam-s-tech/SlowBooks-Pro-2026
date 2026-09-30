@@ -265,7 +265,7 @@ const BillsPage = {
         const acctOpts = PurchaseAccounts.options(BillsPage._accounts, BillsPage._defaultExpenseAccountId);
         return `<tr data-billline="${idx}">
                 <td><select class="line-item" onchange="BillsPage.itemSelected(this)"><option value="">--</option>${itemOpts}</select></td>
-                <td><select class="line-account" aria-label="Account"><option value="">Choose...</option>${acctOpts}</select></td>
+                <td><select class="line-account"><option value="">Choose...</option>${acctOpts}</select></td>
                 <td><input class="line-desc"></td>
                 ${CostCodes.cellHtml('line-cost-code')}${Nonprofit.cellHtml('line-function')}
                 <td style="text-align:center;"><input type="checkbox" class="line-billable" title="Billable"></td>

@@ -835,27 +835,42 @@ function _hint(el) {
     return (el.getAttribute('title') || (el.tagName !== 'SELECT' && el.getAttribute('placeholder')) || '').trim();
 }
 
+// Chromium reads a placeholder or title as a field's name; WebKit, and so
+// VoiceOver on the Mac, doesn't. Where that's all a field has ("Email", the
+// search boxes), it becomes the name, a trailing "*" read as required.
+function _nameFromHint(field) {
+    const hint = _hint(field);
+    if (!hint) return;
+    const m = hint.match(/^(.*?)\s*\*\s*$/s);
+    field.setAttribute('aria-label', m ? m[1] : hint);
+    if (m && !field.required) field.setAttribute('aria-required', 'true');
+}
+
 function nameFields(root = document) {
     for (const field of root.querySelectorAll(_FIELD_SEL)) {
         if (_ownName(field)) continue;
         const group = field.closest('.form-group');
         const label = group && [...group.querySelectorAll('label')].find(l => !l.querySelector(_FIELD_SEL));
+        const before = field.previousElementSibling;
         if (label) {
             // The label names the group's first field. Another field in the
             // group that has a placeholder of its own keeps it: a quick add's
             // "Email" and "Phone" under Customer aren't called "Customer" too.
-            if (!(label.htmlFor && label.htmlFor !== field.id && _hint(field))) _tieLabel(label, field);
-            continue;
-        }
-        const before = field.previousElementSibling;
-        if (before && before.tagName === 'LABEL' && !before.htmlFor && !before.querySelector(_FIELD_SEL)) {
+            if (!(label.htmlFor && label.htmlFor !== field.id && _hint(field))) {
+                _tieLabel(label, field);
+                continue;
+            }
+        } else if (before && before.tagName === 'LABEL' && !before.htmlFor && !before.querySelector(_FIELD_SEL)) {
             _tieLabel(before, field);
             continue;
-        }
-        if (field.closest('td')) {
+        } else if (field.closest('td')) {
             const name = _gridName(field);
-            if (name) field.setAttribute('aria-label', name);
+            if (name) {
+                field.setAttribute('aria-label', name);
+                continue;
+            }
         }
+        _nameFromHint(field);
     }
 }
 
