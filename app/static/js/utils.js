@@ -830,12 +830,23 @@ function _gridName(field) {
     return [heading, rowName].filter(Boolean).join(', ');
 }
 
+// A placeholder or title: a name, if nothing better is found.
+function _hint(el) {
+    return (el.getAttribute('title') || (el.tagName !== 'SELECT' && el.getAttribute('placeholder')) || '').trim();
+}
+
 function nameFields(root = document) {
     for (const field of root.querySelectorAll(_FIELD_SEL)) {
         if (_ownName(field)) continue;
         const group = field.closest('.form-group');
         const label = group && [...group.querySelectorAll('label')].find(l => !l.querySelector(_FIELD_SEL));
-        if (label) { _tieLabel(label, field); continue; }
+        if (label) {
+            // The label names the group's first field. Another field in the
+            // group that has a placeholder of its own keeps it: a quick add's
+            // "Email" and "Phone" under Customer aren't called "Customer" too.
+            if (!(label.htmlFor && label.htmlFor !== field.id && _hint(field))) _tieLabel(label, field);
+            continue;
+        }
         const before = field.previousElementSibling;
         if (before && before.tagName === 'LABEL' && !before.htmlFor && !before.querySelector(_FIELD_SEL)) {
             _tieLabel(before, field);

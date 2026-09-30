@@ -255,7 +255,7 @@ const VendorQuickAdd = {
                 <option value="">Select...</option><option value="${this.NEW}">+ New Vendor</option>${opts}</select>
             <div id="${id}-new" style="display:none; margin-top:8px; padding:8px; border:1px solid var(--gray-300); border-radius:4px; background:var(--primary-light);">
                 <div style="font-weight:700; font-size:11px; margin-bottom:6px;">Quick Add Vendor</div>
-                <input id="${id}-new-name" placeholder="Name *" style="width:100%; margin-bottom:4px; padding:4px 8px; border:1px solid var(--gray-300); border-radius:4px;">
+                <input id="${id}-new-name" placeholder="Name *" aria-label="Vendor name" aria-required="true" style="width:100%; margin-bottom:4px; padding:4px 8px; border:1px solid var(--gray-300); border-radius:4px;">
                 <div style="display:flex; gap:6px;">
                     <button type="button" class="btn btn-sm btn-primary" onclick="VendorQuickAdd.save('${id}')">Save</button>
                     <button type="button" class="btn btn-sm btn-secondary" onclick="VendorQuickAdd.cancel('${id}')">Cancel</button>

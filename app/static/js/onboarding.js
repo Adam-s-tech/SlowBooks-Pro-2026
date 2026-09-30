@@ -90,7 +90,7 @@ const OnboardingPage = {
             const signable = this._signableTasks.has(t.task_type);
             const signedChk = signable
                 ? `<label style="font-size:.85em;white-space:nowrap">
-                       <input type="checkbox" ${t.signed ? 'checked' : ''}
+                       <input type="checkbox" ${t.signed ? 'checked' : ''} aria-label="Signed, ${label}"
                            onchange="OnboardingPage.signTask(${t.id}, this.checked, ${empId})">
                        Signed
                    </label>`
