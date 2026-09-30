@@ -134,7 +134,8 @@ jobs:
           # +3: tests/test_theme_contrast.py, tests/test_dialog_contrast.py and
           # tests/test_readonly_browser.py each skip as one module without playwright, as
           # tests/test_browser_ui.py does.
-          MAX_SKIPS: "97"
+          # +1: tests/test_field_names.py (#198) skips as one module without playwright too.
+          MAX_SKIPS: "98"
         shell: pwsh
         run: |
           # -v names each test as it starts, so a mid-run death is identified
