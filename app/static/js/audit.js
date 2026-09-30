@@ -19,10 +19,10 @@ const AuditPage = {
                 </div>
             </div>
             <div class="toolbar">
-                <select id="audit-table" onchange="AuditPage.load()">
+                <select id="audit-table" aria-label="Table" onchange="AuditPage.load()">
                     <option value="">All Tables</option>${tableOpts}
                 </select>
-                <select id="audit-action" onchange="AuditPage.load()">
+                <select id="audit-action" aria-label="Action" onchange="AuditPage.load()">
                     <option value="">All Actions</option>
                     <option value="INSERT">INSERT</option>
                     <option value="UPDATE">UPDATE</option>

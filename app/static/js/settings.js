@@ -108,8 +108,8 @@ const SettingsPage = {
             <form id="settings-form" data-admin-fields onsubmit="SettingsPage.save(event)"
                 oninput="SettingsPage._updateDirty()" onchange="SettingsPage._updateDirty()">
                 <div class="hint hint--locked hidden" data-admin-note style="margin-bottom:10px;">Company settings are changed by an administrator.</div>
-                <div class="settings-section">
-                    <h3>Company Information</h3>
+                <div class="settings-section" role="group" aria-labelledby="settings-h-company-information">
+                    <h3 id="settings-h-company-information">Company Information</h3>
                     <div class="form-grid">
                         <div class="form-group full-width"><label>Company Name *</label>
                             <input name="company_name" value="${escapeHtml(s.company_name || '')}" required></div>
@@ -141,13 +141,13 @@ const SettingsPage = {
                     </div>
                 </div>
 
-                <div class="settings-section">
-                    <h3>Company Logo</h3>
+                <div class="settings-section" role="group" aria-labelledby="settings-h-company-logo">
+                    <h3 id="settings-h-company-logo">Company Logo</h3>
                     <div class="form-grid">
                         <div class="form-group">
                             ${s.company_logo_path && !(logo && logo.missing) ? `<img id="company-logo-preview" src="${escapeHtml(s.company_logo_path)}" style="max-width:200px; max-height:80px; margin-bottom:8px; display:block;">` : ''}
                             ${SettingsPage._logoNote(logo)}
-                            ${SettingsPage._isAdmin() ? `<input type="file" id="logo-upload" data-admin accept="image/*" onchange="SettingsPage.uploadLogo(this)">
+                            ${SettingsPage._isAdmin() ? `<input type="file" id="logo-upload" aria-label="Logo image" data-admin accept="image/*" onchange="SettingsPage.uploadLogo(this)">
                             ${s.company_logo_path ? `<button type="button" class="btn btn-sm btn-secondary" data-admin data-write style="margin-left:6px;" onclick="SettingsPage.removeLogo()">Remove logo</button>` : ''}
                             <div data-admin style="font-size:10px; color:var(--text-muted); margin-top:4px;">PNG, JPG, GIF, WebP, or SVG &middot; max 5 MB &middot; 200&times;80 px recommended.</div>`
                             : `<div id="logo-admin-only" style="font-size:10px; color:var(--text-muted);">Only an administrator can change the logo.</div>`}
@@ -162,8 +162,8 @@ const SettingsPage = {
                     </div>
                 </div>
 
-                <div class="settings-section">
-                    <h3>${T('Invoice')} Defaults</h3>
+                <div class="settings-section" role="group" aria-labelledby="settings-h-invoice-defaults">
+                    <h3 id="settings-h-invoice-defaults">${T('Invoice')} Defaults</h3>
                     <div class="form-grid">
                         <div class="form-group"><label>Default Terms</label>
                             <select name="default_terms">
@@ -201,8 +201,8 @@ const SettingsPage = {
                 <!-- Desktop app only (shown by loadSignInPref); the session used
                      to outlive the app, so a relaunch reopened the company
                      without its password (explore 2.17.3, macbase1 S-j). -->
-                <div class="settings-section" id="settings-sign-in" hidden>
-                    <h3>Sign-in</h3>
+                <div class="settings-section" id="settings-sign-in" hidden role="group" aria-labelledby="settings-h-sign-in">
+                    <h3 id="settings-h-sign-in">Sign-in</h3>
                     <div class="form-grid">
                         <div class="form-group full-width">
                             <label for="ask-password-on-start">Ask for the password each time SlowBooks Pro starts</label>
@@ -217,8 +217,8 @@ const SettingsPage = {
                     </div>
                 </div>
 
-                <div class="settings-section" id="settings-closing-date">
-                    <h3>Closing Date</h3>
+                <div class="settings-section" id="settings-closing-date" role="group" aria-labelledby="settings-h-closing-date">
+                    <h3 id="settings-h-closing-date">Closing Date</h3>
                     <div style="font-size:10px; color:var(--text-muted); margin-bottom:8px;">
                         Prevent modifications to transactions before this date.
                     </div>
@@ -245,8 +245,8 @@ const SettingsPage = {
                     </div>
                 </div>
 
-                <div class="settings-section">
-                    <h3>Email (SMTP)</h3>
+                <div class="settings-section" role="group" aria-labelledby="settings-h-email-smtp">
+                    <h3 id="settings-h-email-smtp">Email (SMTP)</h3>
                     <div style="font-size:10px; color:var(--text-muted); margin-bottom:8px;">
                         Configure SMTP for sending invoices by email.
                     </div>
@@ -273,14 +273,14 @@ const SettingsPage = {
                         Send Test Email</button>
                 </div>
 
-                <div class="settings-section">
-                    <h3>Online Payments</h3>
+                <div class="settings-section" role="group" aria-labelledby="settings-h-online-payments">
+                    <h3 id="settings-h-online-payments">Online Payments</h3>
                     <div style="font-size:10px; color:var(--text-muted); margin-bottom:8px;">
                         Accept online payments on emailed invoice links. Enable any combination of
                         providers — the customer pay page shows one button per enabled provider.
                     </div>
-                    <h4 style="margin:8px 0 4px; font-size:12px;">Stripe</h4>
-                    <div class="form-grid">
+                    <h4 id="settings-h-stripe" style="margin:8px 0 4px; font-size:12px;">Stripe</h4>
+                    <div class="form-grid" role="group" aria-labelledby="settings-h-stripe">
                         <div class="form-group"><label>Stripe Payments</label>
                             <select name="stripe_enabled">
                                 <option value="false" ${s.stripe_enabled !== 'true' ? 'selected' : ''}>Disabled</option>
@@ -293,8 +293,8 @@ const SettingsPage = {
                         <div class="form-group"><label>Webhook Secret</label>
                             <input name="stripe_webhook_secret" type="password" value="${escapeHtml(s.stripe_webhook_secret || '')}" placeholder="whsec_..."></div>
                     </div>
-                    <h4 style="margin:12px 0 4px; font-size:12px;">PayPal</h4>
-                    <div class="form-grid">
+                    <h4 id="settings-h-paypal" style="margin:12px 0 4px; font-size:12px;">PayPal</h4>
+                    <div class="form-grid" role="group" aria-labelledby="settings-h-paypal">
                         <div class="form-group"><label>PayPal Payments</label>
                             <select name="paypal_enabled">
                                 <option value="false" ${s.paypal_enabled !== 'true' ? 'selected' : ''}>Disabled</option>
@@ -313,8 +313,8 @@ const SettingsPage = {
                             <input name="paypal_webhook_id" value="${escapeHtml(s.paypal_webhook_id || '')}"
                                 placeholder="From the PayPal developer dashboard"></div>
                     </div>
-                    <h4 style="margin:12px 0 4px; font-size:12px;">Square</h4>
-                    <div class="form-grid">
+                    <h4 id="settings-h-square" style="margin:12px 0 4px; font-size:12px;">Square</h4>
+                    <div class="form-grid" role="group" aria-labelledby="settings-h-square">
                         <div class="form-group"><label>Square Payments</label>
                             <select name="square_enabled">
                                 <option value="false" ${s.square_enabled !== 'true' ? 'selected' : ''}>Disabled</option>
@@ -337,8 +337,8 @@ const SettingsPage = {
                     </div>
                 </div>
 
-                <div class="settings-section">
-                    <h3>QuickBooks Online</h3>
+                <div class="settings-section" role="group" aria-labelledby="settings-h-quickbooks-online">
+                    <h3 id="settings-h-quickbooks-online">QuickBooks Online</h3>
                     <div style="font-size:10px; color:var(--text-muted); margin-bottom:8px;">
                         Configure your Intuit Developer app credentials for QBO integration.
                         Get these from <a href="https://developer.intuit.com" target="_blank" style="color:var(--text-link);">developer.intuit.com</a>.
@@ -364,8 +364,8 @@ const SettingsPage = {
                     </div>
                 </div>
 
-                <div class="settings-section" id="settings-ai">
-                    <h3>AI Insights</h3>
+                <div class="settings-section" id="settings-ai" role="group" aria-labelledby="settings-h-ai-insights">
+                    <h3 id="settings-h-ai-insights">AI Insights</h3>
                     <div style="font-size:10px; color:var(--text-muted); margin-bottom:8px;">
                         Bring-your-own-key access to xAI Grok, Groq, Cloudflare Workers AI, Anthropic Claude, OpenAI, or Google Gemini.
                         Used by the Analytics dashboard to generate observations, risks, and recommendations.
@@ -376,8 +376,8 @@ const SettingsPage = {
                     </div>
                 </div>
 
-                <div class="settings-section" id="settings-ocr">
-                    <h3>Receipt Scanning</h3>
+                <div class="settings-section" id="settings-ocr" role="group" aria-labelledby="settings-h-receipt-scanning">
+                    <h3 id="settings-h-receipt-scanning">Receipt Scanning</h3>
                     <div style="font-size:10px; color:var(--text-muted); margin-bottom:8px;">
                         ${Terms.text('Local OCR for the Scan Receipt button on the Enter Sales Receipt and Enter Bill forms.')}
                         Everything runs on this computer — no cloud, no data leaves the machine.
@@ -402,8 +402,8 @@ const SettingsPage = {
                     </div>
                 </div>
 
-                <div class="settings-section">
-                    <h3>Late Fees</h3>
+                <div class="settings-section" role="group" aria-labelledby="settings-h-late-fees">
+                    <h3 id="settings-h-late-fees">Late Fees</h3>
                     <div style="font-size:10px; color:var(--text-muted); margin-bottom:8px;">
                         Automatically apply late fees to overdue invoices. Use "Apply Late Fees" on the AR Aging report.
                     </div>
@@ -420,8 +420,8 @@ const SettingsPage = {
                     </div>
                 </div>
 
-                <div class="settings-section">
-                    <h3>Email Templates</h3>
+                <div class="settings-section" role="group" aria-labelledby="settings-h-email-templates">
+                    <h3 id="settings-h-email-templates">Email Templates</h3>
                     <div style="font-size:10px; color:var(--text-muted); margin-bottom:8px;">
                         Customize email templates for invoices, payment receipts, and collection notices.
                         Templates use Jinja2 syntax. Available variables: {{ invoice }}, {{ customer_name }}, {{ company }}, {{ pay_url }}. The donation acknowledgment letter (nonprofit) also gets {{ donor }}, {{ donor_name }}, {{ gift }} and {{ irs.text }}.
@@ -432,8 +432,8 @@ const SettingsPage = {
                     <div id="email-template-list"></div>
                 </div>
 
-                <div class="settings-section">
-                    <h3>${T('Classes')}</h3>
+                <div class="settings-section" role="group" aria-labelledby="settings-h-classes">
+                    <h3 id="settings-h-classes">${T('Classes')}</h3>
                     <div style="font-size:10px; color:var(--text-muted); margin-bottom:8px;">
                         Track income and expenses by department, location, or line of
                         business. ${T('Classes')} appear on entry forms and the ${T('P&L by Class')} report.
@@ -445,8 +445,8 @@ const SettingsPage = {
                     <div id="classes-list"></div>
                 </div>
 
-                <div class="settings-section">
-                    <h3>Cost Types</h3>
+                <div class="settings-section" role="group" aria-labelledby="settings-h-cost-types">
+                    <h3 id="settings-h-cost-types">Cost Types</h3>
                     <div style="font-size:10px; color:var(--text-muted); margin-bottom:8px;">
                         How job costs roll up: labor, material, subcontract, equipment, other — add your own
                         (permits, bonding, warranty…). A labor-type carries a burden % (employer taxes, benefits,
@@ -464,8 +464,8 @@ const SettingsPage = {
                     <div id="cost-types-list"></div>
                 </div>
 
-                <div class="settings-section">
-                    <h3>Cost Codes</h3>
+                <div class="settings-section" role="group" aria-labelledby="settings-h-cost-codes">
+                    <h3 id="settings-h-cost-codes">Cost Codes</h3>
                     <div style="font-size:10px; color:var(--text-muted); margin-bottom:8px;">
                         ${Terms.text('The job-costing chart: which part of a job a cost belongs to')}
                         ("03 Concrete", "26 Electrical"), independent of the account it posts
@@ -475,12 +475,12 @@ const SettingsPage = {
                     <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;" data-write>
                         <input type="text" id="new-cc-code" placeholder="Code" style="width:90px;">
                         <input type="text" id="new-cc-name" placeholder="Name" style="width:220px;">
-                        <select id="new-cc-type">
+                        <select id="new-cc-type" aria-label="Cost code type">
                             <option value="labor">Labor</option><option value="material">Material</option>
                             <option value="subcontract">Subcontract</option><option value="equipment">Equipment</option>
                             <option value="other" selected>Other</option>
                         </select>
-                        <select id="new-cc-parent"><option value="">(top level)</option></select>
+                        <select id="new-cc-parent" aria-label="Parent cost code"><option value="">(top level)</option></select>
                         <button type="button" class="btn btn-primary" onclick="SettingsPage.addCostCode()">Add Cost Code</button>
                         <button type="button" class="btn btn-secondary" onclick="SettingsPage.loadStandardCostCodes()" title="CSI MasterFormat divisions + Labor + Equipment Rental">Load standard list</button>
                         <button type="button" class="btn btn-secondary" onclick="SettingsPage.showCostCodeImport()">Import CSV</button>
@@ -488,8 +488,8 @@ const SettingsPage = {
                     <div id="cost-codes-list"></div>
                 </div>
 
-                <div class="settings-section">
-                    <h3>Equipment</h3>
+                <div class="settings-section" role="group" aria-labelledby="settings-h-equipment">
+                    <h3 id="settings-h-equipment">Equipment</h3>
                     <div style="font-size:10px; color:var(--text-muted); margin-bottom:8px;">
                         ${Terms.text('Owned machines charged to jobs by the hour from a Job Cost Entry.')} The recovery account is
                         the credit side (defaults to the equipment cost type's offset).
@@ -503,8 +503,8 @@ const SettingsPage = {
                     <div id="equipment-list"></div>
                 </div>
 
-                <div class="settings-section" id="settings-backups">
-                    <h3>Backup / Restore</h3>
+                <div class="settings-section" id="settings-backups" role="group" aria-labelledby="settings-h-backup-restore">
+                    <h3 id="settings-h-backup-restore">Backup / Restore</h3>
                     <div style="font-size:10px; color:var(--text-muted); margin-bottom:8px;">
                         Backups of this company only, named for it. Restore replaces everything in this
                         company with the backup; a safety backup of the books as they are is taken first,
@@ -519,8 +519,8 @@ const SettingsPage = {
 
                 ${SettingsPage._isAdmin() ? '<div class="settings-section" id="settings-legacy-files" data-admin hidden></div>' : ''}
 
-                <div class="settings-section" id="settings-users" data-admin style="display:none;">
-                    <h3>Users &mdash; Server Edition</h3>
+                <div class="settings-section" id="settings-users" data-admin style="display:none;" role="group" aria-labelledby="settings-h-users-server-edition">
+                    <h3 id="settings-h-users-server-edition">Users &mdash; Server Edition</h3>
                     <p style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">
                         Add a second user and this deployment becomes
                         <strong>Server Edition</strong>: everyone signs in with a
@@ -545,8 +545,8 @@ const SettingsPage = {
                     <button type="button" class="btn btn-primary" onclick="SettingsPage.createUser()">Add User</button>
                 </div>
 
-                <div class="settings-section" id="settings-api-tokens" data-admin style="display:none;">
-                    <h3>API Tokens &mdash; agents &amp; integrations</h3>
+                <div class="settings-section" id="settings-api-tokens" data-admin style="display:none;" role="group" aria-labelledby="settings-h-api-tokens-agents-integrations">
+                    <h3 id="settings-h-api-tokens-agents-integrations">API Tokens &mdash; agents &amp; integrations</h3>
                     <p style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">
                         Scoped credentials for non-humans: AI agents, the receipt
                         service, scripts. A token wears a role just like a user —
@@ -1846,8 +1846,8 @@ SettingsPage.loadCostTypes = async function () {
                 <td><code>${escapeHtml(t.code)}</code></td>
                 <td><input class="ct-name" value="${escapeHtml(t.name)}" style="width:130px"></td>
                 <td style="text-align:center"><input type="checkbox" class="ct-labor" ${t.is_labor ? 'checked' : ''}></td>
-                <td><input type="number" step="0.01" class="ct-burden" value="${t.burden_pct ?? ''}" style="width:70px" placeholder="%" aria-label="Flat burden percent"></td>
-                <td>${t.is_labor ? `<select class="ct-burden-method" aria-label="Burden method" title="Flat: the % above posts with each time entry. Payroll: the pay run distributes actual employer taxes + job-routed benefit codes by hours — only for stubs built from time entries (Use approved time entries on the pay run); hours typed on a stub leave that employee's burden in the pool.">
+                <td><input type="number" step="0.01" class="ct-burden" value="${t.burden_pct ?? ''}" style="width:70px" placeholder="%" aria-label="Flat burden percent, ${escapeHtml(t.code)}"></td>
+                <td>${t.is_labor ? `<select class="ct-burden-method" aria-label="Burden method, ${escapeHtml(t.code)}" title="Flat: the % above posts with each time entry. Payroll: the pay run distributes actual employer taxes + job-routed benefit codes by hours — only for stubs built from time entries (Use approved time entries on the pay run); hours typed on a stub leave that employee's burden in the pool.">
                     <option value="flat" ${t.burden_method !== 'payroll' ? 'selected' : ''}>Flat %</option>
                     <option value="payroll" ${t.burden_method === 'payroll' ? 'selected' : ''}>Actual payroll</option>
                 </select>` : '—'}</td>

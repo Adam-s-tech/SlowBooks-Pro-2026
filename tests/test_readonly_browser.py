@@ -638,7 +638,8 @@ ADMIN_ON_PAGES = {
         "Restore…",
         "Download",
         "company_name",
-        "logo-upload",
+        # the logo's file picker, by its name (#198: it was known by its id)
+        "Logo image",
         "ocr-engine-pref",
         "Save AI settings",
     },

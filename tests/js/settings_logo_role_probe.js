@@ -23,8 +23,9 @@ const S = ctx.SettingsPage;
   for (const role of ['admin', 'bookkeeper', 'readonly']) {
     ctx.App.role = role;
     const html = await S.render();
-    const start = html.indexOf('<h3>Company Logo</h3>');
-    const section = html.slice(start, html.indexOf('<div class="settings-section">', start));
+    // by its heading's words: the section and its heading carry names for screen readers
+    const start = html.indexOf('>Company Logo</h3>');
+    const section = html.slice(start, html.indexOf('class="settings-section"', start));
     console.log(JSON.stringify({
       role,
       picker: section.includes('id="logo-upload"'),

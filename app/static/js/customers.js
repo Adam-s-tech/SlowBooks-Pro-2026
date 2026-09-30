@@ -287,8 +287,8 @@ const CustomersPage = {
                                 `<option ${c.terms===t?'selected':''}>${escapeHtml(t)}</option>`).join('')}
                         </select></div>
                 </div>
-                <h3 style="margin:16px 0 8px; font-size:14px; color:var(--gray-600);">Billing Address</h3>
-                <div class="form-grid">
+                <h3 id="cust-bill-heading" style="margin:16px 0 8px; font-size:14px; color:var(--gray-600);">Billing Address</h3>
+                <div class="form-grid" role="group" aria-labelledby="cust-bill-heading">
                     <div class="form-group full-width"><label>Address 1</label>
                         <input name="bill_address1" value="${escapeHtml(c.bill_address1 || '')}"></div>
                     <div class="form-group full-width"><label>Address 2</label>
@@ -302,8 +302,8 @@ const CustomersPage = {
                     <div class="form-group"><label>Country</label>
                         <select name="bill_country">${countryOptions(c.bill_country || 'US')}</select></div>
                 </div>
-                <h3 style="margin:16px 0 8px; font-size:14px; color:var(--gray-600);">Shipping Address</h3>
-                <div class="form-grid">
+                <h3 id="cust-ship-heading" style="margin:16px 0 8px; font-size:14px; color:var(--gray-600);">Shipping Address</h3>
+                <div class="form-grid" role="group" aria-labelledby="cust-ship-heading">
                     <div class="form-group full-width"><label>Address 1</label>
                         <input name="ship_address1" value="${escapeHtml(c.ship_address1 || '')}"></div>
                     <div class="form-group full-width"><label>Address 2</label>

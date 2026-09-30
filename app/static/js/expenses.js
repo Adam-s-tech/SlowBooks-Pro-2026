@@ -235,7 +235,7 @@ const ExpensesPage = {
                 <div style="font-weight:700; font-size:12px; margin-bottom:4px;">Attachments</div>
                 <div id="expense-attachments-list" style="margin-bottom:8px; font-size:11px;">Loading...</div>
                 <div style="display:flex; gap:6px; align-items:center;">
-                    <input type="file" id="expense-attach-file" style="font-size:11px;">
+                    <input type="file" id="expense-attach-file" aria-label="File to attach" style="font-size:11px;">
                     <button class="btn btn-sm btn-secondary" onclick="ExpensesPage.uploadAttachment(${x.id})">Attach</button>
                 </div>
             </div>

@@ -101,10 +101,10 @@ const QBOPage = {
                         <div id="qbo-import-why" class="hint" style="margin-top:4px; font-size:11px;" role="status"></div>
                     </div>
 
-                    <div style="font-size:10px; font-weight:700; color:var(--text-secondary); text-transform:uppercase; margin-bottom:6px;" data-write data-admin>
+                    <div style="font-size:10px; font-weight:700; color:var(--text-secondary); text-transform:uppercase; margin-bottom:6px;" data-write data-admin id="qbo-import-types">
                         Import Individual Entity Types
                     </div>
-                    <div id="qbo-import-checkboxes" data-write data-admin style="margin-bottom:8px; font-size:11px;">
+                    <div id="qbo-import-checkboxes" data-write data-admin role="group" aria-labelledby="qbo-import-types" style="margin-bottom:8px; font-size:11px;">
                         ${importCheckboxes}
                     </div>
                     <button class="btn btn-secondary qbo-import-button" data-admin onclick="QBOPage.importSelected()"
@@ -144,10 +144,10 @@ const QBOPage = {
                         </button>
                     </div>
 
-                    <div style="font-size:10px; font-weight:700; color:var(--text-secondary); text-transform:uppercase; margin-bottom:6px;">
+                    <div style="font-size:10px; font-weight:700; color:var(--text-secondary); text-transform:uppercase; margin-bottom:6px;" id="qbo-export-types">
                         Export Individual Entity Types
                     </div>
-                    <div id="qbo-export-checkboxes" style="margin-bottom:8px; font-size:11px;">
+                    <div id="qbo-export-checkboxes" role="group" aria-labelledby="qbo-export-types" style="margin-bottom:8px; font-size:11px;">
                         ${checkboxes}
                     </div>
                     <button class="btn btn-secondary" onclick="QBOPage.exportSelected()"

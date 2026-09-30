@@ -35,7 +35,7 @@ const MigrationPage = {
                     offers one (recommended — enables balance verification). Files are
                     recognized by name; CSV and tab-separated exports both work.
                 </p>
-                <input type="file" id="migration-files" multiple accept=".csv,.txt" onchange="MigrationPage.reset()">
+                <input type="file" id="migration-files" aria-label="Files to import" multiple accept=".csv,.txt" onchange="MigrationPage.reset()">
                 <div class="form-actions" style="margin-top:12px;" data-write>
                     <button class="btn btn-primary" onclick="MigrationPage.dryRun()">Dry Run</button>
                     <button class="btn btn-danger" id="migration-import-btn" disabled onclick="MigrationPage.doImport()">Import</button>

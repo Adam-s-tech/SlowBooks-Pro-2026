@@ -55,7 +55,7 @@ const BatchPaymentsPage = {
                 html += `<tr style="background:var(--toolbar-bg);"><td colspan="6" style="font-weight:700;font-size:11px;padding:3px 10px;">${escapeHtml(cname)}</td></tr>`;
                 for (const inv of invs) {
                     html += `<tr>
-                        <td><input type="checkbox" class="batch-check" data-inv="${inv.id}" data-cust="${inv.customer_id}" data-bal="${inv.balance_due}"></td>
+                        <td><input type="checkbox" class="batch-check" data-inv="${inv.id}" data-cust="${inv.customer_id}" data-bal="${inv.balance_due}" aria-label="Pay ${T('invoice')} ${escapeHtml(inv.invoice_number)}"></td>
                         <td><strong>${escapeHtml(inv.invoice_number)}</strong></td>
                         <td>${escapeHtml(cname)}</td>
                         <td>${formatDate(inv.due_date)}</td>

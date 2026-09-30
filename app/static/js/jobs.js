@@ -67,9 +67,9 @@ const JobsPage = {
             </div>
             <div class="toolbar" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
                 <input type="text" placeholder="${Terms.text('Search jobs...')}" id="job-search" oninput="JobsPage.setFilter('q', this.value)">
-                <select id="job-filter-customer" onchange="JobsPage.setFilter('customer_id', this.value)">
+                <select id="job-filter-customer" aria-label="${Terms.text('Customer')}" onchange="JobsPage.setFilter('customer_id', this.value)">
                     <option value="">${Terms.text('All customers')}</option>${custOpts}</select>
-                <select id="job-filter-status" onchange="JobsPage.setFilter('status', this.value)">
+                <select id="job-filter-status" aria-label="Status" onchange="JobsPage.setFilter('status', this.value)">
                     <option value="">Active jobs</option>${statusOpts}<option value="__inactive__">Inactive</option></select>
                 <span style="font-size:11px; color:var(--gray-500);">${Terms.text('Job-to-date figures from posted lines. Click a job to drill down.')}</span>
             </div>
@@ -187,8 +187,8 @@ const JobsPage = {
                 ${Object.entries(JobsPage.TAB_LABELS).map(([t, label]) => `
                     <button class="btn btn-sm ${JobsPage._tab === t ? 'btn-primary' : 'btn-secondary'}" data-jobtab="${t}" onclick="JobsPage.setTab('${t}')">${label}</button>`).join('')}
                 <span style="margin-left:auto; font-size:11px; display:flex; gap:6px; align-items:center;">
-                    Period <input type="date" id="job-period-start" value="${JobsPage._period.start}" onchange="JobsPage.setPeriod()">
-                    – <input type="date" id="job-period-end" value="${JobsPage._period.end}" onchange="JobsPage.setPeriod()">
+                    Period <input type="date" id="job-period-start" aria-label="Period start" value="${JobsPage._period.start}" onchange="JobsPage.setPeriod()">
+                    – <input type="date" id="job-period-end" aria-label="Period end" value="${JobsPage._period.end}" onchange="JobsPage.setPeriod()">
                     <button class="btn btn-sm btn-secondary" onclick="JobsPage.clearPeriod()" title="${T('Job')} to date">JTD</button>
                 </span>
             </div>

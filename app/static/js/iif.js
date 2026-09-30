@@ -112,7 +112,7 @@ const IIFPage = {
                         entries on your bank account). Keep the report's default columns.
                         Safe to re-upload — duplicates are skipped.
                     </p>
-                    <input type="file" id="qbcsv-file-input" accept=".csv" style="font-size:11px; margin-bottom:8px;">
+                    <input type="file" id="qbcsv-file-input" aria-label="QuickBooks report CSV file" accept=".csv" style="font-size:11px; margin-bottom:8px;">
                     <div>
                         <button class="btn btn-primary" onclick="IIFPage.importQbReportCsv()">Import Report CSV</button>
                     </div>

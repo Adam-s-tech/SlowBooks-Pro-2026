@@ -301,7 +301,7 @@ function renderListPage({ title, headerHtml = '', filter = null, empty, columns,
             .join('');
         html += `
             <div class="toolbar">
-                <select id="${filter.id}" onchange="filterRows('${filter.id}', '${filter.rowSelector}')">
+                <select id="${filter.id}" aria-label="Status" onchange="filterRows('${filter.id}', '${filter.rowSelector}')">
                     <option value="">All Statuses</option>
                     ${opts}
                 </select>
@@ -741,4 +741,129 @@ async function copyToClipboard(text, label = 'Text', el = null) {
         toast(`Couldn't copy. ${manual}`, 'error');
         return false;
     }
+}
+
+// ---------------------------------------------------------------------------
+// Every form field gets a name a screen reader can say (#198).
+//
+// Forms put a <label> beside their field (<div class="form-group"><label>
+// Customer *</label><select>) without tying the two, so a screen reader said
+// "combo box" where it should have said "Customer"; a grid of inputs (a
+// budget, a batch of payments) had no names at all. nameFields ties them
+// wherever a page or dialog draws them, so no template has to remember:
+//   - a form group's label is tied to its field (clicking it focuses the
+//     field), and a trailing "*" reads as required rather than "star";
+//   - a label written just before its field is tied to it;
+//   - a field in a table is named from its column heading and its row.
+// A field that already has a name (its own label, aria-label or
+// aria-labelledby) is left as it is.
+// ---------------------------------------------------------------------------
+const _FIELD_SEL = 'input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=reset]), select, textarea';
+let _fieldSeq = 0;
+
+function _ownName(el) {
+    return (el.labels && el.labels.length) || el.getAttribute('aria-label') || el.getAttribute('aria-labelledby');
+}
+
+function _cellText(cell) {
+    return cell && !cell.querySelector(_FIELD_SEL) ? cell.textContent.replace(/\s+/g, ' ').trim() : '';
+}
+
+// A label's trailing "*" marks the field required: hidden from speech, and
+// the field says it is required instead.
+function _requiredStar(label, field) {
+    for (let n = label.lastChild; n; n = n.previousSibling) {
+        if (n.nodeType === Node.ELEMENT_NODE && n.getAttribute('aria-hidden') === 'true') return;
+        if (n.nodeType !== Node.TEXT_NODE || !n.textContent.trim()) continue;
+        const m = n.textContent.match(/^(.*?)\s*\*\s*$/s);
+        if (!m) return;
+        n.textContent = m[1] + ' ';
+        const star = document.createElement('span');
+        star.setAttribute('aria-hidden', 'true');
+        star.textContent = '*';
+        n.after(star);
+        if (!field.required) field.setAttribute('aria-required', 'true');
+        return;
+    }
+}
+
+function _tieLabel(label, field) {
+    if (!field.id) field.id = `fld-${++_fieldSeq}`;
+    if (!label.htmlFor) {
+        label.htmlFor = field.id;
+    } else if (label.htmlFor !== field.id) {
+        if (!label.id) label.id = `lbl-${++_fieldSeq}`;
+        field.setAttribute('aria-labelledby', label.id);
+    }
+    _requiredStar(label, field);
+}
+
+function _gridName(field) {
+    const cell = field.closest('td');
+    const row = cell && cell.parentElement;
+    const table = row && row.closest('table');
+    if (!table) return '';
+    // the column heading over this cell, colspans counted
+    let col = 0;
+    for (const c of row.cells) { if (c === cell) break; col += c.colSpan || 1; }
+    let heading = '';
+    const head = table.tHead && table.tHead.rows[table.tHead.rows.length - 1];
+    if (head) {
+        let at = 0;
+        for (const h of head.cells) {
+            if (col >= at && col < at + (h.colSpan || 1)) { heading = _cellText(h); break; }
+            at += h.colSpan || 1;
+        }
+    }
+    // the row: the words of its first cell before this one that has any (an
+    // amount isn't a row's name), or "line N" where they're all fields
+    let rowName = '';
+    for (const c of row.cells) {
+        if (c === cell) break;
+        if (c.matches('.amount, .col-amount')) continue;
+        rowName = _cellText(c);
+        if (rowName) break;
+    }
+    if (!rowName && row.parentElement && row.parentElement.tagName === 'TBODY') {
+        rowName = `line ${row.sectionRowIndex + 1}`;
+    }
+    return [heading, rowName].filter(Boolean).join(', ');
+}
+
+// A placeholder or title: a name, if nothing better is found.
+function _hint(el) {
+    return (el.getAttribute('title') || (el.tagName !== 'SELECT' && el.getAttribute('placeholder')) || '').trim();
+}
+
+function nameFields(root = document) {
+    for (const field of root.querySelectorAll(_FIELD_SEL)) {
+        if (_ownName(field)) continue;
+        const group = field.closest('.form-group');
+        const label = group && [...group.querySelectorAll('label')].find(l => !l.querySelector(_FIELD_SEL));
+        if (label) {
+            // The label names the group's first field. Another field in the
+            // group that has a placeholder of its own keeps it: a quick add's
+            // "Email" and "Phone" under Customer aren't called "Customer" too.
+            if (!(label.htmlFor && label.htmlFor !== field.id && _hint(field))) _tieLabel(label, field);
+            continue;
+        }
+        const before = field.previousElementSibling;
+        if (before && before.tagName === 'LABEL' && !before.htmlFor && !before.querySelector(_FIELD_SEL)) {
+            _tieLabel(before, field);
+            continue;
+        }
+        if (field.closest('td')) {
+            const name = _gridName(field);
+            if (name) field.setAttribute('aria-label', name);
+        }
+    }
+}
+
+// Whatever a page or a dialog draws, as it is drawn. Setting attributes
+// doesn't wake the observer; wrapping a label's "*" does, once, and finds
+// nothing left to do.
+// (The node tests that load this file have no MutationObserver or body.)
+if (typeof MutationObserver === 'function' && typeof document !== 'undefined' && document.body) {
+    new MutationObserver(() => nameFields(document)).observe(document.body, { childList: true, subtree: true });
+    nameFields(document);
 }
