@@ -246,6 +246,22 @@ class ProviderSpec:
 
 
 PROVIDERS: Dict[str, ProviderSpec] = {
+    # Claude and Grok come first, side by side: the two agents SlowBooks is
+    # built for (#200). The settings page pre-selects the first one on an
+    # install that hasn't chosen yet.
+    "anthropic": ProviderSpec(
+        key="anthropic",
+        label="Anthropic Claude",
+        default_model="claude-sonnet-4-6",
+        wire_format="anthropic",
+        docs_url="https://console.anthropic.com/",
+        free_tier_hint="Paid only (no free tier)",
+        model_choices=(
+            "claude-opus-4-7",
+            "claude-sonnet-4-6",
+            "claude-haiku-4-5-20251001",
+        ),
+    ),
     "grok": ProviderSpec(
         key="grok",
         label="xAI Grok",
@@ -307,19 +323,6 @@ PROVIDERS: Dict[str, ProviderSpec] = {
             "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
             "@cf/meta/llama-3.1-8b-instruct",
             "@cf/mistral/mistral-7b-instruct-v0.1",
-        ),
-    ),
-    "anthropic": ProviderSpec(
-        key="anthropic",
-        label="Anthropic Claude",
-        default_model="claude-sonnet-4-6",
-        wire_format="anthropic",
-        docs_url="https://console.anthropic.com/",
-        free_tier_hint="Paid only (no free tier)",
-        model_choices=(
-            "claude-opus-4-7",
-            "claude-sonnet-4-6",
-            "claude-haiku-4-5-20251001",
         ),
     ),
     "openai": ProviderSpec(
