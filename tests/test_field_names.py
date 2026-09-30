@@ -125,7 +125,27 @@ SHARED = r"""(rootSel) => {
 }"""
 
 
-CHECKS = {"unnamed": UNNAMED, "shared": SHARED}
+# Fields under `root`, shown or not, named by nothing but a placeholder or a
+# title. Chromium reads those as the name; WebKit, and so VoiceOver on the
+# Mac, doesn't, and the field has no name there (macbase1, 2.18.2 gate).
+HINT_ONLY = r"""(rootSel) => {
+    const root = rootSel ? document.querySelector(rootSel) : document;
+    const sel = 'input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=reset]),'
+        + ' select, textarea';
+    const out = [];
+    for (const el of root.querySelectorAll(sel)) {
+        if (!rootSel && el.closest('#modal')) continue;
+        if ((el.labels && el.labels.length) || el.getAttribute('aria-label')
+            || el.getAttribute('aria-labelledby')) continue;
+        const hint = (el.getAttribute('title')
+            || (el.tagName !== 'SELECT' && el.getAttribute('placeholder')) || '').trim();
+        if (hint) out.push(`${el.tagName.toLowerCase()}[${el.id || el.name || el.className}] "${hint}"`);
+    }
+    return out;
+}"""
+
+
+CHECKS = {"unnamed": UNNAMED, "shared": SHARED, "hint_only": HINT_ONLY}
 
 
 def _check(page, where, root, found):
@@ -183,7 +203,7 @@ def _in_dialogs(page, handled, books, groups):
     return opened, found
 
 
-NOTHING = {"unnamed": {}, "shared": {}}
+NOTHING = {"unnamed": {}, "shared": {}, "hint_only": {}}
 
 
 def test_every_field_on_every_page_has_a_name(browser, company, books):
@@ -207,10 +227,20 @@ GRID = r"""([sel, cell]) => [...document.querySelectorAll(sel)].map(f => [
 def test_a_grid_field_says_its_column_and_row(browser, company, books):
     """A field in a grid is named from its column and its row: the row's
     first words where it has some ("Jan, 4000 Service Income"; "Payment,
-    1001" rather than "line 2" when a checkbox comes first), and a row's
-    checkbox says what ticking it does."""
+    1001" rather than "line 2" when a checkbox comes first), else its line
+    ("Account, line 1", not a bare "Account" beside "Item, line 1"), and a
+    row's checkbox says what ticking it does."""
     page, handled = _open(browser, company)
     try:
+        _visit(page, handled, "#/bills")
+        page.evaluate("async () => { await BillsPage.showForm(); }")
+        page.wait_for_function(OPEN, timeout=5000)
+        settle(page, handled)
+        bill_line = page.evaluate(
+            "() => [...document.querySelector('#modal tbody tr').querySelectorAll('select')]"
+            ".map(f => f.getAttribute('aria-label'))"
+        )
+        page.evaluate("() => closeModal()")
         _visit(page, handled, "#/budgets")
         budget = page.evaluate(GRID, ["#page-content td input", 0])
         _visit(page, handled, "#/batch-payments")
@@ -220,6 +250,7 @@ def test_a_grid_field_says_its_column_and_row(browser, company, books):
         cleared = page.evaluate(GRID, ["#page-content td input[type=checkbox]", 2])
     finally:
         page.close()
+    assert bill_line[:2] == ["Item, line 1", "Account, line 1"], bill_line
     assert budget and all(n.endswith(f", {row}") for n, row in budget), budget
     assert budget[0][0].startswith("Jan, ")
     assert amounts and all(n == f"Payment, {inv}" for n, inv in amounts), amounts
