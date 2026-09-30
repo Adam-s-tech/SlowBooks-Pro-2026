@@ -2386,3 +2386,120 @@ tbody tr.row--dim > td.amount { color: var(--text-muted); }
     color: var(--text-muted, #6b7090);
     cursor: not-allowed;
 }
+
+/* ========================================================================
+ * TYPE-AHEAD PICKERS (combobox.js)
+ * A picker is a box you type into; its <select> stays, out of sight, as
+ * the answer. The list hangs from the window, over dialogs and tables.
+ * ======================================================================== */
+
+.cbx {
+    position: relative;
+    display: inline-block;
+    vertical-align: middle;
+    max-width: 100%;
+}
+.cbx.cbx--fill { display: block; width: 100%; }
+.cbx[hidden] { display: none !important; }
+
+/* The select is still there for the page's code (and a test's), but not
+   for the eye, the mouse or Tab. */
+.cbx > select.cbx-select {
+    position: absolute !important;
+    left: 0;
+    bottom: 0;
+    width: 1px !important;
+    height: 1px !important;
+    min-width: 0 !important;
+    max-width: 1px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    clip-path: inset(50%);
+}
+
+/* The box: like the app's other fields where no form styles it, and
+   everywhere a picker's arrow, so it still reads as a list. */
+.cbx-input {
+    padding: 3px 6px;
+    border: 1px solid var(--input-border);
+    border-radius: 0;
+    font-size: 11px;
+    font-family: var(--font);
+    color: var(--text-primary);
+    background-color: #ffffff;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0h8L4 5z' fill='%235b616d'/%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 6px center !important;
+    background-size: 8px 5px !important;
+    padding-right: 20px !important;
+}
+.cbx > .cbx-input {
+    width: 100%;
+    box-sizing: border-box;
+    text-overflow: ellipsis;
+}
+
+.cbx-popup {
+    position: fixed;
+    z-index: 450;   /* over a dialog (200) and a toast (300), under the splash */
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+    color: var(--text-primary);
+    border: 1px solid var(--input-border);
+    box-shadow: 0 4px 14px rgba(0, 20, 50, 0.22);
+    font-family: var(--font);
+    font-size: 11px;
+}
+.cbx-popup[hidden] { display: none; }
+.cbx-popup > ul {
+    list-style: none;
+    margin: 0;
+    padding: 2px 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    min-height: 0;
+}
+.cbx-popup ul ul { list-style: none; margin: 0; padding: 0; }
+.cbx-opt {
+    padding: 3px 8px;
+    cursor: default;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.cbx-opt.cbx-current { font-weight: 700; }
+.cbx-opt mark { background: none; color: inherit; font-weight: 700; }
+.cbx-action { color: var(--text-link); }
+.cbx-in { color: var(--text-muted); font-size: 10px; }
+.cbx-opt[aria-selected="true"] { background: var(--qb-navy); color: #ffffff; }
+.cbx-opt[aria-selected="true"] .cbx-in { color: var(--text-on-navy); }
+.cbx-group {
+    display: block;
+    padding: 4px 6px 2px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+.cbx-note {
+    padding: 3px 8px 4px;
+    color: var(--text-muted);
+    font-style: italic;
+    border-top: 1px solid var(--panel-border);
+}
+.cbx-note[hidden] { display: none; }
+.cbx-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+@media (forced-colors: active) {
+    .cbx-opt[aria-selected="true"] { outline: 2px solid Highlight; outline-offset: -2px; }
+}
